@@ -320,7 +320,7 @@ class MainActivity : Activity() {
         if (editMode == on) return
         editMode = on
         (moveBtn.background as GradientDrawable).setColor(if (on) 0xCCEC4899.toInt() else 0x66000000)
-        toast(if (on) "Taşıma modu açık: simgeyi basılı tutup sürükle" else "Taşıma modu kapalı")
+        toast(if (on) "Düzenleme açık: simgeyi sürükle, başka simgenin üstüne bırakırsan klasör olur" else "Düzenleme kapalı")
     }
 
     private fun openUrl(url: String) {
@@ -458,6 +458,12 @@ class MainActivity : Activity() {
                 val p = h.bindingAdapterPosition
                 if (p >= 0) onTap(order[p])
             }
+            // Uzun basıp bırakınca "tıklama" sayılmasın (menü yerine uygulama açılıyordu)
+            h.cell.setOnLongClickListener {
+                val p = h.bindingAdapterPosition
+                if (!editMode && p >= 0) showMenu(order[p], h.cell, null)
+                true
+            }
         }
     }
 
@@ -473,18 +479,9 @@ class MainActivity : Activity() {
         override fun getMovementFlags(rv: RecyclerView, vh: RecyclerView.ViewHolder) =
             makeMovementFlags(ItemTouchHelper.UP or ItemTouchHelper.DOWN or ItemTouchHelper.LEFT or ItemTouchHelper.RIGHT, 0)
 
-        override fun onMove(rv: RecyclerView, vh: RecyclerView.ViewHolder, t: RecyclerView.ViewHolder): Boolean {
-            if (!editMode) return false
-            val from = vh.bindingAdapterPosition
-            val to = t.bindingAdapterPosition
-            if (from < 0 || to < 0 || from >= order.size || to >= order.size) return false
-            val item = order.removeAt(from)
-            order.add(to, item)
-            gridAdapter.notifyItemMoved(from, to)
-            return true
-        }
+        override fun onMove(rv: RecyclerView, vh: RecyclerView.ViewHolder, t: RecyclerView.ViewHolder) = false
         override fun onSwiped(vh: RecyclerView.ViewHolder, direction: Int) {}
-        override fun isLongPressDragEnabled() = true
+        override fun isLongPressDragEnabled() = editMode
 
         override fun onSelectedChanged(vh: RecyclerView.ViewHolder?, state: Int) {
             super.onSelectedChanged(vh, state)
@@ -504,7 +501,7 @@ class MainActivity : Activity() {
             vh.itemView.animate().cancel()
             vh.itemView.scaleX = 1f
             vh.itemView.scaleY = 1f
-            if (editMode) savePrefs() else handleDrop(rv, vh, dx, dy)
+            if (editMode) handleDrop(rv, vh, dx, dy)
             dx = 0f; dy = 0f
         }
     })
@@ -513,11 +510,8 @@ class MainActivity : Activity() {
         val pos = vh.bindingAdapterPosition
         if (pos < 0 || pos >= order.size) return
         val key = order[pos]
-        // Neredeyse hiç kıpırdamadan bırakıldıysa: uzun basma menüsü
-        if (hypot(dx, dy) < dp(14)) {
-            showMenu(key, vh.itemView, null)
-            return
-        }
+        // Düzenleme modunda kıpırdamadan bırakılırsa hiçbir şey yapma (menü yok)
+        if (hypot(dx, dy) < dp(14)) return
         val cx = vh.itemView.left + vh.itemView.width / 2f + dx
         val cy = vh.itemView.top + vh.itemView.height / 2f + dy
         val target = rv.findChildViewUnder(cx, cy) ?: return
@@ -525,8 +519,18 @@ class MainActivity : Activity() {
         if (tp < 0 || tp >= order.size || tp == pos) return
         val tcx = target.left + target.width / 2f
         val tcy = target.top + target.height / 2f
-        if (hypot(cx - tcx, cy - tcy) > target.width * 0.4f) return
-        mergeInto(key, order[tp])
+        if (hypot(cx - tcx, cy - tcy) > target.width * 0.4f) {
+            moveTo(pos, tp)
+        } else {
+            mergeInto(key, order[tp])
+        }
+    }
+
+    private fun moveTo(from: Int, to: Int) {
+        if (from == to || from !in order.indices || to !in order.indices) return
+        val item = order.removeAt(from)
+        order.add(to, item)
+        persistAndRefresh()
     }
 
     private fun mergeInto(drag: String, target: String) {

@@ -81,7 +81,6 @@ class MainActivity : Activity() {
     private val rows = mutableListOf<Row>()
     private var folderDialog: Dialog? = null
     private var askedContacts = false
-    private lateinit var defBtn: TextView
     private lateinit var moveBtn: ImageView
     private var editMode = false
 
@@ -100,11 +99,20 @@ class MainActivity : Activity() {
         reload()
         launcherApps.registerCallback(callback)
         handleIntent(intent)
+        if (savedInstanceState == null) promptDefaultIfNeeded(intent)
     }
 
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
         handleIntent(intent)
+        promptDefaultIfNeeded(intent)
+    }
+
+    /** Uygulama başka bir launcher'dan simgesiyle açıldıysa ve varsayılan değilse, seçim ekranını göster. */
+    private fun promptDefaultIfNeeded(i: Intent?) {
+        if (i != null && i.hasCategory(Intent.CATEGORY_LAUNCHER) && !isDefaultLauncher()) {
+            openDefaultLauncherSettings()
+        }
     }
 
     override fun onResume() {
@@ -112,7 +120,6 @@ class MainActivity : Activity() {
         // ColorOS bazı paket olaylarını kaçırabildiği için emniyet kemeri
         iconCache.clear()
         reload()
-        updateDefaultState()
     }
 
     override fun onDestroy() {
@@ -206,21 +213,6 @@ class MainActivity : Activity() {
         }
         bar.addView(moveBtn, LinearLayout.LayoutParams(dp(34), dp(34)).apply { marginStart = dp(8) })
 
-        defBtn = TextView(this).apply {
-            text = "Varsayılan"
-            textSize = 11f
-            setTextColor(Color.WHITE)
-            gravity = Gravity.CENTER
-            setPadding(dp(10), 0, dp(10), 0)
-            background = GradientDrawable().apply {
-                cornerRadius = dp(17).toFloat()
-                setColor(0x66000000)
-            }
-            setOnClickListener { openDefaultLauncherSettings() }
-        }
-        bar.addView(defBtn, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(34)).apply {
-            marginStart = dp(8)
-        })
         root.addView(bar, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
 
         // Uygulama ızgarası (sağdan sola 4 sütun, aşağı doğru sonsuz)
@@ -322,10 +314,6 @@ class MainActivity : Activity() {
         val i = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
         val ri = packageManager.resolveActivity(i, PackageManager.MATCH_DEFAULT_ONLY)
         return ri?.activityInfo?.packageName == packageName
-    }
-
-    private fun updateDefaultState() {
-        defBtn.visibility = if (isDefaultLauncher()) View.GONE else View.VISIBLE
     }
 
     private fun setEditMode(on: Boolean) {

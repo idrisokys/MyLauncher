@@ -81,6 +81,9 @@ class MainActivity : Activity() {
     private val rows = mutableListOf<Row>()
     private var folderDialog: Dialog? = null
     private var askedContacts = false
+    private lateinit var defBtn: TextView
+    private lateinit var moveBtn: ImageView
+    private var editMode = false
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
@@ -109,6 +112,7 @@ class MainActivity : Activity() {
         // ColorOS bazı paket olaylarını kaçırabildiği için emniyet kemeri
         iconCache.clear()
         reload()
+        updateDefaultState()
     }
 
     override fun onDestroy() {
@@ -119,6 +123,7 @@ class MainActivity : Activity() {
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
         if (search.text.isNotEmpty() || search.hasFocus()) closeSearch()
+        else if (editMode) setEditMode(false)
         // Ana ekranda geri tuşu hiçbir şey yapmaz
     }
 
@@ -141,6 +146,7 @@ class MainActivity : Activity() {
             }
         } else if (i.hasCategory(Intent.CATEGORY_HOME)) {
             closeSearch()
+            setEditMode(false)
             folderDialog?.dismiss()
             grid.scrollToPosition(0)
         }
@@ -189,7 +195,18 @@ class MainActivity : Activity() {
         }
         bar.addView(search, LinearLayout.LayoutParams(0, dp(42), 1f))
 
-        val defBtn = TextView(this).apply {
+        moveBtn = ImageView(this).apply {
+            setImageResource(R.drawable.ic_move)
+            setPadding(dp(8), dp(8), dp(8), dp(8))
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(0x66000000)
+            }
+            setOnClickListener { setEditMode(!editMode) }
+        }
+        bar.addView(moveBtn, LinearLayout.LayoutParams(dp(34), dp(34)).apply { marginStart = dp(8) })
+
+        defBtn = TextView(this).apply {
             text = "Varsayılan"
             textSize = 11f
             setTextColor(Color.WHITE)
@@ -299,6 +316,23 @@ class MainActivity : Activity() {
         for (a in tries) {
             try { startActivity(Intent(a)); return } catch (e: Exception) { }
         }
+    }
+
+    private fun isDefaultLauncher(): Boolean {
+        val i = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+        val ri = packageManager.resolveActivity(i, PackageManager.MATCH_DEFAULT_ONLY)
+        return ri?.activityInfo?.packageName == packageName
+    }
+
+    private fun updateDefaultState() {
+        defBtn.visibility = if (isDefaultLauncher()) View.GONE else View.VISIBLE
+    }
+
+    private fun setEditMode(on: Boolean) {
+        if (editMode == on) return
+        editMode = on
+        (moveBtn.background as GradientDrawable).setColor(if (on) 0xCCEC4899.toInt() else 0x66000000)
+        toast(if (on) "Taşıma modu açık: simgeyi basılı tutup sürükle" else "Taşıma modu kapalı")
     }
 
     private fun openUrl(url: String) {
@@ -451,7 +485,16 @@ class MainActivity : Activity() {
         override fun getMovementFlags(rv: RecyclerView, vh: RecyclerView.ViewHolder) =
             makeMovementFlags(ItemTouchHelper.UP or ItemTouchHelper.DOWN or ItemTouchHelper.LEFT or ItemTouchHelper.RIGHT, 0)
 
-        override fun onMove(rv: RecyclerView, vh: RecyclerView.ViewHolder, t: RecyclerView.ViewHolder) = false
+        override fun onMove(rv: RecyclerView, vh: RecyclerView.ViewHolder, t: RecyclerView.ViewHolder): Boolean {
+            if (!editMode) return false
+            val from = vh.bindingAdapterPosition
+            val to = t.bindingAdapterPosition
+            if (from < 0 || to < 0 || from >= order.size || to >= order.size) return false
+            val item = order.removeAt(from)
+            order.add(to, item)
+            gridAdapter.notifyItemMoved(from, to)
+            return true
+        }
         override fun onSwiped(vh: RecyclerView.ViewHolder, direction: Int) {}
         override fun isLongPressDragEnabled() = true
 
@@ -473,7 +516,7 @@ class MainActivity : Activity() {
             vh.itemView.animate().cancel()
             vh.itemView.scaleX = 1f
             vh.itemView.scaleY = 1f
-            handleDrop(rv, vh, dx, dy)
+            if (editMode) savePrefs() else handleDrop(rv, vh, dx, dy)
             dx = 0f; dy = 0f
         }
     })

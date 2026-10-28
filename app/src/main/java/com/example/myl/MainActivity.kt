@@ -33,7 +33,6 @@ import android.text.Editable
 import android.text.TextUtils
 import android.text.TextWatcher
 import android.view.Gravity
-import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.Window
@@ -282,24 +281,6 @@ class MainActivity : Activity() {
         frame.addView(grid, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         touchHelper.attachToRecyclerView(grid)
 
-        // Listenin en üstündeyken aşağı çekince arama açılır
-        grid.addOnItemTouchListener(object : RecyclerView.SimpleOnItemTouchListener() {
-            var startY = 0f
-            var triggered = false
-            override fun onInterceptTouchEvent(rv: RecyclerView, e: MotionEvent): Boolean {
-                when (e.actionMasked) {
-                    MotionEvent.ACTION_DOWN -> { startY = e.y; triggered = false }
-                    MotionEvent.ACTION_MOVE -> {
-                        if (!triggered && !rv.canScrollVertically(-1) && e.y - startY > dp(90)) {
-                            triggered = true
-                            openSearch()
-                        }
-                    }
-                }
-                return false
-            }
-        })
-
         // Arama sonuçları
         results = ListView(this).apply {
             divider = null
@@ -340,11 +321,6 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun openSearch() {
-        search.requestFocus()
-        (getSystemService(InputMethodManager::class.java)).showSoftInput(search, 0)
-    }
-
     private fun closeSearch() {
         search.setText("")
         search.clearFocus()
@@ -373,7 +349,7 @@ class MainActivity : Activity() {
         if (editMode == on) return
         editMode = on
         (moveBtn.background as GradientDrawable).setColor(if (on) 0xCCEC4899.toInt() else 0x66000000)
-        toast(if (on) "Düzenleme açık: simgeyi sürükle, başka simgenin üstüne bırakırsan klasör olur" else "Düzenleme kapalı")
+        toast(if (on) "Düzenleme açık: simgeyi sürükle. Yan çubuk = araya girer, pembe halka = klasör olur" else "Düzenleme kapalı")
     }
 
     private fun openUrl(url: String) {
@@ -612,10 +588,76 @@ class MainActivity : Activity() {
     }
 
     private fun onTap(key: String) {
-        if (key.startsWith("folder:")) openFolder(key) else launch(key)
+        if (key.startsWith("folder:")) openFolder(key)
+        else if (!editMode) launch(key)   // düzenleme modunda uygulama açılmaz
     }
 
     // ---------- Sürükle-bırak: klasör oluşturma / uzun basma menüsü ----------
+    // Sürüklerken hedefin ne olacağını gösteren efekt:
+    //  - pembe halka + hafif büyüme  => klasör olacak / klasöre eklenecek
+    //  - mavi çubuk (hedefin yan tarafı) => araya girip yer değiştirecek
+    private var hintView: View? = null
+    private var hintMerge = false
+    private var hintRight = false
+    private val hintRect = RectF()
+    private val hintFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x33EC4899 }
+    private val hintRing = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0xFFEC4899.toInt(); style = Paint.Style.STROKE
+    }
+    private val hintBar = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF38BDF8.toInt() }
+
+    private fun setHint(v: View?, merge: Boolean, right: Boolean) {
+        if (hintView !== v || hintMerge != merge) {
+            hintView?.animate()?.scaleX(1f)?.scaleY(1f)?.setDuration(120)?.start()
+            if (v != null && merge) v.animate().scaleX(1.12f).scaleY(1.12f).setDuration(120).start()
+        }
+        hintView = v; hintMerge = merge; hintRight = right
+    }
+
+    /** Sürüklenen öğenin merkezinin altındaki (kendisi hariç) hücreyi bulur. */
+    private fun findTarget(rv: RecyclerView, exclude: View, x: Float, y: Float): View? {
+        for (i in rv.childCount - 1 downTo 0) {
+            val c = rv.getChildAt(i)
+            if (c === exclude) continue
+            if (x >= c.left && x <= c.right && y >= c.top && y <= c.bottom) return c
+        }
+        return null
+    }
+
+    private fun updateHint(rv: RecyclerView, vh: RecyclerView.ViewHolder, dX: Float, dY: Float) {
+        val iv = vh.itemView
+        val pos = vh.bindingAdapterPosition
+        val key = shownKeys.getOrNull(pos)
+        val cx = iv.left + iv.width / 2f + dX
+        val cy = iv.top + iv.height / 2f + dY
+        val t = if (key != null) findTarget(rv, iv, cx, cy) else null
+        val tp = if (t != null) rv.getChildAdapterPosition(t) else -1
+        if (t == null || key == null || tp < 0 || tp >= shownKeys.size || tp == pos) {
+            setHint(null, false, false)
+            return
+        }
+        val tcx = t.left + t.width / 2f
+        val tcy = t.top + t.height / 2f
+        val reorder = key.startsWith("folder:") || hypot(cx - tcx, cy - tcy) > t.width * 0.4f
+        setHint(t, !reorder, cx > tcx)
+    }
+
+    private fun drawHint(c: Canvas) {
+        val t = hintView ?: return
+        if (hintMerge) {
+            val r = dp(18).toFloat()
+            hintRect.set(t.left + dp(2).toFloat(), t.top + dp(2).toFloat(), t.right - dp(2).toFloat(), t.bottom - dp(2).toFloat())
+            hintRing.strokeWidth = dp(2) + dp(1) / 2f
+            c.drawRoundRect(hintRect, r, r, hintFill)
+            c.drawRoundRect(hintRect, r, r, hintRing)
+        } else {
+            val x = if (hintRight) t.right - dp(1).toFloat() else t.left + dp(1).toFloat()
+            val half = dp(3).toFloat()
+            hintRect.set(x - half, t.top + dp(8).toFloat(), x + half, t.bottom - dp(8).toFloat())
+            c.drawRoundRect(hintRect, half, half, hintBar)
+        }
+    }
+
     private val touchHelper = ItemTouchHelper(object : ItemTouchHelper.Callback() {
         var dx = 0f
         var dy = 0f
@@ -636,8 +678,12 @@ class MainActivity : Activity() {
         }
 
         override fun onChildDraw(c: Canvas, rv: RecyclerView, vh: RecyclerView.ViewHolder, dX: Float, dY: Float, state: Int, active: Boolean) {
+            if (state == ItemTouchHelper.ACTION_STATE_DRAG && active) {
+                dx = dX; dy = dY
+                updateHint(rv, vh, dX, dY)
+                drawHint(c)   // simgelerin ALTINA çizilir
+            }
             super.onChildDraw(c, rv, vh, dX, dY, state, active)
-            if (state == ItemTouchHelper.ACTION_STATE_DRAG && active) { dx = dX; dy = dY }
         }
 
         override fun clearView(rv: RecyclerView, vh: RecyclerView.ViewHolder) {
@@ -645,6 +691,8 @@ class MainActivity : Activity() {
             vh.itemView.animate().cancel()
             vh.itemView.scaleX = 1f
             vh.itemView.scaleY = 1f
+            setHint(null, false, false)
+            rv.invalidate()
             if (editMode) handleDrop(rv, vh, dx, dy)
             dx = 0f; dy = 0f
         }
@@ -664,7 +712,7 @@ class MainActivity : Activity() {
         val targetKey = shownKeys[tp]
         val tcx = target.left + target.width / 2f
         val tcy = target.top + target.height / 2f
-        val move = hypot(cx - tcx, cy - tcy) > target.width * 0.4f
+        val move = key.startsWith("folder:") || hypot(cx - tcx, cy - tcy) > target.width * 0.4f
         // Değişiklik, RecyclerView kendi çizim/animasyon döngüsünden çıktıktan sonra uygulanır.
         rv.post { if (move) moveKey(key, targetKey) else mergeInto(key, targetKey) }
     }
@@ -806,7 +854,7 @@ class MainActivity : Activity() {
             val (cell, iv, tv) = newCell()
             iv.setImageBitmap(iconCache[ck])
             tv.text = labelFor(ck)
-            cell.setOnClickListener { d.dismiss(); launch(ck) }
+            cell.setOnClickListener { if (!editMode) { d.dismiss(); launch(ck) } }
             cell.setOnLongClickListener { showMenu(ck, cell, fk); true }
             g.addView(cell, GridLayout.LayoutParams().apply { width = cw })
         }

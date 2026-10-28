@@ -24,7 +24,7 @@ A simple, fast and no-frills Android home screen. All your apps on one screen, a
 - Your order, folders and shortcuts are stored persistently
 
 ### 🔍 Smart search
-**Pull down** while at the top of the list to open search.
+Tap the **search bar** at the top to start searching.
 
 | Result | Description |
 |---|---|
@@ -43,6 +43,8 @@ The **✥ button** at the top right toggles edit mode.
   - Drop it on the **edge** of another icon → they swap places
   - Drop it on the **center** of another icon → a **folder** is created
   - Drop it on a folder → it is added to that folder
+- A **live drop hint** shows what will happen while you drag: a **pink ring** with a slight zoom on the target means *folder*, a **blue bar** on its side means *reorder*
+- In edit mode, tapping an app does **not** launch it
 - The folder icon shows a **mini preview** of its first 4 apps
 - Tap the folder name to **rename** it
 - Folder menu: **Rename**, **Dissolve folder**
@@ -133,9 +135,24 @@ MyLauncher/
 1. Open the project in **Android Studio** (Hedgehog or newer recommended, JDK 17).
 2. Once Gradle sync finishes, run it on a connected phone with **Run ▶**.
 3. To produce an APK: **Build → Build Bundle(s) / APK(s) → Build APK(s)**
-   The release APK is signed with the debug key by default; to publish, define your own keystore in `app/build.gradle.kts`.
+   To sign with your own key, see **Signing a release APK** below.
 4. From the command line: `gradle wrapper`, then `./gradlew assembleRelease`
 5. On first launch, choose MyL as your **default home app**.
+
+---
+
+## 🔏 Signing a release APK
+
+1. Create a keystore once (keep the `.jks` file and passwords safe, you cannot update the app without them):
+   ```
+   keytool -genkeypair -v -keystore myl-release.jks -alias myl -keyalg RSA -keysize 2048 -validity 10000
+   ```
+2. Put `myl-release.jks` in the project root, copy `keystore.properties.example` to `keystore.properties` and fill in your details.
+3. Build: `./gradlew assembleRelease`
+   Output: `app/build/outputs/apk/release/app-release.apk`
+4. Increase `versionCode` in `app/build.gradle.kts` for every new release.
+
+If `keystore.properties` is missing, the release APK is signed with the debug key. `keystore.properties` and `*.jks` are already in `.gitignore`; never commit them.
 
 ---
 
@@ -176,7 +193,7 @@ Sade, hızlı ve gösterişten uzak bir Android ana ekran uygulaması. Tek ekran
 - Sıralamanız, klasörleriniz ve kısayollarınız kalıcı olarak saklanır
 
 ### 🔍 Akıllı arama
-Listenin en üstündeyken **aşağı çekince** arama açılır.
+Üstteki **arama çubuğuna** dokununca arama açılır.
 
 | Sonuç | Açıklama |
 |---|---|
@@ -195,6 +212,8 @@ Sağ üstteki **✥ düğmesi** düzenleme modunu açar/kapatır.
   - Başka bir simgenin **kenarına** bırak → yer değiştirir
   - Başka bir simgenin **üstüne** bırak → **klasör** oluşur
   - Klasörün üstüne bırak → klasöre eklenir
+- Sürüklerken ne olacağını gösteren **canlı efekt** vardır: hedefte **pembe halka** ve hafif büyüme *klasör*, yan tarafta **mavi çubuk** *araya girme* demektir
+- Düzenleme modunda uygulamaya dokunmak uygulamayı **açmaz**
 - Klasör simgesi içindeki ilk 4 uygulamanın **mini önizlemesini** gösterir
 - Klasörün adına dokunarak **yeniden adlandır**
 - Klasör menüsü: **Yeniden adlandır**, **Klasörü dağıt**
@@ -285,9 +304,24 @@ MyLauncher/
 1. Projeyi **Android Studio**'da açın (Hedgehog veya daha yeni önerilir, JDK 17).
 2. Gradle senkronizasyonu bitince bağlı telefonda **Run ▶** ile çalıştırın.
 3. APK üretmek için: **Build → Build Bundle(s) / APK(s) → Build APK(s)**
-   Release APK varsayılan olarak debug anahtarıyla imzalanır; yayınlamak için kendi keystore'unuzu `app/build.gradle.kts` içine tanımlayın.
+   Kendi anahtarınızla imzalamak için aşağıdaki **Release APK imzalama** bölümüne bakın.
 4. Komut satırından: `gradle wrapper` ardından `./gradlew assembleRelease`
 5. İlk açılışta MyL'yi **varsayılan ana ekran uygulaması** olarak seçin.
+
+---
+
+## 🔏 Release APK imzalama
+
+1. Bir kez keystore oluştur (`.jks` dosyasını ve şifreleri sakla, bunlar olmadan uygulamayı güncelleyemezsin):
+   ```
+   keytool -genkeypair -v -keystore myl-release.jks -alias myl -keyalg RSA -keysize 2048 -validity 10000
+   ```
+2. `myl-release.jks` dosyasını proje köküne koy, `keystore.properties.example` dosyasını `keystore.properties` olarak kopyalayıp bilgilerini doldur.
+3. Derle: `./gradlew assembleRelease`
+   Çıktı: `app/build/outputs/apk/release/app-release.apk`
+4. Her yeni sürümde `app/build.gradle.kts` içindeki `versionCode` değerini artır.
+
+`keystore.properties` yoksa release APK debug anahtarıyla imzalanır. `keystore.properties` ve `*.jks` zaten `.gitignore` içinde; asla paylaşma ya da GitHub'a yükleme.
 
 ---
 

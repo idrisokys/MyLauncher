@@ -1,7 +1,17 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
 }
+
+// İmza bilgileri proje kökündeki keystore.properties dosyasından okunur (git'e EKLEME).
+// Dosya yoksa release APK debug anahtarıyla imzalanır.
+val keystoreProps = Properties().apply {
+    val f = rootProject.file("keystore.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+val hasReleaseKey = keystoreProps.getProperty("storeFile") != null
 
 android {
     namespace = "com.example.myl"
@@ -14,14 +24,26 @@ android {
         versionCode = 2
         versionName = "1.1"
     }
+
+    signingConfigs {
+        if (hasReleaseKey) {
+            create("release") {
+                storeFile = rootProject.file(keystoreProps.getProperty("storeFile"))
+                storePassword = keystoreProps.getProperty("storePassword")
+                keyAlias = keystoreProps.getProperty("keyAlias")
+                keyPassword = keystoreProps.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
             // R8: kodu küçültür/optimize eder, APK daha küçük ve daha hızlı açılır
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            // İmzasız release APK yüklenemez; kendi keystore'unu ekleyene kadar debug anahtarıyla imzala
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (hasReleaseKey) signingConfigs.getByName("release")
+                            else signingConfigs.getByName("debug")
         }
     }
     compileOptions {

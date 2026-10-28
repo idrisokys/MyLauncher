@@ -100,6 +100,8 @@ class MainActivity : Activity() {
     private var loading = false
     private var pendingReload = false
     private var skipNextResumeReload = true
+    private var loadedOnce = false                 // ilk uygulama listesi geldi mi?
+    private var pendingPinIntent: Intent? = null   // liste gelmeden önce gelen kısayol isteği
     @Volatile private var searchGen = 0
     private val reloadRunnable = Runnable { startReload() }
 
@@ -183,6 +185,7 @@ class MainActivity : Activity() {
     private fun handleIntent(i: Intent?) {
         if (i == null) return
         if (i.action == "android.content.pm.action.CONFIRM_PIN_SHORTCUT") {
+            if (!loadedOnce) { pendingPinIntent = i; return }
             try {
                 val req = launcherApps.getPinItemRequest(i) ?: return
                 val info = req.shortcutInfo ?: return
@@ -999,6 +1002,8 @@ class MainActivity : Activity() {
         if (changed) savePrefs()
         refreshGrid()
         if (search.text.isNotEmpty()) updateResults(search.text.toString())
+        loadedOnce = true
+        pendingPinIntent?.let { pendingPinIntent = null; handleIntent(it) }
     }
 
     /**
@@ -1006,6 +1011,7 @@ class MainActivity : Activity() {
      * Bir şey değiştiyse true döner.
      */
     private fun normalize(): Boolean {
+        if (apps.isEmpty()) return false   // liste henüz yüklenmediyse sırayı bozma
         var changed = false
         for (f in folders.values) if (f.children.removeAll { !isValid(it) }) changed = true
         for (fk in folders.keys.toList()) {

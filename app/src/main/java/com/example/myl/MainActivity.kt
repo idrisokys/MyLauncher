@@ -11,6 +11,7 @@ import android.content.pm.LauncherApps
 import android.content.pm.LauncherApps.ShortcutQuery
 import android.content.pm.PackageManager
 import android.content.pm.ShortcutInfo
+import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.ColorFilter
@@ -22,6 +23,8 @@ import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.os.Process
 import android.os.UserHandle
 import android.provider.ContactsContract
@@ -47,12 +50,18 @@ import android.widget.ListView
 import android.widget.PopupMenu
 import android.widget.TextView
 import android.widget.Toast
+import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.RecyclerView
+import androidx.recyclerview.widget.SimpleItemAnimator
 import org.json.JSONArray
 import org.json.JSONObject
+import java.text.Collator
+import java.util.Locale
 import java.util.UUID
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
 import kotlin.math.hypot
 
 class MainActivity : Activity() {
@@ -60,17 +69,44 @@ class MainActivity : Activity() {
     // ---------- Veri modelleri ----------
     class Folder(var name: String, val children: MutableList<String>)
     class Sc(val pkg: String, val id: String, var label: String)
-    class Row(val title: String, val sub: String?, val icon: Drawable?, val action: () -> Unit)
+    class Row(val title: String, val sub: String?, val icon: Bitmap?, val action: () -> Unit)
+
+    /** Arka planda hazırlanan, ana thread'e hazır halde teslim edilen uygulama listesi. */
+    private class Snapshot(
+        val apps: LinkedHashMap<String, LauncherActivityInfo>,
+        val newIcons: Map<String, Bitmap>
+    )
 
     private lateinit var launcherApps: LauncherApps
     private lateinit var prefs: SharedPreferences
     private val me: UserHandle = Process.myUserHandle()
 
+    // Bu koleksiyonlara YALNIZCA ana thread dokunur.
     private val apps = LinkedHashMap<String, LauncherActivityInfo>()   // "app:<component>"
     private val folders = LinkedHashMap<String, Folder>()              // "folder:<uuid>"
     private val shortcuts = LinkedHashMap<String, Sc>()                // "sc:<pkg>/<id>"
-    private val order = mutableListOf<String>()                        // ekranda görünen sıra
-    private val iconCache = HashMap<String, Drawable>()
+    private val order = mutableListOf<String>()                        // olması gereken sıra
+    private val iconCache = HashMap<String, Bitmap>()                  // hazır, boyutlandırılmış simgeler
+    private val normLabels = HashMap<String, String>()                 // arama için sadeleştirilmiş adlar
+
+    // Adaptörün o an gösterdiği durum (DiffUtil için)
+    private var shownKeys: List<String> = emptyList()
+    private var shownSigs: List<String> = emptyList()
+
+    // ---------- Arka plan işleri ----------
+    private val main = Handler(Looper.getMainLooper())
+    private val worker: ExecutorService = Executors.newSingleThreadExecutor()
+    private val searchExec: ExecutorService = Executors.newSingleThreadExecutor()
+    private var loading = false
+    private var pendingReload = false
+    private var skipNextResumeReload = true
+    @Volatile private var searchGen = 0
+    private val reloadRunnable = Runnable { startReload() }
+
+    private val collator: Collator = Collator.getInstance(Locale.forLanguageTag("tr-TR"))
+    private val trLocale: Locale = Locale.forLanguageTag("tr-TR")
+    private val density by lazy { resources.displayMetrics.density }
+    private val iconPx by lazy { dp(56) }
 
     // ---------- UI ----------
     private lateinit var root: LinearLayout
@@ -84,7 +120,7 @@ class MainActivity : Activity() {
     private lateinit var moveBtn: ImageView
     private var editMode = false
 
-    private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
+    private fun dp(v: Int) = (v * density).toInt()
 
     // ---------- Yaşam döngüsü ----------
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -96,7 +132,7 @@ class MainActivity : Activity() {
         window.navigationBarColor = Color.TRANSPARENT
         buildUi()
         loadPrefs()
-        reload()
+        startReload()
         launcherApps.registerCallback(callback)
         handleIntent(intent)
         if (savedInstanceState == null) promptDefaultIfNeeded(intent)
@@ -117,13 +153,18 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
-        // ColorOS bazı paket olaylarını kaçırabildiği için emniyet kemeri
-        iconCache.clear()
-        reload()
+        // ColorOS bazı paket olaylarını kaçırabildiği için emniyet kemeri.
+        // Artık simge önbelleği silinmiyor; arka planda hızlıca kontrol edilir,
+        // bir şey değişmediyse ekrana hiç dokunulmaz.
+        if (skipNextResumeReload) skipNextResumeReload = false else startReload()
     }
 
     override fun onDestroy() {
         launcherApps.unregisterCallback(callback)
+        main.removeCallbacksAndMessages(null)
+        worker.shutdown()
+        searchExec.shutdown()
+        folderDialog?.dismiss()
         super.onDestroy()
     }
 
@@ -160,16 +201,21 @@ class MainActivity : Activity() {
     }
 
     private val callback = object : LauncherApps.Callback() {
-        override fun onPackageRemoved(packageName: String?, user: UserHandle?) = refreshAll()
-        override fun onPackageAdded(packageName: String?, user: UserHandle?) = refreshAll()
-        override fun onPackageChanged(packageName: String?, user: UserHandle?) = refreshAll()
-        override fun onPackagesAvailable(packageNames: Array<out String>?, user: UserHandle?, replacing: Boolean) = refreshAll()
-        override fun onPackagesUnavailable(packageNames: Array<out String>?, user: UserHandle?, replacing: Boolean) = refreshAll()
+        override fun onPackageRemoved(packageName: String?, user: UserHandle?) = pkgChanged(packageName)
+        override fun onPackageAdded(packageName: String?, user: UserHandle?) = pkgChanged(packageName)
+        override fun onPackageChanged(packageName: String?, user: UserHandle?) = pkgChanged(packageName)
+        override fun onPackagesAvailable(packageNames: Array<out String>?, user: UserHandle?, replacing: Boolean) =
+            packageNames?.forEach { pkgChanged(it) } ?: Unit
+        override fun onPackagesUnavailable(packageNames: Array<out String>?, user: UserHandle?, replacing: Boolean) =
+            packageNames?.forEach { pkgChanged(it) } ?: Unit
     }
 
-    private fun refreshAll() {
-        iconCache.clear()
-        reload()
+    /** Sadece değişen paketin simgesini geçersiz kıl; art arda gelen olayları tek yüklemede birleştir. */
+    private fun pkgChanged(pkg: String?) {
+        if (pkg == null) iconCache.clear()
+        else iconCache.keys.removeAll { it.startsWith("app:$pkg/") || it.startsWith("sc:$pkg/") }
+        main.removeCallbacks(reloadRunnable)
+        main.postDelayed(reloadRunnable, 250)
     }
 
     // ---------- Arayüz ----------
@@ -181,7 +227,7 @@ class MainActivity : Activity() {
             WindowInsets.CONSUMED
         }
 
-        // Üst çubuk: arama kutusu + küçük "Varsayılan" düğmesi
+        // Üst çubuk: arama kutusu + küçük "düzenle" düğmesi
         val bar = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -225,6 +271,10 @@ class MainActivity : Activity() {
             setPadding(dp(8), 0, dp(8), dp(24))
             adapter = gridAdapter
             overScrollMode = View.OVER_SCROLL_NEVER
+            setHasFixedSize(true)
+            setItemViewCacheSize(12)
+            recycledViewPool.setMaxRecycledViews(0, 32)
+            (itemAnimator as? SimpleItemAnimator)?.supportsChangeAnimations = false
         }
         frame.addView(grid, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         touchHelper.attachToRecyclerView(grid)
@@ -332,25 +382,61 @@ class MainActivity : Activity() {
         closeSearch()
     }
 
+    private fun safeStart(i: Intent) {
+        try { startActivity(i) } catch (e: Exception) { toast("Açılamadı") }
+    }
+
     private fun toast(s: String) = Toast.makeText(this, s, Toast.LENGTH_SHORT).show()
 
     // ---------- Arama ----------
+    /** Türkçe karakterleri sadeleştirir: "Işık" ile "isik" birbirini bulur. */
+    private fun fold(s: String): String {
+        val low = s.lowercase(trLocale)
+        val sb = StringBuilder(low.length)
+        for (ch in low) {
+            sb.append(
+                when (ch) {
+                    'ı' -> 'i'; 'ö' -> 'o'; 'ü' -> 'u'; 'ş' -> 's'; 'ç' -> 'c'; 'ğ' -> 'g'
+                    else -> ch
+                }
+            )
+        }
+        return sb.toString()
+    }
+
     private fun updateResults(q0: String) {
         val q = q0.trim()
+        val gen = ++searchGen
         if (q.isEmpty()) {
             results.visibility = View.GONE
             return
         }
-        rows.clear()
-        rows.addAll(findContacts(q))
-        var n = 0
-        for ((k, a) in apps) {
-            if (n >= 6) break
-            val label = a.label.toString()
-            if (label.contains(q, ignoreCase = true)) {
-                rows.add(Row(label, "Uygulama", iconFor(k)) { launch(k) })
-                n++
+        // Uygulamalar anında gelir; kişi sorgusu arka planda yapılıp sonra eklenir.
+        showRows(q, emptyList())
+        if (checkSelfPermission(Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED) {
+            searchExec.execute {
+                if (gen != searchGen) return@execute
+                val found = findContacts(q)
+                main.post {
+                    if (gen == searchGen && !isDestroyed && found.isNotEmpty()) showRows(q, found)
+                }
             }
+        }
+    }
+
+    private fun showRows(q: String, contacts: List<Row>) {
+        rows.clear()
+        rows.addAll(contacts)
+        val fq = fold(q)
+        val matches = ArrayList<String>()
+        for (k in apps.keys) {
+            val n = normLabels[k] ?: continue
+            if (n.contains(fq)) matches.add(k)
+        }
+        matches.sortWith(compareBy<String>({ normLabels[it]?.startsWith(fq) != true }, { normLabels[it] ?: "" }))
+        for (k in matches.take(6)) {
+            val label = apps[k]?.label?.toString() ?: continue
+            rows.add(Row(label, "Uygulama", iconCache[k]) { launch(k) })
         }
         val enc = Uri.encode(q)
         rows.add(Row("Google'da ara: $q", null, null) { openUrl("https://www.google.com/search?q=$enc") })
@@ -360,15 +446,16 @@ class MainActivity : Activity() {
         results.visibility = View.VISIBLE
     }
 
+    /** Arka plan thread'inde çalışır. */
     private fun findContacts(q: String): List<Row> {
-        if (checkSelfPermission(Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) return emptyList()
         val out = mutableListOf<Row>()
         try {
             val name = ContactsContract.Contacts.DISPLAY_NAME_PRIMARY
+            val esc = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
             contentResolver.query(
                 ContactsContract.Contacts.CONTENT_URI,
                 arrayOf(ContactsContract.Contacts._ID, ContactsContract.Contacts.LOOKUP_KEY, name),
-                "$name LIKE ?", arrayOf("%$q%"),
+                "$name LIKE ? ESCAPE '\\'", arrayOf("%$esc%"),
                 "$name COLLATE LOCALIZED ASC LIMIT 5"
             )?.use { c ->
                 while (c.moveToNext()) {
@@ -386,33 +473,51 @@ class MainActivity : Activity() {
         return out
     }
 
+    private class RowHolder(val icon: ImageView, val title: TextView, val sub: TextView) {
+        val placeholder = GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(0x44FFFFFF)
+        }
+    }
+
     private val resultsAdapter = object : BaseAdapter() {
         override fun getCount() = rows.size
         override fun getItem(p: Int) = rows[p]
         override fun getItemId(p: Int) = p.toLong()
         override fun getView(p: Int, cv: View?, parent: ViewGroup?): View {
-            val r = rows[p]
-            val line = LinearLayout(this@MainActivity).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
-                setPadding(dp(16), dp(10), dp(16), dp(10))
+            val h: RowHolder
+            val v: View
+            if (cv == null) {
+                val line = LinearLayout(this@MainActivity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(dp(16), dp(10), dp(16), dp(10))
+                }
+                val iv = ImageView(this@MainActivity)
+                line.addView(iv, LinearLayout.LayoutParams(dp(40), dp(40)))
+                val col = LinearLayout(this@MainActivity).apply { orientation = LinearLayout.VERTICAL }
+                val title = TextView(this@MainActivity).apply {
+                    textSize = 16f; setTextColor(Color.WHITE)
+                    maxLines = 1; ellipsize = TextUtils.TruncateAt.END
+                }
+                val sub = TextView(this@MainActivity).apply {
+                    textSize = 12f; setTextColor(0xAAFFFFFF.toInt())
+                }
+                col.addView(title)
+                col.addView(sub)
+                line.addView(col, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(14) })
+                h = RowHolder(iv, title, sub)
+                line.tag = h
+                v = line
+            } else {
+                v = cv
+                h = cv.tag as RowHolder
             }
-            val iv = ImageView(this@MainActivity)
-            iv.setImageDrawable(r.icon ?: GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColor(0x44FFFFFF)
-            })
-            line.addView(iv, LinearLayout.LayoutParams(dp(40), dp(40)))
-            val col = LinearLayout(this@MainActivity).apply { orientation = LinearLayout.VERTICAL }
-            col.addView(TextView(this@MainActivity).apply {
-                text = r.title; textSize = 16f; setTextColor(Color.WHITE)
-                maxLines = 1; ellipsize = TextUtils.TruncateAt.END
-            })
-            if (r.sub != null) col.addView(TextView(this@MainActivity).apply {
-                text = r.sub; textSize = 12f; setTextColor(0xAAFFFFFF.toInt())
-            })
-            line.addView(col, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(14) })
-            return line
+            val r = rows[p]
+            if (r.icon != null) h.icon.setImageBitmap(r.icon) else h.icon.setImageDrawable(h.placeholder)
+            h.title.text = r.title
+            if (r.sub != null) { h.sub.text = r.sub; h.sub.visibility = View.VISIBLE } else h.sub.visibility = View.GONE
+            return v
         }
     }
 
@@ -445,26 +550,62 @@ class MainActivity : Activity() {
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
             val (cell, iv, tv) = newCell()
             cell.layoutParams = RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
-            return VH(cell, iv, tv)
-        }
-
-        override fun getItemCount() = order.size
-
-        override fun onBindViewHolder(h: VH, position: Int) {
-            val k = order[position]
-            h.label.text = labelFor(k)
-            h.icon.setImageDrawable(iconFor(k))
-            h.cell.setOnClickListener {
+            val h = VH(cell, iv, tv)
+            // Dinleyiciler bir kez kurulur; bind'da yeniden nesne üretilmez.
+            cell.setOnClickListener {
                 val p = h.bindingAdapterPosition
-                if (p >= 0) onTap(order[p])
+                if (p >= 0 && p < shownKeys.size) onTap(shownKeys[p])
             }
             // Uzun basıp bırakınca "tıklama" sayılmasın (menü yerine uygulama açılıyordu)
-            h.cell.setOnLongClickListener {
+            cell.setOnLongClickListener {
                 val p = h.bindingAdapterPosition
-                if (!editMode && p >= 0) showMenu(order[p], h.cell, null)
+                if (!editMode && p >= 0 && p < shownKeys.size) showMenu(shownKeys[p], cell, null)
                 true
             }
+            return h
         }
+
+        override fun getItemCount() = shownKeys.size
+
+        override fun onBindViewHolder(h: VH, position: Int) {
+            val k = shownKeys[position]
+            h.label.text = labelFor(k)
+            setIcon(h.icon, k)
+        }
+    }
+
+    private fun setIcon(iv: ImageView, k: String) {
+        if (k.startsWith("folder:")) {
+            val f = folders[k]
+            iv.setImageDrawable(FolderDrawable(f?.children?.take(4)?.map { iconCache[it] }.orEmpty(), iconPx))
+        } else {
+            iv.setImageBitmap(iconCache[k])
+        }
+    }
+
+    /** Sırayı ekrana yansıtır; yalnızca gerçekten değişen hücreler güncellenir. */
+    private fun refreshGrid() {
+        val newKeys = order.toList()
+        val newSigs = newKeys.map { sigFor(it) }
+        val oldKeys = shownKeys
+        val oldSigs = shownSigs
+        val diff = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
+            override fun getOldListSize() = oldKeys.size
+            override fun getNewListSize() = newKeys.size
+            override fun areItemsTheSame(o: Int, n: Int) = oldKeys[o] == newKeys[n]
+            override fun areContentsTheSame(o: Int, n: Int) = oldSigs[o] == newSigs[n]
+        }, false)
+        shownKeys = newKeys
+        shownSigs = newSigs
+        diff.dispatchUpdatesTo(gridAdapter)
+    }
+
+    private fun sigFor(k: String): String = when {
+        k.startsWith("folder:") -> {
+            val f = folders[k]
+            "F" + (f?.name ?: "") + "|" + (f?.children?.take(4)?.joinToString(",") { sigFor(it) } ?: "")
+        }
+        else -> labelFor(k) + "|" + System.identityHashCode(iconCache[k])
     }
 
     private fun onTap(key: String) {
@@ -508,26 +649,27 @@ class MainActivity : Activity() {
 
     private fun handleDrop(rv: RecyclerView, vh: RecyclerView.ViewHolder, dx: Float, dy: Float) {
         val pos = vh.bindingAdapterPosition
-        if (pos < 0 || pos >= order.size) return
-        val key = order[pos]
+        if (pos < 0 || pos >= shownKeys.size) return
+        val key = shownKeys[pos]
         // Düzenleme modunda kıpırdamadan bırakılırsa hiçbir şey yapma (menü yok)
         if (hypot(dx, dy) < dp(14)) return
         val cx = vh.itemView.left + vh.itemView.width / 2f + dx
         val cy = vh.itemView.top + vh.itemView.height / 2f + dy
         val target = rv.findChildViewUnder(cx, cy) ?: return
         val tp = rv.getChildAdapterPosition(target)
-        if (tp < 0 || tp >= order.size || tp == pos) return
+        if (tp < 0 || tp >= shownKeys.size || tp == pos) return
+        val targetKey = shownKeys[tp]
         val tcx = target.left + target.width / 2f
         val tcy = target.top + target.height / 2f
-        if (hypot(cx - tcx, cy - tcy) > target.width * 0.4f) {
-            moveTo(pos, tp)
-        } else {
-            mergeInto(key, order[tp])
-        }
+        val move = hypot(cx - tcx, cy - tcy) > target.width * 0.4f
+        // Değişiklik, RecyclerView kendi çizim/animasyon döngüsünden çıktıktan sonra uygulanır.
+        rv.post { if (move) moveKey(key, targetKey) else mergeInto(key, targetKey) }
     }
 
-    private fun moveTo(from: Int, to: Int) {
-        if (from == to || from !in order.indices || to !in order.indices) return
+    private fun moveKey(key: String, targetKey: String) {
+        val from = order.indexOf(key)
+        val to = order.indexOf(targetKey)
+        if (from < 0 || to < 0 || from == to) return
         val item = order.removeAt(from)
         order.add(to, item)
         persistAndRefresh()
@@ -536,13 +678,15 @@ class MainActivity : Activity() {
     private fun mergeInto(drag: String, target: String) {
         if (drag.startsWith("folder:")) return
         if (target.startsWith("folder:")) {
-            folders[target]?.children?.add(drag)
+            val f = folders[target] ?: return
+            if (!f.children.contains(drag)) f.children.add(drag)
             order.remove(drag)
         } else {
+            val idx0 = order.indexOf(target)
+            if (idx0 < 0 || !order.contains(drag)) return
             val id = "folder:" + UUID.randomUUID().toString().take(8)
             order.remove(drag)
             val idx = order.indexOf(target)
-            if (idx < 0) return
             order[idx] = id
             folders[id] = Folder("Klasör", mutableListOf(target, drag))
         }
@@ -570,11 +714,11 @@ class MainActivity : Activity() {
                     menu.add(t).setOnMenuItemClickListener { shortcutActions(si); true }
                 }
                 menu.add("Uygulama bilgisi").setOnMenuItemClickListener {
-                    startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$pkg")))
+                    safeStart(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$pkg")))
                     true
                 }
                 menu.add("Kaldır").setOnMenuItemClickListener {
-                    startActivity(Intent(Intent.ACTION_DELETE, Uri.parse("package:$pkg")))
+                    safeStart(Intent(Intent.ACTION_DELETE, Uri.parse("package:$pkg")))
                     true
                 }
             }
@@ -625,7 +769,7 @@ class MainActivity : Activity() {
         f.children.remove(key)
         order.add(key)
         folderDialog?.dismiss()
-        persistAndRefresh()
+        persistAndRefresh()   // içinde tek kalan klasörler de hemen dağıtılır
     }
 
     // ---------- Klasör penceresi ----------
@@ -657,7 +801,7 @@ class MainActivity : Activity() {
         val cw = (resources.displayMetrics.widthPixels * 0.84f / 4).toInt()
         for (ck in f.children.toList()) {
             val (cell, iv, tv) = newCell()
-            iv.setImageDrawable(iconFor(ck))
+            iv.setImageBitmap(iconCache[ck])
             tv.text = labelFor(ck)
             cell.setOnClickListener { d.dismiss(); launch(ck) }
             cell.setOnLongClickListener { showMenu(ck, cell, fk); true }
@@ -716,6 +860,12 @@ class MainActivity : Activity() {
         if (shortcuts.containsKey(key)) { toast("Zaten ekli"); return }
         shortcuts[key] = Sc(pkg, si.id, si.shortLabel?.toString() ?: si.id)
         order.add(key)
+        // Tek bir simge: ana thread'de hemen hazırlanır
+        try {
+            val d = launcherApps.getShortcutIconDrawable(si, 0)
+                ?: launcherApps.getActivityList(pkg, me).firstOrNull()?.getBadgedIcon(0)
+            if (d != null) iconCache[key] = renderIcon(d, iconPx)
+        } catch (e: Exception) { }
         if (pin) {
             try {
                 val pinned = shortcutsOf(pkg, pinnedOnly = true).map { it.id }
@@ -723,7 +873,7 @@ class MainActivity : Activity() {
             } catch (e: Exception) { }
         }
         persistAndRefresh()
-        grid.post { grid.smoothScrollToPosition(order.size - 1) }
+        grid.post { grid.smoothScrollToPosition((order.size - 1).coerceAtLeast(0)) }
         toast("Ana ekrana eklendi")
     }
 
@@ -780,8 +930,9 @@ class MainActivity : Activity() {
     }
 
     private fun persistAndRefresh() {
+        normalize()
         savePrefs()
-        gridAdapter.notifyDataSetChanged()
+        refreshGrid()
     }
 
     private fun isValid(k: String) = when {
@@ -790,16 +941,75 @@ class MainActivity : Activity() {
         else -> false
     }
 
-    /** Yüklü uygulamaları okur; sırayı, klasörleri düzeltir. Yeni uygulamalar listenin SONUNA eklenir. */
-    private fun reload() {
-        apps.clear()
-        for (a in launcherApps.getActivityList(null, me)) {
-            apps["app:" + a.componentName.flattenToString()] = a
+    // ---------- Uygulama listesini yükleme (arka plan) ----------
+    /**
+     * Yüklü uygulamaları ve henüz önbellekte olmayan simgeleri ARKA PLANDA hazırlar,
+     * sonucu ana thread'e tek seferde teslim eder. Ana thread hiç bloklanmaz.
+     */
+    private fun startReload() {
+        if (loading) { pendingReload = true; return }
+        loading = true
+        val known = HashSet(iconCache.keys)
+        val scs = shortcuts.values.toList()
+        val size = iconPx
+        worker.execute {
+            var snap: Snapshot? = null
+            try {
+                val list = launcherApps.getActivityList(null, me)
+                // Sistem geçici olarak boş liste dönerse (kilit açılırken vb.) düzeni silmemek için yok say.
+                if (!list.isNullOrEmpty()) {
+                    val map = LinkedHashMap<String, LauncherActivityInfo>(list.size * 2)
+                    val icons = HashMap<String, Bitmap>()
+                    for (a in list) {
+                        val k = "app:" + a.componentName.flattenToString()
+                        map[k] = a
+                        if (k !in known && k !in icons) {
+                            try { icons[k] = renderIcon(a.getBadgedIcon(0), size) } catch (e: Exception) { }
+                        }
+                    }
+                    for (s in scs) {
+                        val k = "sc:${s.pkg}/${s.id}"
+                        if (k !in known) {
+                            try { scIcon(s)?.let { icons[k] = renderIcon(it, size) } } catch (e: Exception) { }
+                        }
+                    }
+                    snap = Snapshot(map, icons)
+                }
+            } catch (e: Exception) { }
+            val result = snap
+            main.post {
+                loading = false
+                if (!isDestroyed) {
+                    if (result != null) applySnapshot(result)
+                    if (pendingReload) { pendingReload = false; startReload() }
+                }
+            }
         }
-        // Klasörleri temizle
-        for (f in folders.values) f.children.removeAll { !isValid(it) }
+    }
+
+    private fun applySnapshot(s: Snapshot) {
+        apps.clear()
+        apps.putAll(s.apps)
+        iconCache.putAll(s.newIcons)
+        normLabels.clear()
+        for ((k, a) in apps) normLabels[k] = fold(a.label.toString())
+        // Artık var olmayan öğelerin simgelerini bellekten at
+        iconCache.keys.removeAll { !apps.containsKey(it) && !shortcuts.containsKey(it) }
+        val changed = normalize()
+        if (changed) savePrefs()
+        refreshGrid()
+        if (search.text.isNotEmpty()) updateResults(search.text.toString())
+    }
+
+    /**
+     * Sırayı ve klasörleri gerçek duruma göre düzeltir. Yeni uygulamalar listenin SONUNA (alfabetik) eklenir.
+     * Bir şey değiştiyse true döner.
+     */
+    private fun normalize(): Boolean {
+        var changed = false
+        for (f in folders.values) if (f.children.removeAll { !isValid(it) }) changed = true
         for (fk in folders.keys.toList()) {
-            val f = folders[fk]!!
+            val f = folders[fk] ?: continue
             if (f.children.size <= 1) {
                 val idx = order.indexOf(fk)
                 if (idx >= 0) {
@@ -807,9 +1017,11 @@ class MainActivity : Activity() {
                     if (f.children.size == 1) order.add(idx, f.children[0])
                 }
                 folders.remove(fk)
+                changed = true
             }
         }
-        val inFolder = folders.values.flatMap { it.children }.toHashSet()
+        val inFolder = HashSet<String>()
+        for (f in folders.values) inFolder.addAll(f.children)
         val res = LinkedHashSet<String>()
         for (k in order) {
             when {
@@ -820,13 +1032,15 @@ class MainActivity : Activity() {
         }
         val missing = apps.keys
             .filter { it !in res && it !in inFolder }
-            .sortedBy { apps[it]!!.label.toString().lowercase() }
+            .sortedWith { a, b -> collator.compare(apps[a]!!.label.toString(), apps[b]!!.label.toString()) }
         res.addAll(missing)
-        order.clear()
-        order.addAll(res)
-        savePrefs()
-        gridAdapter.notifyDataSetChanged()
-        if (search.text.isNotEmpty()) updateResults(search.text.toString())
+        val newOrder = res.toList()
+        if (newOrder != order) {
+            order.clear()
+            order.addAll(newOrder)
+            changed = true
+        }
+        return changed
     }
 
     // ---------- Etiket / ikon ----------
@@ -837,26 +1051,8 @@ class MainActivity : Activity() {
         else -> ""
     }
 
-    private fun iconFor(k: String): Drawable? {
-        if (k.startsWith("folder:")) {
-            val f = folders[k]
-            return FolderDrawable(f?.children?.take(4)?.map { iconFor(it) }.orEmpty(), dp(56))
-        }
-        var d = iconCache[k]
-        if (d == null) {
-            d = when {
-                k.startsWith("app:") -> apps[k]?.getBadgedIcon(0)
-                k.startsWith("sc:") -> scIcon(k)
-                else -> null
-            }
-            if (d != null) iconCache[k] = d
-        }
-        // Her görünüm kendi kopyasını alır (sınırlar çakışmasın)
-        return d?.constantState?.newDrawable()?.mutate() ?: d
-    }
-
-    private fun scIcon(k: String): Drawable? {
-        val s = shortcuts[k] ?: return null
+    /** Arka plan thread'inde de çağrılabilir. */
+    private fun scIcon(s: Sc): Drawable? {
         try {
             val q = ShortcutQuery().setPackage(s.pkg).setShortcutIds(listOf(s.id)).setQueryFlags(
                 ShortcutQuery.FLAG_MATCH_PINNED or ShortcutQuery.FLAG_MATCH_DYNAMIC or
@@ -871,12 +1067,23 @@ class MainActivity : Activity() {
         return launcherApps.getActivityList(s.pkg, me).firstOrNull()?.getBadgedIcon(0)
     }
 
+    /** Simgeyi bir kez hedef boyutta bitmap'e çizer; sonrasında kaydırma sırasında hiç vektör/adaptive çizimi yapılmaz. */
+    private fun renderIcon(d: Drawable, size: Int): Bitmap {
+        val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val c = Canvas(bmp)
+        d.setBounds(0, 0, size, size)
+        d.draw(c)
+        return bmp
+    }
 }
 
 /** Klasör simgesi: yarı saydam yuvarlak zemin üzerinde en çok 4 mini simge. */
-class FolderDrawable(icons: List<Drawable?>, private val sizePx: Int) : Drawable() {
+class FolderDrawable(icons: List<Bitmap?>, private val sizePx: Int) : Drawable() {
     private val bg = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x66FFFFFF }
-    private val minis: List<Drawable?> = icons.take(4).map { it?.constantState?.newDrawable()?.mutate() ?: it }
+    private val bmpPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+    private val minis: List<Bitmap?> = icons.take(4)
+    private val rect = RectF()
+    private val dst = RectF()
 
     override fun getIntrinsicWidth() = sizePx
     override fun getIntrinsicHeight() = sizePx
@@ -884,22 +1091,23 @@ class FolderDrawable(icons: List<Drawable?>, private val sizePx: Int) : Drawable
     override fun draw(canvas: Canvas) {
         val b = bounds
         val w = b.width().toFloat()
-        canvas.drawRoundRect(RectF(b), w * 0.28f, w * 0.28f, bg)
+        rect.set(b.left.toFloat(), b.top.toFloat(), b.right.toFloat(), b.bottom.toFloat())
+        canvas.drawRoundRect(rect, w * 0.28f, w * 0.28f, bg)
         val pad = w * 0.12f
         val cell = (w - pad * 3) / 2f
-        minis.forEachIndexed { i, d ->
-            if (d == null) return@forEachIndexed
+        minis.forEachIndexed { i, bmp ->
+            if (bmp == null) return@forEachIndexed
             val col = i % 2
             val row = i / 2
             val l = b.left + pad + col * (cell + pad)
             val t = b.top + pad + row * (cell + pad)
-            d.setBounds(l.toInt(), t.toInt(), (l + cell).toInt(), (t + cell).toInt())
-            d.draw(canvas)
+            dst.set(l, t, l + cell, t + cell)
+            canvas.drawBitmap(bmp, null, dst, bmpPaint)
         }
     }
 
-    override fun setAlpha(alpha: Int) { bg.alpha = alpha }
-    override fun setColorFilter(cf: ColorFilter?) { bg.colorFilter = cf }
+    override fun setAlpha(alpha: Int) { bg.alpha = alpha; bmpPaint.alpha = alpha }
+    override fun setColorFilter(cf: ColorFilter?) { bg.colorFilter = cf; bmpPaint.colorFilter = cf }
     @Deprecated("Deprecated in Java")
     override fun getOpacity() = PixelFormat.TRANSLUCENT
 }

@@ -330,8 +330,8 @@ class MainActivity : Activity() {
                 setColor(0x66000000)
             }
             setOnClickListener { setEditMode(!editMode) }
-            // Uzun basış: mevcut düzeni İndirilenler klasörüne yedekle
-            setOnLongClickListener { backupLayout(); true }
+            // Uzun basış: düzenleme kapalıyken yedek al, düzenleme açıkken yedekten geri yükleme ekranını aç
+            setOnLongClickListener { if (editMode) pickBackupFile() else backupLayout(); true }
         }
         bar.addView(moveBtn, LinearLayout.LayoutParams(dp(34), dp(34)).apply { marginStart = dp(8) })
 

@@ -22,6 +22,7 @@ import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -59,8 +60,11 @@ import org.json.JSONObject
 import java.text.Collator
 import java.util.Locale
 import java.util.UUID
+import java.util.concurrent.Callable
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.ThreadPoolExecutor
+import java.util.concurrent.TimeUnit
 import kotlin.math.hypot
 
 class MainActivity : Activity() {
@@ -73,6 +77,8 @@ class MainActivity : Activity() {
     /** Arka planda hazırlanan, ana thread'e hazır halde teslim edilen uygulama listesi. */
     private class Snapshot(
         val apps: LinkedHashMap<String, LauncherActivityInfo>,
+        val labels: HashMap<String, String>,   // uygulama adları (arka planda okunur)
+        val norms: HashMap<String, String>,    // arama için sadeleştirilmiş adlar
         val newIcons: Map<String, Bitmap>
     )
 
@@ -86,6 +92,7 @@ class MainActivity : Activity() {
     private val shortcuts = LinkedHashMap<String, Sc>()                // "sc:<pkg>/<id>"
     private val order = mutableListOf<String>()                        // olması gereken sıra
     private val iconCache = HashMap<String, Bitmap>()                  // hazır, boyutlandırılmış simgeler
+    private val labels = HashMap<String, String>()                     // uygulama adları (ana thread'de kaynak okumamak için)
     private val normLabels = HashMap<String, String>()                 // arama için sadeleştirilmiş adlar
 
     // Adaptörün o an gösterdiği durum (DiffUtil için)
@@ -96,6 +103,12 @@ class MainActivity : Activity() {
     private val main = Handler(Looper.getMainLooper())
     private val worker: ExecutorService = Executors.newSingleThreadExecutor()
     private val searchExec: ExecutorService = Executors.newSingleThreadExecutor()
+    // Simgeleri çok çekirdekte paralel hazırlamak için (soğuk açılışı hızlandırır); boşta kalınca thread'ler kapanır.
+    private val iconPool: ExecutorService =
+        (Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors().coerceIn(2, 4)) as ThreadPoolExecutor).apply {
+            setKeepAliveTime(5, TimeUnit.SECONDS)
+            allowCoreThreadTimeOut(true)
+        }
     private var loading = false
     private var pendingReload = false
     private var skipNextResumeReload = true
@@ -128,7 +141,15 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         launcherApps = getSystemService(LauncherApps::class.java)
         prefs = getSharedPreferences("myl", MODE_PRIVATE)
-        window.setDecorFitsSystemWindows(false)
+        if (Build.VERSION.SDK_INT >= 30) {
+            window.setDecorFitsSystemWindows(false)
+        } else {
+            @Suppress("DEPRECATION")
+            window.decorView.systemUiVisibility =
+                View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
+                    View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
+                    View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+        }
         window.statusBarColor = Color.TRANSPARENT
         window.navigationBarColor = Color.TRANSPARENT
         buildUi()
@@ -165,6 +186,7 @@ class MainActivity : Activity() {
         main.removeCallbacksAndMessages(null)
         worker.shutdown()
         searchExec.shutdown()
+        iconPool.shutdown()
         folderDialog?.dismiss()
         super.onDestroy()
     }
@@ -224,9 +246,19 @@ class MainActivity : Activity() {
     private fun buildUi() {
         root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         root.setOnApplyWindowInsetsListener { v, ins ->
-            val i = ins.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.ime())
-            v.setPadding(i.left, i.top, i.right, i.bottom)
-            WindowInsets.CONSUMED
+            if (Build.VERSION.SDK_INT >= 30) {
+                val i = ins.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.ime())
+                v.setPadding(i.left, i.top, i.right, i.bottom)
+                WindowInsets.CONSUMED
+            } else {
+                @Suppress("DEPRECATION")
+                v.setPadding(
+                    ins.systemWindowInsetLeft, ins.systemWindowInsetTop,
+                    ins.systemWindowInsetRight, ins.systemWindowInsetBottom
+                )
+                @Suppress("DEPRECATION")
+                ins.consumeSystemWindowInsets()
+            }
         }
 
         // Üst çubuk: arama kutusu + küçük "düzenle" düğmesi
@@ -395,6 +427,9 @@ class MainActivity : Activity() {
         if (checkSelfPermission(Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED) {
             searchExec.execute {
                 if (gen != searchGen) return@execute
+                // Hızlı yazarken her harfte kişi veritabanını sorgulama: kısa bekle, hâlâ güncelse sorgula.
+                try { Thread.sleep(120) } catch (e: InterruptedException) { return@execute }
+                if (gen != searchGen) return@execute
                 val found = findContacts(q)
                 main.post {
                     if (gen == searchGen && !isDestroyed && found.isNotEmpty()) showRows(q, found)
@@ -414,7 +449,7 @@ class MainActivity : Activity() {
         }
         matches.sortWith(compareBy<String>({ normLabels[it]?.startsWith(fq) != true }, { normLabels[it] ?: "" }))
         for (k in matches.take(6)) {
-            val label = apps[k]?.label?.toString() ?: continue
+            val label = labels[k] ?: continue
             rows.add(Row(label, "Uygulama", iconCache[k]) { launch(k) })
         }
         val enc = Uri.encode(q)
@@ -897,7 +932,8 @@ class MainActivity : Activity() {
     private fun shortcutsOf(pkg: String, pinnedOnly: Boolean = false): List<ShortcutInfo> = try {
         var flags = ShortcutQuery.FLAG_MATCH_PINNED
         if (!pinnedOnly) {
-            flags = flags or ShortcutQuery.FLAG_MATCH_DYNAMIC or ShortcutQuery.FLAG_MATCH_MANIFEST or ShortcutQuery.FLAG_MATCH_CACHED
+            flags = flags or ShortcutQuery.FLAG_MATCH_DYNAMIC or ShortcutQuery.FLAG_MATCH_MANIFEST
+            if (Build.VERSION.SDK_INT >= 30) flags = flags or ShortcutQuery.FLAG_MATCH_CACHED
         }
         val q = ShortcutQuery().setPackage(pkg).setQueryFlags(flags)
         launcherApps.getShortcuts(q, me)?.filter { it.isEnabled } ?: emptyList()
@@ -1001,6 +1037,7 @@ class MainActivity : Activity() {
         if (loading) { pendingReload = true; return }
         loading = true
         val known = HashSet(iconCache.keys)
+        val knownLabels = HashMap(labels)
         val scs = shortcuts.values.toList()
         val size = iconPx
         worker.execute {
@@ -1010,11 +1047,33 @@ class MainActivity : Activity() {
                 // Sistem geçici olarak boş liste dönerse (kilit açılırken vb.) düzeni silmemek için yok say.
                 if (!list.isNullOrEmpty()) {
                     val map = LinkedHashMap<String, LauncherActivityInfo>(list.size * 2)
-                    val icons = HashMap<String, Bitmap>()
+                    val lbls = HashMap<String, String>(list.size * 2)
+                    val norms = HashMap<String, String>(list.size * 2)
+                    val todo = ArrayList<Pair<String, LauncherActivityInfo>>()
                     for (a in list) {
                         val k = "app:" + a.componentName.flattenToString()
+                        val dup = map.containsKey(k)
                         map[k] = a
-                        if (k !in known && k !in icons) {
+                        if (dup) continue
+                        // Ad okuma ve sadeleştirme burada (arka planda) yapılır; ana thread'de kaynak okunmaz.
+                        val l = try { a.label.toString() } catch (e: Exception) { "" }
+                        lbls[k] = l
+                        norms[k] = fold(l)
+                        if (k !in known) todo.add(k to a)
+                    }
+                    val icons = HashMap<String, Bitmap>()
+                    if (todo.size > 8) {
+                        // Çok simge varsa (ilk açılış) çekirdeklere paylaştır
+                        val futures = todo.map { (k, a) ->
+                            iconPool.submit(Callable<Pair<String, Bitmap>?> {
+                                try { k to renderIcon(a.getBadgedIcon(0), size) } catch (e: Exception) { null }
+                            })
+                        }
+                        for (f in futures) {
+                            try { f.get()?.let { icons[it.first] = it.second } } catch (e: Exception) { }
+                        }
+                    } else {
+                        for ((k, a) in todo) {
                             try { icons[k] = renderIcon(a.getBadgedIcon(0), size) } catch (e: Exception) { }
                         }
                     }
@@ -1024,7 +1083,10 @@ class MainActivity : Activity() {
                             try { scIcon(s)?.let { icons[k] = renderIcon(it, size) } } catch (e: Exception) { }
                         }
                     }
-                    snap = Snapshot(map, icons)
+                    // Hiçbir şey değişmediyse (en sık durum: ana ekrana dönüş) ana thread'e hiç iş yükleme.
+                    if (icons.isNotEmpty() || lbls != knownLabels) {
+                        snap = Snapshot(map, lbls, norms, icons)
+                    }
                 }
             } catch (e: Exception) { }
             val result = snap
@@ -1042,8 +1104,10 @@ class MainActivity : Activity() {
         apps.clear()
         apps.putAll(s.apps)
         iconCache.putAll(s.newIcons)
+        labels.clear()
+        labels.putAll(s.labels)
         normLabels.clear()
-        for ((k, a) in apps) normLabels[k] = fold(a.label.toString())
+        normLabels.putAll(s.norms)
         // Artık var olmayan öğelerin simgelerini bellekten at
         iconCache.keys.removeAll { !apps.containsKey(it) && !shortcuts.containsKey(it) }
         val changed = normalize()
@@ -1086,7 +1150,9 @@ class MainActivity : Activity() {
         }
         val missing = apps.keys
             .filter { it !in res && it !in inFolder }
-            .sortedWith { a, b -> collator.compare(apps[a]!!.label.toString(), apps[b]!!.label.toString()) }
+            .map { it to collator.getCollationKey(labels[it] ?: "") }
+            .sortedBy { it.second }
+            .map { it.first }
         res.addAll(missing)
         val newOrder = res.toList()
         if (newOrder != order) {
@@ -1099,7 +1165,7 @@ class MainActivity : Activity() {
 
     // ---------- Etiket / ikon ----------
     private fun labelFor(k: String): String = when {
-        k.startsWith("app:") -> apps[k]?.label?.toString() ?: ""
+        k.startsWith("app:") -> labels[k] ?: ""
         k.startsWith("sc:") -> shortcuts[k]?.label ?: ""
         k.startsWith("folder:") -> folders[k]?.name ?: ""
         else -> ""
@@ -1108,10 +1174,10 @@ class MainActivity : Activity() {
     /** Arka plan thread'inde de çağrılabilir. */
     private fun scIcon(s: Sc): Drawable? {
         try {
-            val q = ShortcutQuery().setPackage(s.pkg).setShortcutIds(listOf(s.id)).setQueryFlags(
-                ShortcutQuery.FLAG_MATCH_PINNED or ShortcutQuery.FLAG_MATCH_DYNAMIC or
-                    ShortcutQuery.FLAG_MATCH_MANIFEST or ShortcutQuery.FLAG_MATCH_CACHED
-            )
+            var qf = ShortcutQuery.FLAG_MATCH_PINNED or ShortcutQuery.FLAG_MATCH_DYNAMIC or
+                ShortcutQuery.FLAG_MATCH_MANIFEST
+            if (Build.VERSION.SDK_INT >= 30) qf = qf or ShortcutQuery.FLAG_MATCH_CACHED
+            val q = ShortcutQuery().setPackage(s.pkg).setShortcutIds(listOf(s.id)).setQueryFlags(qf)
             val l = launcherApps.getShortcuts(q, me)
             if (!l.isNullOrEmpty()) {
                 val d = launcherApps.getShortcutIconDrawable(l[0], 0)

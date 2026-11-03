@@ -503,7 +503,12 @@ class MainActivity : Activity() {
                     val id = c.getLong(0)
                     val nm = c.getString(1) ?: continue
                     // Dokun: telefon araması. Basılı tut: WhatsApp sohbeti.
-                    out.add(Row(nm, "Kişi", null, onLong = { openWhatsAppChat(id, nm) }) { callContact(id, nm) })
+                    if (isEmulator) {
+                        // Emülatör: dokununca numaradan WhatsApp sohbeti açılır
+                        out.add(Row(nm, "Kişi", null) { openWhatsAppByNumber(id, nm) })
+                    } else {
+                        out.add(Row(nm, "Kişi", null, onLong = { openWhatsAppChat(id, nm) }) { callContact(id, nm) })
+                    }
                 }
             }
         } catch (e: Exception) { }
@@ -564,6 +569,33 @@ class MainActivity : Activity() {
         try {
             startActivity(Intent(Intent.ACTION_DIAL, Uri.fromParts("tel", number, null)))
         } catch (e: Exception) { toast("Aranamadı") }
+    }
+
+    private val isEmulator: Boolean by lazy {
+        Build.FINGERPRINT.startsWith("generic") || Build.FINGERPRINT.contains("emulator") ||
+            Build.HARDWARE.contains("goldfish") || Build.HARDWARE.contains("ranchu") ||
+            Build.MODEL.contains("Emulator") || Build.MODEL.contains("Android SDK built for") ||
+            Build.PRODUCT.contains("sdk_gphone") || Build.PRODUCT.contains("emulator")
+    }
+
+    /** Kişinin numarasıyla WhatsApp sohbetini açar (yalnızca emülatörde kullanılır). */
+    private fun openWhatsAppByNumber(contactId: Long, name: String) {
+        val raw = phonesOf(contactId).firstOrNull()
+        if (raw == null) { toast("$name için numara yok"); return }
+        val t = raw.trim()
+        var d = t.filter { it.isDigit() }
+        d = when {
+            t.startsWith("+") -> d
+            d.startsWith("00") -> d.substring(2)
+            d.startsWith("0") -> "90" + d.substring(1)
+            d.length == 10 -> "90$d"
+            else -> d
+        }
+        val uri = Uri.parse("https://wa.me/$d")
+        for (pkg in listOf(WA_PKG, WA_BIZ_PKG)) {
+            try { startActivity(Intent(Intent.ACTION_VIEW, uri).setPackage(pkg)); return } catch (e: Exception) { }
+        }
+        toast("WhatsApp açılamadı")
     }
 
     /** Rehberdeki WhatsApp (veya WhatsApp Business) sohbet kaydını açar. */

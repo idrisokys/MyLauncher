@@ -1,0 +1,5 @@
+- Düzenleme modunda simge başka simgenin üstüne bırakılınca yer değiştirir
+- Bırakma göstergesi simgenin gideceği yerle aynı
+- Daha büyük arama kutusu ve üst çubuk düğmeleri, kalem düzenleme simgesi
+- Yazarken daha akıcı kişi araması
+- Kararlılık düzeltmeleri

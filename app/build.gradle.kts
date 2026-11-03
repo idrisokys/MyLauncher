@@ -18,7 +18,7 @@ android {
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.example.myl"
+        applicationId = "io.github.idrisokys.myl"
         minSdk = 29
         targetSdk = 34
         versionCode = 7

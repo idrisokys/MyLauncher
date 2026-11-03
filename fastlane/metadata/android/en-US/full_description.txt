@@ -1,0 +1,17 @@
+MyL is a minimal, fast home screen (launcher) for Android.
+
+<b>Features</b>
+<ul>
+<li>4-column app grid, newest apps added to the end alphabetically</li>
+<li>Fast search for apps, contacts and the web (Turkish-character aware)</li>
+<li>Tap a contact to call, long-press to open their WhatsApp chat</li>
+<li>Folders and pinned app shortcuts on the home screen</li>
+<li>Edit mode: drag an icon onto another to swap places, or between two icons to insert it</li>
+<li>Back up and restore your layout as a JSON file</li>
+<li>Long-press an app for its shortcuts, app info and uninstall</li>
+</ul>
+
+<b>Privacy</b>
+No ads, no tracking, no analytics and no network access of its own. Contacts and phone permissions are only used for search and calling.
+
+Requires Android 10 or newer.

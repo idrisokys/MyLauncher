@@ -43,7 +43,7 @@ Next to the edit button there is a **⚙ button** with: **Back up layout** (save
 The **✥ button** at the top right toggles edit mode. In edit mode the ⚙ button turns into a **folder button**.
 
 - **Long-press and drag** an icon
-  - Drop it on the **center** of another icon → it **takes its place** and the replaced icon **moves to the very end** of the list (no folder is created by dragging). A **blue ring** on the target shows what will be replaced
+  - Drop it on the **center** of another icon → the two icons **swap places** (no folder is created by dragging). A **blue ring** on the target shows which icon will be swapped
   - Drop it on the **edge** of an icon (between two icons) → it is **inserted between them**. A **blue bar** shows where it will go
 - **Folder button**: pick **"New folder"** (with a name) or an **existing folder**, tick any number of apps and tap **Add**
 - In edit mode, tapping an app does **not** launch it
@@ -215,7 +215,7 @@ Düzenle düğmesinin yanında bir **⚙ düğmesi** vardır: **Düzeni yedekle*
 Sağ üstteki **✥ düğmesi** düzenleme modunu açar/kapatır. Düzenleme modunda ⚙ düğmesi **klasör düğmesine** dönüşür.
 
 - Simgeye **uzun bas ve sürükle**
-  - Başka bir simgenin **ortasına** bırak → onun **yerini alır**, yeri alınan simge listenin **en sonuna** gider (sürükleyerek klasör oluşmaz). Hedefteki **mavi halka** hangi simgenin yer değiştireceğini gösterir
+  - Başka bir simgenin **ortasına** bırak → iki simge **yer değiştirir** (sürükleyerek klasör oluşmaz). Hedefteki **mavi halka** hangi simgenin yer değiştireceğini gösterir
   - Bir simgenin **kenarına** (iki simgenin arasına) bırak → o iki simgenin **arasına girer**. **Mavi çubuk** nereye gireceğini gösterir
 - **Klasör düğmesi**: **"Yeni klasör"** (adıyla) ya da **var olan bir klasörü** seç, istediğin kadar uygulamayı işaretle ve **Ekle**'ye dokun
 - Düzenleme modunda uygulamaya dokunmak uygulamayı **açmaz**

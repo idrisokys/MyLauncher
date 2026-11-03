@@ -420,7 +420,7 @@ class MainActivity : Activity() {
         editMode = on
         (moveBtn.background as GradientDrawable).setColor(if (on) 0xCCEC4899.toInt() else 0x66000000)
         actionBtn.setImageResource(if (on) R.drawable.ic_folder_add else R.drawable.ic_settings)
-        toast(if (on) "Düzenleme açık: simgeyi ortasına bırakırsan yerini alır, kenarına (arasına) bırakırsan araya girer. Klasör için üstteki klasör düğmesini kullan" else "Düzenleme kapalı")
+        toast(if (on) "Düzenleme açık: simgeyi başka bir simgenin ortasına bırakırsan yer değiştirirler, kenarına (arasına) bırakırsan araya girer. Klasör için üstteki klasör düğmesini kullan" else "Düzenleme kapalı")
     }
 
     private fun showSettingsMenu(anchor: View) {
@@ -860,7 +860,7 @@ class MainActivity : Activity() {
     }
 
     // ---------- Sürükle-bırak: yer değiştirme ----------
-    // Hedefin ORTASINA getirince mavi halka: sürüklenen simge hedefin yerini alır, hedef listenin EN SONUNA gider.
+    // Hedefin ORTASINA getirince mavi halka: sürüklenen simge ile hedef yer değiştirir.
     // Hedefin KENARINA (iki simge arasına) getirince mavi çubuk: simge o iki simgenin arasına girer.
     // (Klasör oluşturmak/klasöre eklemek için üstteki klasör düğmesi kullanılır.)
     private var hintView: View? = null
@@ -893,7 +893,17 @@ class MainActivity : Activity() {
         if (t == null || tp < 0 || tp >= shownKeys.size || tp == pos) { hintView = null; return }
         hintView = t
         hintInsert = isEdgeDrop(t, cx, cy)
-        hintBefore = cx > t.left + t.width / 2f   // ızgara sağdan sola: sağ taraf = hedefin ÖNCESİ
+        hintBefore = isBeforeSide(t, cx)
+    }
+
+    /**
+     * Bırakılan nokta hedefin listede ÖNCEKİ tarafında mı? Izgaranın GERÇEK çizim yönüne bakar:
+     * RTL'de sağ taraf = hedefin önü, LTR'de sol taraf = hedefin önü.
+     * (Çubuğun çizildiği taraf ile simgenin gideceği taraf hep aynı kalsın diye tek yerden hesaplanır.)
+     */
+    private fun isBeforeSide(t: View, cx: Float): Boolean {
+        val rightHalf = cx > t.left + t.width / 2f
+        return if (grid.layoutDirection == View.LAYOUT_DIRECTION_RTL) rightHalf else !rightHalf
     }
 
     /** Hedefin merkezinden yeterince uzakta (kenar/arası) bırakılıyorsa araya girme sayılır. */
@@ -906,7 +916,9 @@ class MainActivity : Activity() {
     private fun drawHint(c: Canvas) {
         val t = hintView ?: return
         if (hintInsert) {
-            val x = if (hintBefore) t.right - dp(1).toFloat() else t.left + dp(1).toFloat()
+            val rtl = grid.layoutDirection == View.LAYOUT_DIRECTION_RTL
+            val barAtRight = if (rtl) hintBefore else !hintBefore
+            val x = if (barAtRight) t.right - dp(1).toFloat() else t.left + dp(1).toFloat()
             val half = dp(3).toFloat()
             hintRect.set(x - half, t.top + dp(8).toFloat(), x + half, t.bottom - dp(8).toFloat())
             c.drawRoundRect(hintRect, half, half, hintBar)
@@ -972,7 +984,7 @@ class MainActivity : Activity() {
         if (tp < 0 || tp >= shownKeys.size || tp == pos) return
         val targetKey = shownKeys[tp]
         val insert = isEdgeDrop(target, cx, cy)
-        val before = cx > target.left + target.width / 2f
+        val before = isBeforeSide(target, cx)
         // Değişiklik, RecyclerView kendi çizim/animasyon döngüsünden çıktıktan sonra uygulanır.
         rv.post { if (insert) insertNear(key, targetKey, before) else replaceAt(key, targetKey) }
     }
@@ -987,14 +999,13 @@ class MainActivity : Activity() {
         persistAndRefresh()
     }
 
-    /** Sürüklenen öğe hedefin yerini alır; yeri alınan hedef listenin en sonuna gider. */
+    /** Sürüklenen öğe ile hedef birbirinin yerini alır (yer değiştirir). */
     private fun replaceAt(drag: String, target: String) {
         val from = order.indexOf(drag)
-        if (from < 0 || !order.contains(target) || drag == target) return
-        order.removeAt(from)
-        val idx = order.indexOf(target)
-        order[idx] = drag
-        order.add(target)
+        val to = order.indexOf(target)
+        if (from < 0 || to < 0 || drag == target) return
+        order[from] = target
+        order[to] = drag
         persistAndRefresh()
     }
 

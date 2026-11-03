@@ -5,7 +5,6 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.app.Dialog
 import android.content.ContentUris
-import android.content.ContentValues
 import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.LauncherActivityInfo
@@ -27,13 +26,10 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
-import android.os.Environment
 import android.os.Looper
 import android.os.Process
 import android.os.UserHandle
 import android.provider.ContactsContract
-import android.provider.DocumentsContract
-import android.provider.MediaStore
 import android.provider.Settings
 import android.text.Editable
 import android.text.TextUtils
@@ -64,8 +60,6 @@ import androidx.recyclerview.widget.SimpleItemAnimator
 import org.json.JSONArray
 import org.json.JSONObject
 import java.text.Collator
-import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.Callable
@@ -148,8 +142,8 @@ class MainActivity : Activity() {
     private var askedContacts = false
     private var pendingCallNumber: String? = null   // CALL_PHONE izni beklenirken
     private lateinit var moveBtn: ImageView
+    private lateinit var actionBtn: ImageView   // normalde ayarlar, düzenleme modunda klasör simgesi
     private var editMode = false
-    private var restoreDialog: Dialog? = null
 
     private fun dp(v: Int) = (v * density).toInt()
 
@@ -158,11 +152,6 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         launcherApps = getSystemService(LauncherApps::class.java)
         prefs = getSharedPreferences("myl", MODE_PRIVATE)
-        // İlk kurulum: hiç düzen kaydı yok ve daha önce yedek sorusu sorulmadı.
-        // Soru, varsayılan launcher seçildikten sonra sorulur (maybeAskRestore).
-        if (!prefs.contains("restore_asked") && !prefs.contains("order")) {
-            prefs.edit().putBoolean("restore_pending", true).apply()
-        }
         if (Build.VERSION.SDK_INT >= 30) {
             window.setDecorFitsSystemWindows(false)
         } else {
@@ -201,7 +190,6 @@ class MainActivity : Activity() {
         // Artık simge önbelleği silinmiyor; arka planda hızlıca kontrol edilir,
         // bir şey değişmediyse ekrana hiç dokunulmaz.
         if (skipNextResumeReload) skipNextResumeReload = false else startReload()
-        maybeAskRestore()
     }
 
     override fun onDestroy() {
@@ -211,7 +199,6 @@ class MainActivity : Activity() {
         searchExec.shutdown()
         iconPool.shutdown()
         folderDialog?.dismiss()
-        restoreDialog?.dismiss()
         super.onDestroy()
     }
 
@@ -233,14 +220,6 @@ class MainActivity : Activity() {
             return
         }
         updateResults(search.text.toString())
-    }
-
-    @Deprecated("Deprecated in Java")
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == REQ_RESTORE && resultCode == RESULT_OK) {
-            data?.data?.let { restoreFrom(it) }
-        }
     }
 
     private fun handleIntent(i: Intent?) {
@@ -330,9 +309,17 @@ class MainActivity : Activity() {
                 setColor(0x66000000)
             }
             setOnClickListener { setEditMode(!editMode) }
-            // Uzun basış: düzenleme kapalıyken yedek al, düzenleme açıkken yedekten geri yükleme ekranını aç
-            setOnLongClickListener { if (editMode) pickBackupFile() else backupLayout(); true }
         }
+        actionBtn = ImageView(this).apply {
+            setImageResource(R.drawable.ic_settings)
+            setPadding(dp(8), dp(8), dp(8), dp(8))
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(0x66000000)
+            }
+            setOnClickListener { if (editMode) showFolderPicker() else showSettingsMenu(this) }
+        }
+        bar.addView(actionBtn, LinearLayout.LayoutParams(dp(34), dp(34)).apply { marginStart = dp(8) })
         bar.addView(moveBtn, LinearLayout.LayoutParams(dp(34), dp(34)).apply { marginStart = dp(8) })
 
         root.addView(bar, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
@@ -427,7 +414,15 @@ class MainActivity : Activity() {
         if (editMode == on) return
         editMode = on
         (moveBtn.background as GradientDrawable).setColor(if (on) 0xCCEC4899.toInt() else 0x66000000)
-        toast(if (on) "Düzenleme açık: simgeyi sürükle. Yan çubuk = araya girer, pembe halka = klasör olur" else "Düzenleme kapalı")
+        actionBtn.setImageResource(if (on) R.drawable.ic_folder_add else R.drawable.ic_settings)
+        toast(if (on) "Düzenleme açık: simgeyi başka simgenin üstüne sürükle, yerini alır. Klasör için üstteki klasör düğmesini kullan" else "Düzenleme kapalı")
+    }
+
+    private fun showSettingsMenu(anchor: View) {
+        val pm = PopupMenu(this, anchor)
+        pm.menu.add("Varsayılan ana ekran uygulaması").setOnMenuItemClickListener { openDefaultLauncherSettings(); true }
+        pm.menu.add("Sistem ayarları").setOnMenuItemClickListener { safeStart(Intent(Settings.ACTION_SETTINGS)); true }
+        pm.show()
     }
 
     private fun openUrl(url: String) {
@@ -616,7 +611,6 @@ class MainActivity : Activity() {
 
     private companion object {
         const val REQ_CALL = 2
-        const val REQ_RESTORE = 3
         const val MAX_RESULTS = 5   // kişi + uygulama sonuçları toplamı
         const val WA_PKG = "com.whatsapp"
         const val WA_BIZ_PKG = "com.whatsapp.w4b"
@@ -773,26 +767,15 @@ class MainActivity : Activity() {
         else if (!editMode) launch(key)   // düzenleme modunda uygulama açılmaz
     }
 
-    // ---------- Sürükle-bırak: klasör oluşturma / uzun basma menüsü ----------
-    // Sürüklerken hedefin ne olacağını gösteren efekt:
-    //  - pembe halka + hafif büyüme  => klasör olacak / klasöre eklenecek
-    //  - mavi çubuk (hedefin yan tarafı) => araya girip yer değiştirecek
+    // ---------- Sürükle-bırak: yer değiştirme ----------
+    // Sürüklenen simge bir simgenin üstüne gelince hedef mavi halkayla işaretlenir:
+    // bırakınca sürüklenen simge hedefin yerini alır, hedef ise listenin EN SONUNA gider.
+    // (Klasör oluşturmak/klasöre eklemek için üstteki klasör düğmesi kullanılır.)
     private var hintView: View? = null
-    private var hintMerge = false
-    private var hintRight = false
     private val hintRect = RectF()
-    private val hintFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x33EC4899 }
+    private val hintFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x3338BDF8 }
     private val hintRing = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = 0xFFEC4899.toInt(); style = Paint.Style.STROKE
-    }
-    private val hintBar = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF38BDF8.toInt() }
-
-    private fun setHint(v: View?, merge: Boolean, right: Boolean) {
-        if (hintView !== v || hintMerge != merge) {
-            hintView?.animate()?.scaleX(1f)?.scaleY(1f)?.setDuration(120)?.start()
-            if (v != null && merge) v.animate().scaleX(1.12f).scaleY(1.12f).setDuration(120).start()
-        }
-        hintView = v; hintMerge = merge; hintRight = right
+        color = 0xFF38BDF8.toInt(); style = Paint.Style.STROKE
     }
 
     /** Sürüklenen öğenin merkezinin altındaki (kendisi hariç) hücreyi bulur. */
@@ -808,35 +791,20 @@ class MainActivity : Activity() {
     private fun updateHint(rv: RecyclerView, vh: RecyclerView.ViewHolder, dX: Float, dY: Float) {
         val iv = vh.itemView
         val pos = vh.bindingAdapterPosition
-        val key = shownKeys.getOrNull(pos)
         val cx = iv.left + iv.width / 2f + dX
         val cy = iv.top + iv.height / 2f + dY
-        val t = if (key != null) findTarget(rv, iv, cx, cy) else null
+        val t = if (pos >= 0) findTarget(rv, iv, cx, cy) else null
         val tp = if (t != null) rv.getChildAdapterPosition(t) else -1
-        if (t == null || key == null || tp < 0 || tp >= shownKeys.size || tp == pos) {
-            setHint(null, false, false)
-            return
-        }
-        val tcx = t.left + t.width / 2f
-        val tcy = t.top + t.height / 2f
-        val reorder = key.startsWith("folder:") || hypot(cx - tcx, cy - tcy) > t.width * 0.4f
-        setHint(t, !reorder, cx > tcx)
+        hintView = if (t == null || tp < 0 || tp >= shownKeys.size || tp == pos) null else t
     }
 
     private fun drawHint(c: Canvas) {
         val t = hintView ?: return
-        if (hintMerge) {
-            val r = dp(18).toFloat()
-            hintRect.set(t.left + dp(2).toFloat(), t.top + dp(2).toFloat(), t.right - dp(2).toFloat(), t.bottom - dp(2).toFloat())
-            hintRing.strokeWidth = dp(2) + dp(1) / 2f
-            c.drawRoundRect(hintRect, r, r, hintFill)
-            c.drawRoundRect(hintRect, r, r, hintRing)
-        } else {
-            val x = if (hintRight) t.right - dp(1).toFloat() else t.left + dp(1).toFloat()
-            val half = dp(3).toFloat()
-            hintRect.set(x - half, t.top + dp(8).toFloat(), x + half, t.bottom - dp(8).toFloat())
-            c.drawRoundRect(hintRect, half, half, hintBar)
-        }
+        val r = dp(18).toFloat()
+        hintRect.set(t.left + dp(2).toFloat(), t.top + dp(2).toFloat(), t.right - dp(2).toFloat(), t.bottom - dp(2).toFloat())
+        hintRing.strokeWidth = dp(2) + dp(1) / 2f
+        c.drawRoundRect(hintRect, r, r, hintFill)
+        c.drawRoundRect(hintRect, r, r, hintRing)
     }
 
     private val touchHelper = ItemTouchHelper(object : ItemTouchHelper.Callback() {
@@ -872,7 +840,7 @@ class MainActivity : Activity() {
             vh.itemView.animate().cancel()
             vh.itemView.scaleX = 1f
             vh.itemView.scaleY = 1f
-            setHint(null, false, false)
+            hintView = null
             rv.invalidate()
             if (editMode) handleDrop(rv, vh, dx, dy)
             dx = 0f; dy = 0f
@@ -891,38 +859,175 @@ class MainActivity : Activity() {
         val tp = rv.getChildAdapterPosition(target)
         if (tp < 0 || tp >= shownKeys.size || tp == pos) return
         val targetKey = shownKeys[tp]
-        val tcx = target.left + target.width / 2f
-        val tcy = target.top + target.height / 2f
-        val move = key.startsWith("folder:") || hypot(cx - tcx, cy - tcy) > target.width * 0.4f
         // Değişiklik, RecyclerView kendi çizim/animasyon döngüsünden çıktıktan sonra uygulanır.
-        rv.post { if (move) moveKey(key, targetKey) else mergeInto(key, targetKey) }
+        rv.post { replaceAt(key, targetKey) }
     }
 
-    private fun moveKey(key: String, targetKey: String) {
-        val from = order.indexOf(key)
-        val to = order.indexOf(targetKey)
-        if (from < 0 || to < 0 || from == to) return
-        val item = order.removeAt(from)
-        order.add(to, item)
+    /** Sürüklenen öğe hedefin yerini alır; yeri alınan hedef listenin en sonuna gider. */
+    private fun replaceAt(drag: String, target: String) {
+        val from = order.indexOf(drag)
+        if (from < 0 || !order.contains(target) || drag == target) return
+        order.removeAt(from)
+        val idx = order.indexOf(target)
+        order[idx] = drag
+        order.add(target)
         persistAndRefresh()
     }
 
-    private fun mergeInto(drag: String, target: String) {
-        if (drag.startsWith("folder:")) return
-        if (target.startsWith("folder:")) {
-            val f = folders[target] ?: return
-            if (!f.children.contains(drag)) f.children.add(drag)
-            order.remove(drag)
-        } else {
-            val idx0 = order.indexOf(target)
-            if (idx0 < 0 || !order.contains(drag)) return
-            val id = "folder:" + UUID.randomUUID().toString().take(8)
-            order.remove(drag)
-            val idx = order.indexOf(target)
-            order[idx] = id
-            folders[id] = Folder("Klasör", mutableListOf(target, drag))
+    // ---------- Klasör seçici (düzenleme modundaki klasör düğmesi) ----------
+    /** Seçilen uygulamaları yeni bir klasöre ya da var olan bir klasöre ekler. */
+    private fun showFolderPicker() {
+        val candidates = order.filter { !it.startsWith("folder:") }
+        if (candidates.isEmpty()) { toast("Eklenecek uygulama yok"); return }
+        val checked = HashSet<String>()
+        val folderKeys = folders.keys.toList()
+        var target = -1   // -1 = yeni klasör, aksi halde folderKeys indeksi
+
+        val d = Dialog(this)
+        d.requestWindowFeature(Window.FEATURE_NO_TITLE)
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(16), dp(16), dp(16), dp(12))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(28).toFloat()
+                setColor(0xF0222222.toInt())
+            }
         }
-        persistAndRefresh()
+        box.addView(TextView(this).apply {
+            text = "Klasöre ekle"
+            textSize = 18f
+            setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+            setPadding(0, 0, 0, dp(10))
+        })
+
+        // Hedef seçimi: "Yeni klasör" + var olan klasörler (yatay kaydırılır)
+        val nameEdit = EditText(this).apply {
+            setText("Klasör")
+            setSingleLine()
+            setTextColor(Color.WHITE)
+            setHintTextColor(0x88FFFFFF.toInt())
+            hint = "Klasör adı"
+            textSize = 15f
+            setSelectAllOnFocus(true)
+        }
+        val chips = ArrayList<TextView>()
+        fun paintChips() {
+            chips.forEachIndexed { i, tv ->
+                (tv.background as GradientDrawable).setColor(if (i - 1 == target) 0xFFEC4899.toInt() else 0x33FFFFFF)
+            }
+            nameEdit.visibility = if (target == -1) View.VISIBLE else View.GONE
+        }
+        val chipRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val chipNames = listOf("＋ Yeni klasör") + folderKeys.map { folders[it]?.name ?: "" }
+        chipNames.forEachIndexed { i, nm ->
+            val tv = TextView(this).apply {
+                text = nm
+                textSize = 14f
+                setTextColor(Color.WHITE)
+                maxLines = 1
+                ellipsize = TextUtils.TruncateAt.END
+                setPadding(dp(14), dp(8), dp(14), dp(8))
+                background = GradientDrawable().apply { cornerRadius = dp(18).toFloat() }
+                setOnClickListener { target = i - 1; paintChips() }
+            }
+            chips.add(tv)
+            chipRow.addView(tv, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                marginEnd = dp(8)
+            })
+        }
+        box.addView(android.widget.HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(chipRow)
+        })
+        box.addView(nameEdit, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            topMargin = dp(8)
+        })
+        paintChips()
+
+        // Uygulama listesi (çoklu seçim)
+        val list = ListView(this)
+        list.divider = null
+        val adapter = object : BaseAdapter() {
+            override fun getCount() = candidates.size
+            override fun getItem(p: Int) = candidates[p]
+            override fun getItemId(p: Int) = p.toLong()
+            override fun getView(p: Int, cv: View?, parent: ViewGroup?): View {
+                val k = candidates[p]
+                val line = (cv as? LinearLayout) ?: LinearLayout(this@MainActivity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(dp(8), dp(6), dp(8), dp(6))
+                    addView(ImageView(this@MainActivity), LinearLayout.LayoutParams(dp(40), dp(40)))
+                    addView(TextView(this@MainActivity).apply {
+                        textSize = 16f; setTextColor(Color.WHITE)
+                        maxLines = 1; ellipsize = TextUtils.TruncateAt.END
+                    }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                        marginStart = dp(12); marginEnd = dp(12)
+                    })
+                    addView(TextView(this@MainActivity).apply {
+                        textSize = 18f; gravity = Gravity.CENTER; setTextColor(Color.WHITE)
+                    }, LinearLayout.LayoutParams(dp(28), dp(28)))
+                }
+                (line.getChildAt(0) as ImageView).setImageBitmap(iconCache[k])
+                (line.getChildAt(1) as TextView).text = labelFor(k)
+                val mark = line.getChildAt(2) as TextView
+                val on = k in checked
+                mark.text = if (on) "✓" else ""
+                mark.background = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    if (on) setColor(0xFFEC4899.toInt()) else { setColor(Color.TRANSPARENT); setStroke(dp(2), 0x88FFFFFF.toInt()) }
+                }
+                return line
+            }
+        }
+        list.adapter = adapter
+        list.setOnItemClickListener { _, _, p, _ ->
+            val k = candidates[p]
+            if (!checked.remove(k)) checked.add(k)
+            adapter.notifyDataSetChanged()
+        }
+        box.addView(list, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (resources.displayMetrics.heightPixels * 0.45f).toInt()).apply {
+            topMargin = dp(8)
+        })
+
+        // Düğmeler
+        val btns = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.END }
+        btns.addView(TextView(this).apply {
+            text = "İptal"; textSize = 15f; setTextColor(0xCCFFFFFF.toInt())
+            setPadding(dp(16), dp(10), dp(16), dp(10))
+            setOnClickListener { d.dismiss() }
+        })
+        btns.addView(TextView(this).apply {
+            text = "Ekle"; textSize = 15f; setTextColor(0xFFEC4899.toInt())
+            setPadding(dp(16), dp(10), dp(16), dp(10))
+            setOnClickListener {
+                val sel = order.filter { it in checked }   // ekrandaki sıra korunur
+                if (sel.isEmpty()) { toast("Uygulama seç"); return@setOnClickListener }
+                if (target == -1) {
+                    if (sel.size < 2) { toast("Yeni klasör için en az 2 uygulama seç"); return@setOnClickListener }
+                    val nm = nameEdit.text.toString().trim().ifEmpty { "Klasör" }
+                    val id = "folder:" + UUID.randomUUID().toString().take(8)
+                    val idx = order.indexOf(sel[0])
+                    order.removeAll(sel.toSet())
+                    order.add(idx.coerceIn(0, order.size), id)
+                    folders[id] = Folder(nm, sel.toMutableList())
+                } else {
+                    val f = folders[folderKeys[target]] ?: return@setOnClickListener
+                    for (k in sel) if (!f.children.contains(k)) f.children.add(k)
+                    order.removeAll(sel.toSet())
+                }
+                d.dismiss()
+                persistAndRefresh()
+            }
+        })
+        box.addView(btns)
+
+        d.setContentView(box)
+        d.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+        d.window?.setLayout((resources.displayMetrics.widthPixels * 0.92f).toInt(), ViewGroup.LayoutParams.WRAP_CONTENT)
+        d.window?.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+        d.show()
     }
 
     // ---------- Menüler ----------
@@ -1150,149 +1255,16 @@ class MainActivity : Activity() {
         } catch (e: Exception) { }
     }
 
-    private fun foldersJson(): JSONObject {
+    private fun savePrefs() {
         val fo = JSONObject()
         for ((k, f) in folders) fo.put(k, JSONObject().put("n", f.name).put("c", JSONArray(f.children)))
-        return fo
-    }
-
-    private fun shortcutsJson(): JSONObject {
         val so = JSONObject()
         for ((k, s) in shortcuts) so.put(k, JSONObject().put("p", s.pkg).put("i", s.id).put("l", s.label))
-        return so
-    }
-
-    private fun savePrefs() {
         prefs.edit()
             .putString("order", JSONArray(order).toString())
-            .putString("folders", foldersJson().toString())
-            .putString("shortcuts", shortcutsJson().toString())
+            .putString("folders", fo.toString())
+            .putString("shortcuts", so.toString())
             .apply()
-    }
-
-    // ---------- Yedekleme / geri yükleme ----------
-    /** Düzenle (✥) düğmesine uzun basınca: sıra, klasörler ve kısayollar İndirilenler'e .json olarak yazılır. */
-    private fun backupLayout() {
-        if (!loadedOnce || order.isEmpty()) { toast("Uygulamalar henüz yüklenmedi"); return }
-        val name = "MyL_yedek_" + SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date()) + ".json"
-        val json = JSONObject()
-            .put("app", "MyL")
-            .put("version", 1)
-            .put("time", System.currentTimeMillis())
-            .put("order", JSONArray(order))
-            .put("folders", foldersJson())
-            .put("shortcuts", shortcutsJson())
-            .toString(2)
-        worker.execute {
-            val ok = try {
-                val cv = ContentValues().apply {
-                    put(MediaStore.Downloads.DISPLAY_NAME, name)
-                    put(MediaStore.Downloads.MIME_TYPE, "application/json")
-                    put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
-                }
-                val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, cv)
-                if (uri == null) false else {
-                    contentResolver.openOutputStream(uri)?.use { it.write(json.toByteArray(Charsets.UTF_8)) } != null
-                }
-            } catch (e: Exception) { false }
-            main.post {
-                if (!isDestroyed) toast(if (ok) "Yedek İndirilenler klasörüne kaydedildi: $name" else "Yedek alınamadı")
-            }
-        }
-    }
-
-    /**
-     * İlk kurulumdan sonra, launcher varsayılan seçilince (ve uygulamalar yüklenince) bir kez sorar:
-     * "Yedek dosyasından geri yüklensin mi?"
-     */
-    private fun maybeAskRestore() {
-        if (!prefs.getBoolean("restore_pending", false)) return
-        if (!loadedOnce || isFinishing || isDestroyed) return
-        if (restoreDialog?.isShowing == true) return
-        if (!isDefaultLauncher()) return
-        restoreDialog = AlertDialog.Builder(this)
-            .setTitle("Yedekten geri yükle")
-            .setMessage("Daha önce aldığın bir yedek dosyasından ana ekran düzeni geri yüklensin mi?\n\nEvet dersen İndirilenler klasöründeki MyL_yedek_….json dosyasını seçmen istenecek.")
-            .setCancelable(false)
-            .setPositiveButton("Evet") { _, _ ->
-                prefs.edit().putBoolean("restore_pending", false).putBoolean("restore_asked", true).apply()
-                pickBackupFile()
-            }
-            .setNegativeButton("Hayır") { _, _ ->
-                prefs.edit().putBoolean("restore_pending", false).putBoolean("restore_asked", true).apply()
-            }
-            .show()
-    }
-
-    private fun pickBackupFile() {
-        val i = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-            addCategory(Intent.CATEGORY_OPENABLE)
-            type = "*/*"
-            try {
-                putExtra(
-                    DocumentsContract.EXTRA_INITIAL_URI,
-                    Uri.parse("content://com.android.externalstorage.documents/document/primary%3ADownload")
-                )
-            } catch (e: Exception) { }
-        }
-        try { startActivityForResult(i, REQ_RESTORE) } catch (e: Exception) { toast("Dosya seçici açılamadı") }
-    }
-
-    private class Backup(
-        val order: List<String>,
-        val folders: LinkedHashMap<String, Folder>,
-        val shortcuts: LinkedHashMap<String, Sc>
-    )
-
-    /** Seçilen yedek dosyasını arka planda okur/doğrular, sonra ana thread'de uygular. */
-    private fun restoreFrom(uri: Uri) {
-        worker.execute {
-            var b: Backup? = null
-            try {
-                val text = contentResolver.openInputStream(uri)?.use { it.readBytes().toString(Charsets.UTF_8) }
-                if (text != null) {
-                    val j = JSONObject(text)
-                    if (j.optString("app") == "MyL") {
-                        val ord = ArrayList<String>()
-                        val oa = j.getJSONArray("order")
-                        for (n in 0 until oa.length()) ord.add(oa.getString(n))
-                        val fs = LinkedHashMap<String, Folder>()
-                        j.optJSONObject("folders")?.let { o ->
-                            for (k in o.keys()) {
-                                val f = o.getJSONObject(k)
-                                val ch = f.getJSONArray("c")
-                                val l = mutableListOf<String>()
-                                for (n in 0 until ch.length()) l.add(ch.getString(n))
-                                fs[k] = Folder(f.getString("n"), l)
-                            }
-                        }
-                        val ss = LinkedHashMap<String, Sc>()
-                        j.optJSONObject("shortcuts")?.let { o ->
-                            for (k in o.keys()) {
-                                val x = o.getJSONObject(k)
-                                ss[k] = Sc(x.getString("p"), x.getString("i"), x.getString("l"))
-                            }
-                        }
-                        if (ord.isNotEmpty()) b = Backup(ord, fs, ss)
-                    }
-                }
-            } catch (e: Exception) { }
-            val result = b
-            main.post {
-                if (isDestroyed) return@post
-                if (result == null) { toast("Geçerli bir MyL yedek dosyası değil"); return@post }
-                folderDialog?.dismiss()
-                order.clear(); order.addAll(result.order)
-                folders.clear(); folders.putAll(result.folders)
-                shortcuts.clear(); shortcuts.putAll(result.shortcuts)
-                // Yüklü olmayan uygulamalar elenir, yeni uygulamalar sona eklenir.
-                normalize()
-                savePrefs()
-                refreshGrid()
-                startReload()   // geri gelen kısayolların simgelerini hazırla
-                toast("Düzen geri yüklendi")
-            }
-        }
     }
 
     private fun persistAndRefresh() {
@@ -1395,7 +1367,6 @@ class MainActivity : Activity() {
         if (search.text.isNotEmpty()) updateResults(search.text.toString())
         loadedOnce = true
         pendingPinIntent?.let { pendingPinIntent = null; handleIntent(it) }
-        maybeAskRestore()
     }
 
     /**

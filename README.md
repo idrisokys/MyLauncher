@@ -36,26 +36,20 @@ Tap the **search bar** at the top to start searching.
 - **Turkish-character aware**: `ısı`, `isi` and `Isı` all return the same result (ı/i, ö/o, ü/u, ş/s, ç/c, ğ/g)
 - Contact lookup runs in the background, so the UI never freezes while typing
 
-### 📁 Folders and edit mode
-The **✥ button** at the top right toggles edit mode.
+### ⚙️ Settings button
+Next to the edit button there is a **⚙ button**: **Default home app** and **System settings** shortcuts.
 
-- **Long-press and drag** an icon
-  - Drop it on the **edge** of another icon → they swap places
-  - Drop it on the **center** of another icon → a **folder** is created
-  - Drop it on a folder → it is added to that folder
-- A **live drop hint** shows what will happen while you drag: a **pink ring** with a slight zoom on the target means *folder*, a **blue bar** on its side means *reorder*
+### 📁 Edit mode and folders
+The **✥ button** at the top right toggles edit mode. In edit mode the ⚙ button turns into a **folder button**.
+
+- **Long-press and drag** an icon onto another icon → the dragged icon **takes its place** and the replaced icon **moves to the very end** of the list (no folder is created by dragging). A **blue ring** on the target shows what will be replaced
+- **Folder button**: pick **"New folder"** (with a name) or an **existing folder**, tick any number of apps and tap **Add**
 - In edit mode, tapping an app does **not** launch it
 - The folder icon shows a **mini preview** of its first 4 apps
 - Tap the folder name to **rename** it
 - Folder menu: **Rename**, **Dissolve folder**
 - Long-press an app inside a folder → **Remove from folder**
 - A folder left with a single app is dissolved automatically
-
-### 💾 Backup & restore
-- **While edit mode is on, long-press the ✥ button** → opens the restore screen (file picker) to restore a backup at any time
-- **Long-press the ✥ button** → your layout (order, folders, shortcuts) is saved automatically to the **Downloads** folder as `MyL_yedek_<date>_<time>.json`
-- On a **fresh install**, after you pick MyL as the default launcher, it asks **"Restore from a backup file?"**. Tap **Yes**, then choose the backup file; your layout is restored (apps that are not installed are skipped, new ones are added at the end)
-- No extra permission is needed (MediaStore + system file picker)
 
 ### 📌 Long-press menu (when edit mode is off)
 **For apps**
@@ -212,26 +206,20 @@ Sade, hızlı ve gösterişten uzak bir Android ana ekran uygulaması. Tek ekran
 - **Türkçe karakter duyarlı**: `ısı`, `isi`, `Isı` hepsi aynı sonucu bulur (ı/i, ö/o, ü/u, ş/s, ç/c, ğ/g)
 - Kişi araması arka planda yapılır, yazarken arayüz donmaz
 
-### 📁 Klasörler ve düzenleme modu
-Sağ üstteki **✥ düğmesi** düzenleme modunu açar/kapatır.
+### ⚙️ Ayarlar düğmesi
+Düzenle düğmesinin yanında bir **⚙ düğmesi** vardır: **Varsayılan ana ekran uygulaması** ve **Sistem ayarları** kısayolları.
 
-- Simgeye **uzun bas ve sürükle**
-  - Başka bir simgenin **kenarına** bırak → yer değiştirir
-  - Başka bir simgenin **üstüne** bırak → **klasör** oluşur
-  - Klasörün üstüne bırak → klasöre eklenir
-- Sürüklerken ne olacağını gösteren **canlı efekt** vardır: hedefte **pembe halka** ve hafif büyüme *klasör*, yan tarafta **mavi çubuk** *araya girme* demektir
+### 📁 Düzenleme modu ve klasörler
+Sağ üstteki **✥ düğmesi** düzenleme modunu açar/kapatır. Düzenleme modunda ⚙ düğmesi **klasör düğmesine** dönüşür.
+
+- Simgeye **uzun bas ve başka bir simgenin üstüne sürükle** → sürüklenen simge onun **yerini alır**, yeri alınan simge listenin **en sonuna** gider (sürükleyerek klasör oluşmaz). Hedefteki **mavi halka** hangi simgenin yer değiştireceğini gösterir
+- **Klasör düğmesi**: **"Yeni klasör"** (adıyla) ya da **var olan bir klasörü** seç, istediğin kadar uygulamayı işaretle ve **Ekle**'ye dokun
 - Düzenleme modunda uygulamaya dokunmak uygulamayı **açmaz**
 - Klasör simgesi içindeki ilk 4 uygulamanın **mini önizlemesini** gösterir
 - Klasörün adına dokunarak **yeniden adlandır**
 - Klasör menüsü: **Yeniden adlandır**, **Klasörü dağıt**
 - Klasör içindeki bir uygulamaya uzun bas → **Klasörden çıkar**
 - İçinde tek uygulama kalan klasör otomatik dağılır
-
-### 💾 Yedekleme ve geri yükleme
-- **Düzenleme modu açıkken ✥ düğmesine uzun bas** → yedekten geri yükleme ekranı (dosya seçici) açılır, istediğin zaman geri yükleyebilirsin
-- **✥ düğmesine uzun bas** → düzenin (sıra, klasörler, kısayollar) **İndirilenler** klasörüne `MyL_yedek_<tarih>_<saat>.json` olarak otomatik kaydedilir
-- **İlk kurulumda**, MyL'i varsayılan launcher seçtikten sonra **"Yedek dosyasından geri yüklensin mi?"** diye sorar. **Evet** dersen yedek dosyasını seçersin ve düzen geri gelir (yüklü olmayan uygulamalar atlanır, yeniler sona eklenir)
-- Ek izin gerekmez (MediaStore + sistem dosya seçici)
 
 ### 📌 Uzun basma menüsü (düzenleme kapalıyken)
 **Uygulamalar için**

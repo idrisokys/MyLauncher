@@ -893,7 +893,17 @@ class MainActivity : Activity() {
         if (t == null || tp < 0 || tp >= shownKeys.size || tp == pos) { hintView = null; return }
         hintView = t
         hintInsert = isEdgeDrop(t, cx, cy)
-        hintBefore = cx > t.left + t.width / 2f   // ızgara sağdan sola: sağ taraf = hedefin ÖNCESİ
+        hintBefore = isBeforeSide(t, cx)
+    }
+
+    /**
+     * Bırakılan nokta hedefin listede ÖNCEKİ tarafında mı? Izgaranın GERÇEK çizim yönüne bakar:
+     * RTL'de sağ taraf = hedefin önü, LTR'de sol taraf = hedefin önü.
+     * (Çubuğun çizildiği taraf ile simgenin gideceği taraf hep aynı kalsın diye tek yerden hesaplanır.)
+     */
+    private fun isBeforeSide(t: View, cx: Float): Boolean {
+        val rightHalf = cx > t.left + t.width / 2f
+        return if (grid.layoutDirection == View.LAYOUT_DIRECTION_RTL) rightHalf else !rightHalf
     }
 
     /** Hedefin merkezinden yeterince uzakta (kenar/arası) bırakılıyorsa araya girme sayılır. */
@@ -906,7 +916,9 @@ class MainActivity : Activity() {
     private fun drawHint(c: Canvas) {
         val t = hintView ?: return
         if (hintInsert) {
-            val x = if (hintBefore) t.right - dp(1).toFloat() else t.left + dp(1).toFloat()
+            val rtl = grid.layoutDirection == View.LAYOUT_DIRECTION_RTL
+            val barAtRight = if (rtl) hintBefore else !hintBefore
+            val x = if (barAtRight) t.right - dp(1).toFloat() else t.left + dp(1).toFloat()
             val half = dp(3).toFloat()
             hintRect.set(x - half, t.top + dp(8).toFloat(), x + half, t.bottom - dp(8).toFloat())
             c.drawRoundRect(hintRect, half, half, hintBar)
@@ -972,7 +984,7 @@ class MainActivity : Activity() {
         if (tp < 0 || tp >= shownKeys.size || tp == pos) return
         val targetKey = shownKeys[tp]
         val insert = isEdgeDrop(target, cx, cy)
-        val before = cx > target.left + target.width / 2f
+        val before = isBeforeSide(target, cx)
         // Değişiklik, RecyclerView kendi çizim/animasyon döngüsünden çıktıktan sonra uygulanır.
         rv.post { if (insert) insertNear(key, targetKey, before) else replaceAt(key, targetKey) }
     }

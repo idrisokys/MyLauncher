@@ -197,7 +197,7 @@ Sade, hızlı ve gösterişten uzak bir Android ana ekran uygulaması. Tek ekran
 
 | Sonuç | Açıklama |
 |---|---|
-| 👤 **WhatsApp kişileri** | Tüm rehberde değil, yalnızca WhatsApp (ve WhatsApp Business) kişilerinde ada göre arar (ilk aramada izin istenir). **Dokununca** WhatsApp sohbetini açar, **basılı tutunca** WhatsApp sesli arama başlatır |
+| 👤 **WhatsApp kişileri** | Tüm rehberde değil, yalnızca WhatsApp (ve WhatsApp Business) kişilerinde ada göre arar (ilk aramada izin istenir). **Dokununca** WhatsApp sohbetini açar, **basılı tutunca** WhatsApp sesli arama başlatır. WhatsApp bu cihaza kayıt eşitlemiyorsa (ör. tablet) rehber numaraları kullanılır ve sohbet numaradan açılır; orada sesli arama yapılamaz |
 | 📱 **Uygulamalar** | Baştan eşleşenler üstte. Kişi + uygulama sonuçları toplam 5 ile sınırlı; büyük yazı ve sonuçlar arasındaki dokunulmaz boş satır yanlış dokunmayı önler |
 | 🌐 **Web** | Google, Yandex ve IMDb'de tek dokunuşla arama |
 

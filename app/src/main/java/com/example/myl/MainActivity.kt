@@ -516,8 +516,80 @@ class MainActivity : Activity() {
                     )
                 }
             }
+            // Bu cihazda WhatsApp rehbere kayıt yazmıyorsa (ör. tablet): rehber numaralarıyla devam et.
+            if (out.isEmpty()) out.addAll(findPhoneBookForWhatsApp(esc))
         } catch (e: Exception) { }
         return out
+    }
+
+    /** Rehberdeki kişileri numaralarıyla bulur; sohbet numara üzerinden WhatsApp'ta açılır. */
+    private fun findPhoneBookForWhatsApp(esc: String): List<Row> {
+        val out = mutableListOf<Row>()
+        val byContact = LinkedHashMap<Long, Pair<String, LinkedHashMap<String, String>>>()
+        try {
+            contentResolver.query(
+                ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+                arrayOf(
+                    ContactsContract.CommonDataKinds.Phone.CONTACT_ID,
+                    ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+                    ContactsContract.CommonDataKinds.Phone.NUMBER
+                ),
+                "${ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME} LIKE ? ESCAPE '\\'", arrayOf("%$esc%"),
+                "${ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME} COLLATE LOCALIZED ASC LIMIT 40"
+            )?.use { c ->
+                while (c.moveToNext()) {
+                    val id = c.getLong(0)
+                    val nm = c.getString(1) ?: continue
+                    val num = c.getString(2)?.trim().orEmpty()
+                    val wa = waNumber(num) ?: continue
+                    byContact.getOrPut(id) { nm to LinkedHashMap() }.second.putIfAbsent(wa, num)
+                }
+            }
+        } catch (e: Exception) { }
+        for ((_, v) in byContact) {
+            if (out.size >= MAX_RESULTS) break
+            val nm = v.first
+            val nums = v.second   // WhatsApp numarası -> gösterilen numara
+            out.add(Row(nm, "Rehber · WhatsApp", null,
+                onLong = { chooseNumber(nm, nums) { n -> openWaNumber(n); toast("Arama için sohbetteki telefon simgesine dokun") } }
+            ) { chooseNumber(nm, nums) { n -> openWaNumber(n) } })
+        }
+        return out
+    }
+
+    private fun chooseNumber(name: String, nums: Map<String, String>, go: (String) -> Unit) {
+        if (nums.size == 1) { go(nums.keys.first()); return }
+        val keys = nums.keys.toList()
+        AlertDialog.Builder(this)
+            .setTitle(name)
+            .setItems(nums.values.toTypedArray()) { _, i -> go(keys[i]) }
+            .show()
+    }
+
+    /** Numarayı WhatsApp için uluslararası biçime çevirir (varsayılan ülke: Türkiye). */
+    private fun waNumber(raw: String): String? {
+        val plus = raw.trim().startsWith("+")
+        var d = raw.filter { it.isDigit() }
+        if (d.length < 7) return null
+        if (!plus) {
+            d = when {
+                d.startsWith("00") -> d.substring(2)
+                d.startsWith("0") && d.length == 11 -> "90" + d.substring(1)
+                d.length == 10 && d.startsWith("5") -> "90$d"
+                else -> d
+            }
+        }
+        return d
+    }
+
+    private fun openWaNumber(number: String) {
+        for (pkg in listOf(WA_PKG, WA_BIZ_PKG)) {
+            try {
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/$number")).setPackage(pkg))
+                return
+            } catch (e: Exception) { }
+        }
+        toast("WhatsApp açılamadı")
     }
 
     /** WhatsApp sohbetini açar. */

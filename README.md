@@ -28,8 +28,8 @@ Tap the **search bar** at the top to start searching.
 
 | Result | Description |
 |---|---|
-| 👤 **Contacts** | Searches contacts by name, opens the contact card on tap (permission is requested on first search). Contacts that have WhatsApp (or WhatsApp Business) also get a **chat** button on the right that opens their WhatsApp conversation |
-| 📱 **Apps** | Up to 6 results, prefix matches first |
+| 👤 **Contacts** | Searches contacts by name (permission is requested on first search). **Tap** = phone call (a number picker appears if the contact has several), **long-press** = opens their WhatsApp chat |
+| 📱 **Apps** | Prefix matches first. Contacts + apps are limited to 5 results in total; large text and a non-tappable blank line between results prevent mis-taps |
 | 🌐 **Web** | One-tap search on Google, Yandex and IMDb |
 
 - The keyboard **Search** key searches Google directly
@@ -92,6 +92,7 @@ This version was optimized from the ground up for speed:
 | Permission | Why |
 |---|---|
 | `READ_CONTACTS` | Show contact results in search (asked on first search; if denied, only contact results are missing) |
+| `CALL_PHONE` | Place a call directly when a contact is tapped in search (asked on first call; if denied, the dialer opens instead) |
 | `QUERY_ALL_PACKAGES` | List all installed apps and their shortcuts |
 | `REQUEST_DELETE_PACKAGES` | Open the uninstall screen from the menu |
 
@@ -197,8 +198,8 @@ Sade, hızlı ve gösterişten uzak bir Android ana ekran uygulaması. Tek ekran
 
 | Sonuç | Açıklama |
 |---|---|
-| 👤 **Kişiler** | Rehberde ada göre arar, dokununca kişi kartını açar (ilk aramada izin istenir). WhatsApp (veya WhatsApp Business) kullanan kişilerin sağında, o kişinin WhatsApp sohbetini açan bir **sohbet** düğmesi çıkar |
-| 📱 **Uygulamalar** | En fazla 6 sonuç, baştan eşleşenler üstte |
+| 👤 **Kişiler** | Rehberde ada göre arar (ilk aramada izin istenir). **Dokununca** telefon araması yapar (birden çok numara varsa seçim çıkar), **basılı tutunca** WhatsApp sohbetini açar |
+| 📱 **Uygulamalar** | Baştan eşleşenler üstte. Kişi + uygulama sonuçları toplam 5 ile sınırlı; büyük yazı ve sonuçlar arasındaki dokunulmaz boş satır yanlış dokunmayı önler |
 | 🌐 **Web** | Google, Yandex ve IMDb'de tek dokunuşla arama |
 
 - Klavyede **Ara** tuşu doğrudan Google'da arar
@@ -261,6 +262,7 @@ Bu sürüm hız için baştan optimize edildi:
 | İzin | Neden |
 |---|---|
 | `READ_CONTACTS` | Aramada kişi sonuçlarını göstermek (ilk aramada istenir, reddedersen sadece kişi sonuçları çıkmaz) |
+| `CALL_PHONE` | Aramada bir kişiye dokununca doğrudan arama yapmak (ilk aramada istenir, reddedersen çevirici açılır) |
 | `QUERY_ALL_PACKAGES` | Yüklü tüm uygulamaları ve kısayollarını listelemek |
 | `REQUEST_DELETE_PACKAGES` | Menüden uygulama kaldırma ekranını açmak |
 

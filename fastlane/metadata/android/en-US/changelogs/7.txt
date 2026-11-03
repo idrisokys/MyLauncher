@@ -1,5 +1,0 @@
-- Edit mode: dropping an icon on another swaps them
-- Drop indicator now matches where the icon lands
-- Larger search box and top-bar buttons, pencil edit icon
-- Smoother contact search while typing
-- Stability fixes

@@ -129,7 +129,6 @@ class MainActivity : Activity() {
     private var loadedOnce = false                 // ilk uygulama listesi geldi mi?
     private var pendingPinIntent: Intent? = null   // liste gelmeden önce gelen kısayol isteği
     @Volatile private var searchGen = 0
-    private var lastContacts: List<Row> = emptyList()   // yazarken kişiler kaybolup geri gelmesin
     private val reloadRunnable = Runnable { startReload() }
 
     private val collator: Collator = Collator.getInstance(Locale.forLanguageTag("tr-TR"))
@@ -552,14 +551,11 @@ class MainActivity : Activity() {
         val q = q0.trim()
         val gen = ++searchGen
         if (q.isEmpty()) {
-            lastContacts = emptyList()
             results.visibility = View.GONE
             return
         }
         // Uygulamalar anında gelir; kişi sorgusu arka planda yapılıp sonra eklenir.
-        // Önceki sorgudan gelen ve hâlâ eşleşen kişiler, yenisi gelene kadar yerinde kalır (titreme olmaz).
-        val fq = fold(q)
-        showRows(q, lastContacts.filter { fold(it.title).contains(fq) })
+        showRows(q, emptyList())
         if (checkSelfPermission(Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED) {
             searchExec.execute {
                 if (gen != searchGen) return@execute
@@ -568,10 +564,7 @@ class MainActivity : Activity() {
                 if (gen != searchGen) return@execute
                 val found = findContacts(q)
                 main.post {
-                    if (gen == searchGen && !isDestroyed) {
-                        lastContacts = found
-                        showRows(q, found)
-                    }
+                    if (gen == searchGen && !isDestroyed && found.isNotEmpty()) showRows(q, found)
                 }
             }
         }
@@ -1427,7 +1420,6 @@ class MainActivity : Activity() {
      * sonucu ana thread'e tek seferde teslim eder. Ana thread hiç bloklanmaz.
      */
     private fun startReload() {
-        if (isDestroyed) return   // kapanmış pencerede kapatılmış thread havuzuna iş verme
         if (loading) { pendingReload = true; return }
         loading = true
         val known = HashSet(iconCache.keys)

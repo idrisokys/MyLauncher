@@ -295,20 +295,20 @@ class MainActivity : Activity() {
             hint = "Kişi, uygulama veya web'de ara"
             setHintTextColor(0xAAFFFFFF.toInt())
             setTextColor(Color.WHITE)
-            textSize = 15f
+            textSize = 18f
             setSingleLine()
             imeOptions = EditorInfo.IME_ACTION_SEARCH
             setPadding(dp(16), 0, dp(16), 0)
             background = GradientDrawable().apply {
-                cornerRadius = dp(21).toFloat()
+                cornerRadius = dp(25).toFloat()
                 setColor(0x66000000)
             }
         }
-        bar.addView(search, LinearLayout.LayoutParams(0, dp(42), 1f))
+        bar.addView(search, LinearLayout.LayoutParams(0, dp(50), 1f))
 
         moveBtn = ImageView(this).apply {
-            setImageResource(R.drawable.ic_move)
-            setPadding(dp(8), dp(8), dp(8), dp(8))
+            setImageResource(R.drawable.ic_edit)
+            setPadding(dp(10), dp(10), dp(10), dp(10))
             background = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
                 setColor(0x66000000)
@@ -317,15 +317,15 @@ class MainActivity : Activity() {
         }
         actionBtn = ImageView(this).apply {
             setImageResource(R.drawable.ic_settings)
-            setPadding(dp(8), dp(8), dp(8), dp(8))
+            setPadding(dp(10), dp(10), dp(10), dp(10))
             background = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
                 setColor(0x66000000)
             }
             setOnClickListener { if (editMode) showFolderPicker() else showSettingsMenu(this) }
         }
-        bar.addView(actionBtn, LinearLayout.LayoutParams(dp(34), dp(34)).apply { marginStart = dp(8) })
-        bar.addView(moveBtn, LinearLayout.LayoutParams(dp(34), dp(34)).apply { marginStart = dp(8) })
+        bar.addView(actionBtn, LinearLayout.LayoutParams(dp(46), dp(46)).apply { marginStart = dp(8) })
+        bar.addView(moveBtn, LinearLayout.LayoutParams(dp(46), dp(46)).apply { marginStart = dp(8) })
 
         root.addView(bar, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
 

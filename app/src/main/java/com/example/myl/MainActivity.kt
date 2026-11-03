@@ -860,7 +860,7 @@ class MainActivity : Activity() {
     }
 
     // ---------- Sürükle-bırak: yer değiştirme ----------
-    // Hedefin ORTASINA getirince mavi halka: sürüklenen simge hedefin yerini alır, hedef listenin EN SONUNA gider.
+    // Hedefin ORTASINA getirince mavi halka: sürüklenen simge ile hedef yer değiştirir.
     // Hedefin KENARINA (iki simge arasına) getirince mavi çubuk: simge o iki simgenin arasına girer.
     // (Klasör oluşturmak/klasöre eklemek için üstteki klasör düğmesi kullanılır.)
     private var hintView: View? = null
@@ -999,14 +999,13 @@ class MainActivity : Activity() {
         persistAndRefresh()
     }
 
-    /** Sürüklenen öğe hedefin yerini alır; yeri alınan hedef listenin en sonuna gider. */
+    /** Sürüklenen öğe ile hedef birbirinin yerini alır (yer değiştirir). */
     private fun replaceAt(drag: String, target: String) {
         val from = order.indexOf(drag)
-        if (from < 0 || !order.contains(target) || drag == target) return
-        order.removeAt(from)
-        val idx = order.indexOf(target)
-        order[idx] = drag
-        order.add(target)
+        val to = order.indexOf(target)
+        if (from < 0 || to < 0 || drag == target) return
+        order[from] = target
+        order[to] = drag
         persistAndRefresh()
     }
 

@@ -12,7 +12,6 @@ import android.content.pm.LauncherApps
 import android.content.pm.LauncherApps.ShortcutQuery
 import android.content.pm.PackageManager
 import android.content.pm.ShortcutInfo
-import android.database.ContentObserver
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
@@ -79,7 +78,7 @@ class MainActivity : Activity() {
         val title: String,
         val sub: String?,
         val icon: Bitmap?,
-        val onLong: (() -> Unit)? = null,   // basılı tutma (kişilerde: WhatsApp sesli arama)
+        val onLong: (() -> Unit)? = null,   // basılı tutma (kişilerde: WhatsApp sohbeti)
         val spacer: Boolean = false,        // sonuçlar arasındaki dokunulmaz boş satır
         val action: () -> Unit
     )
@@ -141,6 +140,7 @@ class MainActivity : Activity() {
     private val rows = mutableListOf<Row>()
     private var folderDialog: Dialog? = null
     private var askedContacts = false
+    private var pendingCallNumber: String? = null   // CALL_PHONE izni beklenirken
     private lateinit var moveBtn: ImageView
     private var editMode = false
 
@@ -166,9 +166,6 @@ class MainActivity : Activity() {
         loadPrefs()
         startReload()
         launcherApps.registerCallback(callback)
-        try {
-            contentResolver.registerContentObserver(ContactsContract.AUTHORITY_URI, true, contactsObserver)
-        } catch (e: Exception) { }
         handleIntent(intent)
         if (savedInstanceState == null) promptDefaultIfNeeded(intent)
     }
@@ -196,7 +193,6 @@ class MainActivity : Activity() {
 
     override fun onDestroy() {
         launcherApps.unregisterCallback(callback)
-        try { contentResolver.unregisterContentObserver(contactsObserver) } catch (e: Exception) { }
         main.removeCallbacksAndMessages(null)
         worker.shutdown()
         searchExec.shutdown()
@@ -214,7 +210,14 @@ class MainActivity : Activity() {
 
     override fun onRequestPermissionsResult(rc: Int, p: Array<out String>, r: IntArray) {
         super.onRequestPermissionsResult(rc, p, r)
-        waCache = null; bookCache = null
+        if (rc == REQ_CALL) {
+            val n = pendingCallNumber
+            pendingCallNumber = null
+            if (n != null) {
+                if (r.isNotEmpty() && r[0] == PackageManager.PERMISSION_GRANTED) startCall(n) else dial(n)
+            }
+            return
+        }
         updateResults(search.text.toString())
     }
 
@@ -441,26 +444,20 @@ class MainActivity : Activity() {
             results.visibility = View.GONE
             return
         }
-        if (checkSelfPermission(Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) {
-            showRows(q, emptyList())
-            return
-        }
-        // Kişi listesi hazırsa arama bellekten, tek seferde ve anında yapılır.
-        val ready = contactRows(q)
-        if (ready != null) {
-            showRows(q, ready)
-            return
-        }
-        // İlk aramada liste arka planda bir kez yüklenir; uygulamalar bu sırada hemen gösterilir.
+        // Uygulamalar anında gelir; kişi sorgusu arka planda yapılıp sonra eklenir.
         showRows(q, emptyList())
-        try {
+        if (checkSelfPermission(Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED) {
             searchExec.execute {
-                loadContacts()
+                if (gen != searchGen) return@execute
+                // Hızlı yazarken her harfte kişi veritabanını sorgulama: kısa bekle, hâlâ güncelse sorgula.
+                try { Thread.sleep(120) } catch (e: InterruptedException) { return@execute }
+                if (gen != searchGen) return@execute
+                val found = findContacts(q)
                 main.post {
-                    if (gen == searchGen && !isDestroyed) contactRows(search.text.toString().trim())?.let { showRows(q, it) }
+                    if (gen == searchGen && !isDestroyed && found.isNotEmpty()) showRows(q, found)
                 }
             }
-        } catch (e: Exception) { }
+        }
     }
 
     private fun showRows(q: String, contacts: List<Row>) {
@@ -490,180 +487,116 @@ class MainActivity : Activity() {
         results.visibility = View.VISIBLE
     }
 
-    // ---------- Kişi önbelleği ----------
-    private class WaContact(val name: String, val norm: String, val dataId: Long, val rawId: Long, val biz: Boolean)
-    private class BookContact(val name: String, val norm: String, val nums: LinkedHashMap<String, String>)
-
-    @Volatile private var waCache: List<WaContact>? = null
-    @Volatile private var bookCache: List<BookContact>? = null
-
-    /** Rehber değişince önbellek bir sonraki aramada yeniden yüklenmek üzere geçersiz kılınır. */
-    private val contactsObserver = object : ContentObserver(main) {
-        override fun onChange(selfChange: Boolean) { waCache = null; bookCache = null }
-    }
-
-    /**
-     * Arka plan thread'inde çalışır; kişileri bir kez okuyup bellekte tutar.
-     * Önce WhatsApp kayıtları; hiç yoksa (ör. tablet) rehber numaraları.
-     */
-    private fun loadContacts() {
-        var wa = waCache
-        if (wa == null) {
-            val list = ArrayList<WaContact>()
-            val seen = HashSet<String>()
-            try {
-                contentResolver.query(
-                    ContactsContract.Data.CONTENT_URI,
-                    arrayOf(
-                        ContactsContract.Data._ID,
-                        ContactsContract.Data.RAW_CONTACT_ID,
-                        ContactsContract.Data.DISPLAY_NAME,
-                        ContactsContract.Data.MIMETYPE
-                    ),
-                    "${ContactsContract.Data.MIMETYPE} IN (?, ?)", arrayOf(WA_CHAT, WA_BIZ_CHAT), null
-                )?.use { c ->
-                    while (c.moveToNext()) {
-                        val nm = c.getString(2) ?: continue
-                        val rawId = c.getLong(1)
-                        val biz = c.getString(3) == WA_BIZ_CHAT
-                        if (!seen.add("$rawId|$biz")) continue
-                        list.add(WaContact(nm, fold(nm), c.getLong(0), rawId, biz))
-                    }
-                }
-            } catch (e: Exception) { }
-            wa = list
-            waCache = list
-        }
-        if (wa.isEmpty() && bookCache == null) {
-            val byContact = LinkedHashMap<Long, Pair<String, LinkedHashMap<String, String>>>()
-            try {
-                contentResolver.query(
-                    ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
-                    arrayOf(
-                        ContactsContract.CommonDataKinds.Phone.CONTACT_ID,
-                        ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
-                        ContactsContract.CommonDataKinds.Phone.NUMBER
-                    ),
-                    null, null, null
-                )?.use { c ->
-                    while (c.moveToNext()) {
-                        val nm = c.getString(1) ?: continue
-                        val num = c.getString(2)?.trim().orEmpty()
-                        val w = waNumber(num) ?: continue
-                        byContact.getOrPut(c.getLong(0)) { nm to LinkedHashMap() }.second.putIfAbsent(w, num)
-                    }
-                }
-            } catch (e: Exception) { }
-            bookCache = byContact.values.map { BookContact(it.first, fold(it.first), it.second) }
-        }
-    }
-
-    /** Önbellekten arar (hızlı, ana thread'de güvenli). Önbellek henüz yüklenmediyse null döner. */
-    private fun contactRows(q: String): List<Row>? {
-        val wa = waCache ?: return null
-        val fq = fold(q)
-        if (wa.isNotEmpty()) {
-            return wa.filter { it.norm.contains(fq) }
-                .sortedWith(compareBy<WaContact>({ !it.norm.startsWith(fq) }, { it.norm }))
-                .take(MAX_RESULTS)
-                .map { waRow(it) }
-        }
-        val book = bookCache ?: return null
-        return book.filter { it.norm.contains(fq) }
-            .sortedWith(compareBy<BookContact>({ !it.norm.startsWith(fq) }, { it.norm }))
-            .take(MAX_RESULTS)
-            .map { bookRow(it) }
-    }
-
-    private fun waRow(w: WaContact): Row {
-        val mime = if (w.biz) WA_BIZ_CHAT else WA_CHAT
-        val pkg = if (w.biz) WA_BIZ_PKG else WA_PKG
-        val voip = if (w.biz) WA_BIZ_VOIP else WA_VOIP
-        // Dokun: WhatsApp sohbeti. Basılı tut: WhatsApp sesli arama.
-        return Row(w.name, if (w.biz) "WhatsApp Business" else "WhatsApp", null,
-            onLong = { whatsAppVoiceCall(w.rawId, voip, pkg, w.name) }
-        ) { openWhatsAppChat(w.dataId, mime, pkg, w.name) }
-    }
-
-    private fun bookRow(b: BookContact): Row =
-        Row(b.name, "Rehber · WhatsApp", null,
-            onLong = { chooseNumber(b.name, b.nums) { n -> openWaNumber(n); toast("Arama için sohbetteki telefon simgesine dokun") } }
-        ) { chooseNumber(b.name, b.nums) { n -> openWaNumber(n) } }
-
-    private fun chooseNumber(name: String, nums: Map<String, String>, go: (String) -> Unit) {
-        if (nums.size == 1) { go(nums.keys.first()); return }
-        val keys = nums.keys.toList()
-        AlertDialog.Builder(this)
-            .setTitle(name)
-            .setItems(nums.values.toTypedArray()) { _, i -> go(keys[i]) }
-            .show()
-    }
-
-    /** Numarayı WhatsApp için uluslararası biçime çevirir (varsayılan ülke: Türkiye). */
-    private fun waNumber(raw: String): String? {
-        val plus = raw.trim().startsWith("+")
-        var d = raw.filter { it.isDigit() }
-        if (d.length < 7) return null
-        if (!plus) {
-            d = when {
-                d.startsWith("00") -> d.substring(2)
-                d.startsWith("0") && d.length == 11 -> "90" + d.substring(1)
-                d.length == 10 && d.startsWith("5") -> "90$d"
-                else -> d
-            }
-        }
-        return d
-    }
-
-    private fun openWaNumber(number: String) {
-        for (pkg in listOf(WA_PKG, WA_BIZ_PKG)) {
-            try {
-                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/$number")).setPackage(pkg))
-                return
-            } catch (e: Exception) { }
-        }
-        toast("WhatsApp açılamadı")
-    }
-
-    /** WhatsApp sohbetini açar. */
-    private fun openWhatsAppChat(dataId: Long, mime: String, pkg: String, name: String) {
+    /** Arka plan thread'inde çalışır. */
+    private fun findContacts(q: String): List<Row> {
+        val out = mutableListOf<Row>()
         try {
-            val uri = ContentUris.withAppendedId(ContactsContract.Data.CONTENT_URI, dataId)
-            startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, mime).setPackage(pkg))
-        } catch (e: Exception) {
-            toast("$name için WhatsApp sohbeti açılamadı")
-        }
+            val name = ContactsContract.Contacts.DISPLAY_NAME_PRIMARY
+            val esc = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            contentResolver.query(
+                ContactsContract.Contacts.CONTENT_URI,
+                arrayOf(ContactsContract.Contacts._ID, name),
+                "$name LIKE ? ESCAPE '\\'", arrayOf("%$esc%"),
+                "$name COLLATE LOCALIZED ASC LIMIT 5"
+            )?.use { c ->
+                while (c.moveToNext()) {
+                    val id = c.getLong(0)
+                    val nm = c.getString(1) ?: continue
+                    // Dokun: telefon araması. Basılı tut: WhatsApp sohbeti.
+                    out.add(Row(nm, "Kişi", null, onLong = { openWhatsAppChat(id, nm) }) { callContact(id, nm) })
+                }
+            }
+        } catch (e: Exception) { }
+        return out
     }
 
-    /** Aynı kişinin WhatsApp sesli arama kaydını bulup WhatsApp'ta sesli arama başlatır. */
-    private fun whatsAppVoiceCall(rawId: Long, voipMime: String, pkg: String, name: String) {
+    /** Kişinin telefon numaralarını (tekrarsız) verir; varsayılan numara başta. */
+    private fun phonesOf(contactId: Long): List<String> {
+        val list = LinkedHashMap<String, String>()   // sadeleştirilmiş -> gösterilen
         try {
             contentResolver.query(
-                ContactsContract.Data.CONTENT_URI,
-                arrayOf(ContactsContract.Data._ID),
-                "${ContactsContract.Data.RAW_CONTACT_ID} = ? AND ${ContactsContract.Data.MIMETYPE} = ?",
-                arrayOf(rawId.toString(), voipMime), null
+                ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+                arrayOf(
+                    ContactsContract.CommonDataKinds.Phone.NUMBER,
+                    ContactsContract.CommonDataKinds.Phone.IS_SUPER_PRIMARY
+                ),
+                "${ContactsContract.CommonDataKinds.Phone.CONTACT_ID} = ?", arrayOf(contactId.toString()),
+                "${ContactsContract.CommonDataKinds.Phone.IS_SUPER_PRIMARY} DESC"
             )?.use { c ->
-                if (c.moveToFirst()) {
-                    val uri = ContentUris.withAppendedId(ContactsContract.Data.CONTENT_URI, c.getLong(0))
-                    startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, voipMime).setPackage(pkg))
-                    return
+                while (c.moveToNext()) {
+                    val n = c.getString(0)?.trim().orEmpty()
+                    if (n.isNotEmpty()) list.putIfAbsent(n.filter { it.isDigit() || it == '+' }, n)
                 }
             }
-            toast("$name için WhatsApp sesli arama bulunamadı")
+        } catch (e: Exception) { }
+        return list.values.toList()
+    }
+
+    private fun callContact(contactId: Long, name: String) {
+        val nums = phonesOf(contactId)
+        when {
+            nums.isEmpty() -> toast("$name için numara yok")
+            nums.size == 1 -> placeCall(nums[0])
+            else -> AlertDialog.Builder(this)
+                .setTitle(name)
+                .setItems(nums.toTypedArray()) { _, i -> placeCall(nums[i]) }
+                .show()
+        }
+    }
+
+    private fun placeCall(number: String) {
+        if (checkSelfPermission(Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED) {
+            startCall(number)
+        } else {
+            pendingCallNumber = number
+            requestPermissions(arrayOf(Manifest.permission.CALL_PHONE), REQ_CALL)
+        }
+    }
+
+    private fun startCall(number: String) {
+        try {
+            startActivity(Intent(Intent.ACTION_CALL, Uri.fromParts("tel", number, null)))
+        } catch (e: Exception) { dial(number) }
+    }
+
+    /** İzin verilmezse arama yerine çevirici açılır. */
+    private fun dial(number: String) {
+        try {
+            startActivity(Intent(Intent.ACTION_DIAL, Uri.fromParts("tel", number, null)))
+        } catch (e: Exception) { toast("Aranamadı") }
+    }
+
+    /** Rehberdeki WhatsApp (veya WhatsApp Business) sohbet kaydını açar. */
+    private fun openWhatsAppChat(contactId: Long, name: String) {
+        val mimes = listOf(WA_CHAT to WA_PKG, WA_BIZ_CHAT to WA_BIZ_PKG)
+        try {
+            for ((mime, pkg) in mimes) {
+                contentResolver.query(
+                    ContactsContract.Data.CONTENT_URI,
+                    arrayOf(ContactsContract.Data._ID),
+                    "${ContactsContract.Data.CONTACT_ID} = ? AND ${ContactsContract.Data.MIMETYPE} = ?",
+                    arrayOf(contactId.toString(), mime), null
+                )?.use { c ->
+                    if (c.moveToFirst()) {
+                        val uri = ContentUris.withAppendedId(ContactsContract.Data.CONTENT_URI, c.getLong(0))
+                        startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, mime).setPackage(pkg))
+                        return
+                    }
+                }
+            }
+            toast("$name için WhatsApp bulunamadı")
         } catch (e: Exception) {
-            toast("WhatsApp araması başlatılamadı")
+            toast("WhatsApp açılamadı")
         }
     }
 
     private companion object {
+        const val REQ_CALL = 2
         const val MAX_RESULTS = 5   // kişi + uygulama sonuçları toplamı
         const val WA_PKG = "com.whatsapp"
         const val WA_BIZ_PKG = "com.whatsapp.w4b"
         const val WA_CHAT = "vnd.android.cursor.item/vnd.com.whatsapp.profile"
         const val WA_BIZ_CHAT = "vnd.android.cursor.item/vnd.com.whatsapp.w4b.profile"
-        const val WA_VOIP = "vnd.android.cursor.item/vnd.com.whatsapp.voip.call"
-        const val WA_BIZ_VOIP = "vnd.android.cursor.item/vnd.com.whatsapp.w4b.voip.call"
     }
 
     private class RowHolder(val icon: ImageView, val title: TextView, val sub: TextView) {

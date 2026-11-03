@@ -34,7 +34,7 @@ Tap the **search bar** at the top to start searching.
 
 - The keyboard **Search** key searches Google directly
 - **Turkish-character aware**: `ısı`, `isi` and `Isı` all return the same result (ı/i, ö/o, ü/u, ş/s, ç/c, ğ/g)
-- Contact lookup runs in the background, so the UI never freezes while typing
+- Contacts are read once in the background and cached in memory; searching is instant and the cache refreshes automatically when your contacts change
 
 ### 📁 Folders and edit mode
 The **✥ button** at the top right toggles edit mode.
@@ -203,7 +203,7 @@ Sade, hızlı ve gösterişten uzak bir Android ana ekran uygulaması. Tek ekran
 
 - Klavyede **Ara** tuşu doğrudan Google'da arar
 - **Türkçe karakter duyarlı**: `ısı`, `isi`, `Isı` hepsi aynı sonucu bulur (ı/i, ö/o, ü/u, ş/s, ç/c, ğ/g)
-- Kişi araması arka planda yapılır, yazarken arayüz donmaz
+- Kişiler bir kez arka planda okunup bellekte tutulur; arama anında yapılır ve rehber değişince önbellek kendini yeniler
 
 ### 📁 Klasörler ve düzenleme modu
 Sağ üstteki **✥ düğmesi** düzenleme modunu açar/kapatır.

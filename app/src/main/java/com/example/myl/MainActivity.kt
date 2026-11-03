@@ -12,6 +12,7 @@ import android.content.pm.LauncherApps
 import android.content.pm.LauncherApps.ShortcutQuery
 import android.content.pm.PackageManager
 import android.content.pm.ShortcutInfo
+import android.database.ContentObserver
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
@@ -165,6 +166,9 @@ class MainActivity : Activity() {
         loadPrefs()
         startReload()
         launcherApps.registerCallback(callback)
+        try {
+            contentResolver.registerContentObserver(ContactsContract.AUTHORITY_URI, true, contactsObserver)
+        } catch (e: Exception) { }
         handleIntent(intent)
         if (savedInstanceState == null) promptDefaultIfNeeded(intent)
     }
@@ -192,6 +196,7 @@ class MainActivity : Activity() {
 
     override fun onDestroy() {
         launcherApps.unregisterCallback(callback)
+        try { contentResolver.unregisterContentObserver(contactsObserver) } catch (e: Exception) { }
         main.removeCallbacksAndMessages(null)
         worker.shutdown()
         searchExec.shutdown()
@@ -209,6 +214,7 @@ class MainActivity : Activity() {
 
     override fun onRequestPermissionsResult(rc: Int, p: Array<out String>, r: IntArray) {
         super.onRequestPermissionsResult(rc, p, r)
+        waCache = null; bookCache = null
         updateResults(search.text.toString())
     }
 
@@ -435,20 +441,26 @@ class MainActivity : Activity() {
             results.visibility = View.GONE
             return
         }
-        // Uygulamalar anında gelir; kişi sorgusu arka planda yapılıp sonra eklenir.
+        if (checkSelfPermission(Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) {
+            showRows(q, emptyList())
+            return
+        }
+        // Kişi listesi hazırsa arama bellekten, tek seferde ve anında yapılır.
+        val ready = contactRows(q)
+        if (ready != null) {
+            showRows(q, ready)
+            return
+        }
+        // İlk aramada liste arka planda bir kez yüklenir; uygulamalar bu sırada hemen gösterilir.
         showRows(q, emptyList())
-        if (checkSelfPermission(Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED) {
+        try {
             searchExec.execute {
-                if (gen != searchGen) return@execute
-                // Hızlı yazarken her harfte kişi veritabanını sorgulama: kısa bekle, hâlâ güncelse sorgula.
-                try { Thread.sleep(120) } catch (e: InterruptedException) { return@execute }
-                if (gen != searchGen) return@execute
-                val found = findContacts(q)
+                loadContacts()
                 main.post {
-                    if (gen == searchGen && !isDestroyed && found.isNotEmpty()) showRows(q, found)
+                    if (gen == searchGen && !isDestroyed) contactRows(search.text.toString().trim())?.let { showRows(q, it) }
                 }
             }
-        }
+        } catch (e: Exception) { }
     }
 
     private fun showRows(q: String, contacts: List<Row>) {
@@ -478,84 +490,105 @@ class MainActivity : Activity() {
         results.visibility = View.VISIBLE
     }
 
-    /**
-     * Arka plan thread'inde çalışır. Telefon rehberindeki herkesi değil, yalnızca
-     * WhatsApp (veya WhatsApp Business) sohbet kaydı olan kişileri arar.
-     */
-    private fun findContacts(q: String): List<Row> {
-        val out = mutableListOf<Row>()
-        val seen = HashSet<String>()
-        try {
-            val esc = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-            contentResolver.query(
-                ContactsContract.Data.CONTENT_URI,
-                arrayOf(
-                    ContactsContract.Data._ID,
-                    ContactsContract.Data.RAW_CONTACT_ID,
-                    ContactsContract.Data.DISPLAY_NAME,
-                    ContactsContract.Data.MIMETYPE
-                ),
-                "${ContactsContract.Data.MIMETYPE} IN (?, ?) AND ${ContactsContract.Data.DISPLAY_NAME} LIKE ? ESCAPE '\\'",
-                arrayOf(WA_CHAT, WA_BIZ_CHAT, "%$esc%"),
-                "${ContactsContract.Data.DISPLAY_NAME} COLLATE LOCALIZED ASC LIMIT 20"
-            )?.use { c ->
-                while (c.moveToNext() && out.size < MAX_RESULTS) {
-                    val dataId = c.getLong(0)
-                    val rawId = c.getLong(1)
-                    val nm = c.getString(2) ?: continue
-                    val biz = c.getString(3) == WA_BIZ_CHAT
-                    if (!seen.add("$rawId|$biz")) continue
-                    val mime = if (biz) WA_BIZ_CHAT else WA_CHAT
-                    val pkg = if (biz) WA_BIZ_PKG else WA_PKG
-                    val voipMime = if (biz) WA_BIZ_VOIP else WA_VOIP
-                    // Dokun: WhatsApp sohbeti. Basılı tut: WhatsApp sesli arama.
-                    out.add(
-                        Row(nm, if (biz) "WhatsApp Business" else "WhatsApp", null,
-                            onLong = { whatsAppVoiceCall(rawId, voipMime, pkg, nm) }
-                        ) { openWhatsAppChat(dataId, mime, pkg, nm) }
-                    )
-                }
-            }
-            // Bu cihazda WhatsApp rehbere kayıt yazmıyorsa (ör. tablet): rehber numaralarıyla devam et.
-            if (out.isEmpty()) out.addAll(findPhoneBookForWhatsApp(esc))
-        } catch (e: Exception) { }
-        return out
+    // ---------- Kişi önbelleği ----------
+    private class WaContact(val name: String, val norm: String, val dataId: Long, val rawId: Long, val biz: Boolean)
+    private class BookContact(val name: String, val norm: String, val nums: LinkedHashMap<String, String>)
+
+    @Volatile private var waCache: List<WaContact>? = null
+    @Volatile private var bookCache: List<BookContact>? = null
+
+    /** Rehber değişince önbellek bir sonraki aramada yeniden yüklenmek üzere geçersiz kılınır. */
+    private val contactsObserver = object : ContentObserver(main) {
+        override fun onChange(selfChange: Boolean) { waCache = null; bookCache = null }
     }
 
-    /** Rehberdeki kişileri numaralarıyla bulur; sohbet numara üzerinden WhatsApp'ta açılır. */
-    private fun findPhoneBookForWhatsApp(esc: String): List<Row> {
-        val out = mutableListOf<Row>()
-        val byContact = LinkedHashMap<Long, Pair<String, LinkedHashMap<String, String>>>()
-        try {
-            contentResolver.query(
-                ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
-                arrayOf(
-                    ContactsContract.CommonDataKinds.Phone.CONTACT_ID,
-                    ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
-                    ContactsContract.CommonDataKinds.Phone.NUMBER
-                ),
-                "${ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME} LIKE ? ESCAPE '\\'", arrayOf("%$esc%"),
-                "${ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME} COLLATE LOCALIZED ASC LIMIT 40"
-            )?.use { c ->
-                while (c.moveToNext()) {
-                    val id = c.getLong(0)
-                    val nm = c.getString(1) ?: continue
-                    val num = c.getString(2)?.trim().orEmpty()
-                    val wa = waNumber(num) ?: continue
-                    byContact.getOrPut(id) { nm to LinkedHashMap() }.second.putIfAbsent(wa, num)
+    /**
+     * Arka plan thread'inde çalışır; kişileri bir kez okuyup bellekte tutar.
+     * Önce WhatsApp kayıtları; hiç yoksa (ör. tablet) rehber numaraları.
+     */
+    private fun loadContacts() {
+        var wa = waCache
+        if (wa == null) {
+            val list = ArrayList<WaContact>()
+            val seen = HashSet<String>()
+            try {
+                contentResolver.query(
+                    ContactsContract.Data.CONTENT_URI,
+                    arrayOf(
+                        ContactsContract.Data._ID,
+                        ContactsContract.Data.RAW_CONTACT_ID,
+                        ContactsContract.Data.DISPLAY_NAME,
+                        ContactsContract.Data.MIMETYPE
+                    ),
+                    "${ContactsContract.Data.MIMETYPE} IN (?, ?)", arrayOf(WA_CHAT, WA_BIZ_CHAT), null
+                )?.use { c ->
+                    while (c.moveToNext()) {
+                        val nm = c.getString(2) ?: continue
+                        val rawId = c.getLong(1)
+                        val biz = c.getString(3) == WA_BIZ_CHAT
+                        if (!seen.add("$rawId|$biz")) continue
+                        list.add(WaContact(nm, fold(nm), c.getLong(0), rawId, biz))
+                    }
                 }
-            }
-        } catch (e: Exception) { }
-        for ((_, v) in byContact) {
-            if (out.size >= MAX_RESULTS) break
-            val nm = v.first
-            val nums = v.second   // WhatsApp numarası -> gösterilen numara
-            out.add(Row(nm, "Rehber · WhatsApp", null,
-                onLong = { chooseNumber(nm, nums) { n -> openWaNumber(n); toast("Arama için sohbetteki telefon simgesine dokun") } }
-            ) { chooseNumber(nm, nums) { n -> openWaNumber(n) } })
+            } catch (e: Exception) { }
+            wa = list
+            waCache = list
         }
-        return out
+        if (wa.isEmpty() && bookCache == null) {
+            val byContact = LinkedHashMap<Long, Pair<String, LinkedHashMap<String, String>>>()
+            try {
+                contentResolver.query(
+                    ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+                    arrayOf(
+                        ContactsContract.CommonDataKinds.Phone.CONTACT_ID,
+                        ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+                        ContactsContract.CommonDataKinds.Phone.NUMBER
+                    ),
+                    null, null, null
+                )?.use { c ->
+                    while (c.moveToNext()) {
+                        val nm = c.getString(1) ?: continue
+                        val num = c.getString(2)?.trim().orEmpty()
+                        val w = waNumber(num) ?: continue
+                        byContact.getOrPut(c.getLong(0)) { nm to LinkedHashMap() }.second.putIfAbsent(w, num)
+                    }
+                }
+            } catch (e: Exception) { }
+            bookCache = byContact.values.map { BookContact(it.first, fold(it.first), it.second) }
+        }
     }
+
+    /** Önbellekten arar (hızlı, ana thread'de güvenli). Önbellek henüz yüklenmediyse null döner. */
+    private fun contactRows(q: String): List<Row>? {
+        val wa = waCache ?: return null
+        val fq = fold(q)
+        if (wa.isNotEmpty()) {
+            return wa.filter { it.norm.contains(fq) }
+                .sortedWith(compareBy<WaContact>({ !it.norm.startsWith(fq) }, { it.norm }))
+                .take(MAX_RESULTS)
+                .map { waRow(it) }
+        }
+        val book = bookCache ?: return null
+        return book.filter { it.norm.contains(fq) }
+            .sortedWith(compareBy<BookContact>({ !it.norm.startsWith(fq) }, { it.norm }))
+            .take(MAX_RESULTS)
+            .map { bookRow(it) }
+    }
+
+    private fun waRow(w: WaContact): Row {
+        val mime = if (w.biz) WA_BIZ_CHAT else WA_CHAT
+        val pkg = if (w.biz) WA_BIZ_PKG else WA_PKG
+        val voip = if (w.biz) WA_BIZ_VOIP else WA_VOIP
+        // Dokun: WhatsApp sohbeti. Basılı tut: WhatsApp sesli arama.
+        return Row(w.name, if (w.biz) "WhatsApp Business" else "WhatsApp", null,
+            onLong = { whatsAppVoiceCall(w.rawId, voip, pkg, w.name) }
+        ) { openWhatsAppChat(w.dataId, mime, pkg, w.name) }
+    }
+
+    private fun bookRow(b: BookContact): Row =
+        Row(b.name, "Rehber · WhatsApp", null,
+            onLong = { chooseNumber(b.name, b.nums) { n -> openWaNumber(n); toast("Arama için sohbetteki telefon simgesine dokun") } }
+        ) { chooseNumber(b.name, b.nums) { n -> openWaNumber(n) } }
 
     private fun chooseNumber(name: String, nums: Map<String, String>, go: (String) -> Unit) {
         if (nums.size == 1) { go(nums.keys.first()); return }

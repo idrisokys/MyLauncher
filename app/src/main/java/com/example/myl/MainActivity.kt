@@ -78,7 +78,6 @@ class MainActivity : Activity() {
         val sub: String?,
         val icon: Bitmap?,
         val waChat: (() -> Unit)? = null,   // kişinin WhatsApp sohbetini aç (yoksa null)
-        val waCall: (() -> Unit)? = null,   // kişiye WhatsApp sesli arama başlat (yoksa null)
         val action: () -> Unit
     )
 
@@ -489,10 +488,9 @@ class MainActivity : Activity() {
         } catch (e: Exception) { }
         if (found.isEmpty()) return emptyList()
 
-        val wa = whatsappActions(found.map { it.id })
+        val wa = whatsappChats(found.map { it.id })
         return found.map { c ->
-            val acts = wa[c.id]
-            Row(c.name, "Kişi", null, acts?.first, acts?.second) {
+            Row(c.name, "Kişi", null, wa[c.id]) {
                 try {
                     startActivity(Intent(Intent.ACTION_VIEW, ContactsContract.Contacts.getLookupUri(c.id, c.lookup)))
                 } catch (e: Exception) { toast("Kişi açılamadı") }
@@ -501,20 +499,16 @@ class MainActivity : Activity() {
     }
 
     /**
-     * Kişilerin rehberdeki WhatsApp kayıtlarını (sohbet + sesli arama) bulur; WhatsApp'ı olmayan kişi için kayıt çıkmaz.
+     * Kişilerin rehberdeki WhatsApp sohbet kaydını bulur; WhatsApp'ı olmayan kişi için kayıt çıkmaz.
      * WhatsApp ve WhatsApp Business desteklenir (önce normal WhatsApp). Arka plan thread'inde çalışır.
      */
-    private fun whatsappActions(ids: List<Long>): Map<Long, Pair<(() -> Unit)?, (() -> Unit)?>> {
-        // mimetype -> (paket, sıra: 0 = sohbet, 1 = sesli arama, öncelik)
-        val chatMimes = listOf(WA_CHAT to WA_PKG, WA_BIZ_CHAT to WA_BIZ_PKG)
-        val callMimes = listOf(WA_CALL to WA_PKG, WA_BIZ_CALL to WA_BIZ_PKG)
-        val chat = HashMap<Long, Pair<Long, Int>>()   // contactId -> (dataId, mimeIndex)
-        val call = HashMap<Long, Pair<Long, Int>>()
+    private fun whatsappChats(ids: List<Long>): Map<Long, () -> Unit> {
+        val mimes = listOf(WA_CHAT to WA_PKG, WA_BIZ_CHAT to WA_BIZ_PKG)
+        val best = HashMap<Long, Pair<Long, Int>>()   // contactId -> (dataId, mimeIndex)
         try {
-            val mimes = (chatMimes + callMimes).map { it.first }
             val idPh = ids.joinToString(",") { "?" }
             val mimePh = mimes.joinToString(",") { "?" }
-            val args = (ids.map { it.toString() } + mimes).toTypedArray()
+            val args = (ids.map { it.toString() } + mimes.map { it.first }).toTypedArray()
             contentResolver.query(
                 ContactsContract.Data.CONTENT_URI,
                 arrayOf(
@@ -529,32 +523,19 @@ class MainActivity : Activity() {
                     val dataId = c.getLong(0)
                     val cid = c.getLong(1)
                     val mime = c.getString(2) ?: continue
-                    val ci = chatMimes.indexOfFirst { it.first == mime }
-                    val vi = callMimes.indexOfFirst { it.first == mime }
-                    if (ci >= 0) { val o = chat[cid]; if (o == null || ci < o.second) chat[cid] = dataId to ci }
-                    if (vi >= 0) { val o = call[cid]; if (o == null || vi < o.second) call[cid] = dataId to vi }
+                    val i = mimes.indexOfFirst { it.first == mime }
+                    if (i < 0) continue
+                    val o = best[cid]
+                    if (o == null || i < o.second) best[cid] = dataId to i
                 }
             }
         } catch (e: Exception) { }
 
-        val out = HashMap<Long, Pair<(() -> Unit)?, (() -> Unit)?>>()
-        for (id in ids) {
-            val ch = chat[id]
-            val ca = call[id]
-            if (ch == null && ca == null) continue
-            var chatAct: (() -> Unit)? = null
-            var callAct: (() -> Unit)? = null
-            if (ch != null) {
-                val (dataId, i) = ch
-                val m = chatMimes[i]
-                chatAct = { openWhatsApp(dataId, m.first, m.second) }
-            }
-            if (ca != null) {
-                val (dataId, i) = ca
-                val m = callMimes[i]
-                callAct = { openWhatsApp(dataId, m.first, m.second) }
-            }
-            out[id] = Pair(chatAct, callAct)
+        val out = HashMap<Long, () -> Unit>()
+        for ((cid, v) in best) {
+            val dataId = v.first
+            val m = mimes[v.second]
+            out[cid] = { openWhatsApp(dataId, m.first, m.second) }
         }
         return out
     }
@@ -572,14 +553,12 @@ class MainActivity : Activity() {
         const val WA_PKG = "com.whatsapp"
         const val WA_BIZ_PKG = "com.whatsapp.w4b"
         const val WA_CHAT = "vnd.android.cursor.item/vnd.com.whatsapp.profile"
-        const val WA_CALL = "vnd.android.cursor.item/vnd.com.whatsapp.voip.call"
         const val WA_BIZ_CHAT = "vnd.android.cursor.item/vnd.com.whatsapp.w4b.profile"
-        const val WA_BIZ_CALL = "vnd.android.cursor.item/vnd.com.whatsapp.w4b.voip.call"
     }
 
     private class RowHolder(
         val icon: ImageView, val title: TextView, val sub: TextView,
-        val chatBtn: ImageView, val callBtn: ImageView
+        val chatBtn: ImageView
     ) {
         val placeholder = GradientDrawable().apply {
             shape = GradientDrawable.OVAL
@@ -614,10 +593,8 @@ class MainActivity : Activity() {
                 col.addView(sub)
                 line.addView(col, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(14) })
                 val chatBtn = waButton(R.drawable.ic_wa_chat, "WhatsApp sohbet")
-                val callBtn = waButton(R.drawable.ic_wa_call, "WhatsApp sesli arama")
                 line.addView(chatBtn, LinearLayout.LayoutParams(dp(40), dp(40)).apply { marginStart = dp(6) })
-                line.addView(callBtn, LinearLayout.LayoutParams(dp(40), dp(40)).apply { marginStart = dp(6) })
-                h = RowHolder(iv, title, sub, chatBtn, callBtn)
+                h = RowHolder(iv, title, sub, chatBtn)
                 line.tag = h
                 v = line
             } else {
@@ -629,7 +606,6 @@ class MainActivity : Activity() {
             h.title.text = r.title
             if (r.sub != null) { h.sub.text = r.sub; h.sub.visibility = View.VISIBLE } else h.sub.visibility = View.GONE
             bindWaButton(h.chatBtn, r.waChat)
-            bindWaButton(h.callBtn, r.waCall)
             return v
         }
     }

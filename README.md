@@ -28,7 +28,7 @@ Tap the **search bar** at the top to start searching.
 
 | Result | Description |
 |---|---|
-| 👤 **Contacts** | Searches contacts by name, opens the contact card on tap (permission is requested on first search). Contacts that have WhatsApp (or WhatsApp Business) also get **chat** and **voice call** buttons on the right |
+| 👤 **Contacts** | Searches contacts by name, opens the contact card on tap (permission is requested on first search). Contacts that have WhatsApp (or WhatsApp Business) also get a **chat** button on the right that opens their WhatsApp conversation |
 | 📱 **Apps** | Up to 6 results, prefix matches first |
 | 🌐 **Web** | One-tap search on Google, Yandex and IMDb |
 
@@ -197,7 +197,7 @@ Sade, hızlı ve gösterişten uzak bir Android ana ekran uygulaması. Tek ekran
 
 | Sonuç | Açıklama |
 |---|---|
-| 👤 **Kişiler** | Rehberde ada göre arar, dokununca kişi kartını açar (ilk aramada izin istenir). WhatsApp (veya WhatsApp Business) kullanan kişilerin sağında **sohbet** ve **sesli arama** düğmeleri çıkar |
+| 👤 **Kişiler** | Rehberde ada göre arar, dokununca kişi kartını açar (ilk aramada izin istenir). WhatsApp (veya WhatsApp Business) kullanan kişilerin sağında, o kişinin WhatsApp sohbetini açan bir **sohbet** düğmesi çıkar |
 | 📱 **Uygulamalar** | En fazla 6 sonuç, baştan eşleşenler üstte |
 | 🌐 **Web** | Google, Yandex ve IMDb'de tek dokunuşla arama |
 

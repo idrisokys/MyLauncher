@@ -5,6 +5,7 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.app.Dialog
 import android.content.ContentUris
+import android.content.ContentValues
 import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.LauncherActivityInfo
@@ -26,10 +27,13 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
+import android.os.Environment
 import android.os.Looper
 import android.os.Process
 import android.os.UserHandle
 import android.provider.ContactsContract
+import android.provider.DocumentsContract
+import android.provider.MediaStore
 import android.provider.Settings
 import android.text.Editable
 import android.text.TextUtils
@@ -60,6 +64,8 @@ import androidx.recyclerview.widget.SimpleItemAnimator
 import org.json.JSONArray
 import org.json.JSONObject
 import java.text.Collator
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.Callable
@@ -143,6 +149,7 @@ class MainActivity : Activity() {
     private var pendingCallNumber: String? = null   // CALL_PHONE izni beklenirken
     private lateinit var moveBtn: ImageView
     private var editMode = false
+    private var restoreDialog: Dialog? = null
 
     private fun dp(v: Int) = (v * density).toInt()
 
@@ -151,6 +158,11 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         launcherApps = getSystemService(LauncherApps::class.java)
         prefs = getSharedPreferences("myl", MODE_PRIVATE)
+        // İlk kurulum: hiç düzen kaydı yok ve daha önce yedek sorusu sorulmadı.
+        // Soru, varsayılan launcher seçildikten sonra sorulur (maybeAskRestore).
+        if (!prefs.contains("restore_asked") && !prefs.contains("order")) {
+            prefs.edit().putBoolean("restore_pending", true).apply()
+        }
         if (Build.VERSION.SDK_INT >= 30) {
             window.setDecorFitsSystemWindows(false)
         } else {
@@ -189,6 +201,7 @@ class MainActivity : Activity() {
         // Artık simge önbelleği silinmiyor; arka planda hızlıca kontrol edilir,
         // bir şey değişmediyse ekrana hiç dokunulmaz.
         if (skipNextResumeReload) skipNextResumeReload = false else startReload()
+        maybeAskRestore()
     }
 
     override fun onDestroy() {
@@ -198,6 +211,7 @@ class MainActivity : Activity() {
         searchExec.shutdown()
         iconPool.shutdown()
         folderDialog?.dismiss()
+        restoreDialog?.dismiss()
         super.onDestroy()
     }
 
@@ -219,6 +233,14 @@ class MainActivity : Activity() {
             return
         }
         updateResults(search.text.toString())
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQ_RESTORE && resultCode == RESULT_OK) {
+            data?.data?.let { restoreFrom(it) }
+        }
     }
 
     private fun handleIntent(i: Intent?) {
@@ -308,6 +330,8 @@ class MainActivity : Activity() {
                 setColor(0x66000000)
             }
             setOnClickListener { setEditMode(!editMode) }
+            // Uzun basış: mevcut düzeni İndirilenler klasörüne yedekle
+            setOnLongClickListener { backupLayout(); true }
         }
         bar.addView(moveBtn, LinearLayout.LayoutParams(dp(34), dp(34)).apply { marginStart = dp(8) })
 
@@ -592,6 +616,7 @@ class MainActivity : Activity() {
 
     private companion object {
         const val REQ_CALL = 2
+        const val REQ_RESTORE = 3
         const val MAX_RESULTS = 5   // kişi + uygulama sonuçları toplamı
         const val WA_PKG = "com.whatsapp"
         const val WA_BIZ_PKG = "com.whatsapp.w4b"
@@ -1125,16 +1150,149 @@ class MainActivity : Activity() {
         } catch (e: Exception) { }
     }
 
-    private fun savePrefs() {
+    private fun foldersJson(): JSONObject {
         val fo = JSONObject()
         for ((k, f) in folders) fo.put(k, JSONObject().put("n", f.name).put("c", JSONArray(f.children)))
+        return fo
+    }
+
+    private fun shortcutsJson(): JSONObject {
         val so = JSONObject()
         for ((k, s) in shortcuts) so.put(k, JSONObject().put("p", s.pkg).put("i", s.id).put("l", s.label))
+        return so
+    }
+
+    private fun savePrefs() {
         prefs.edit()
             .putString("order", JSONArray(order).toString())
-            .putString("folders", fo.toString())
-            .putString("shortcuts", so.toString())
+            .putString("folders", foldersJson().toString())
+            .putString("shortcuts", shortcutsJson().toString())
             .apply()
+    }
+
+    // ---------- Yedekleme / geri yükleme ----------
+    /** Düzenle (✥) düğmesine uzun basınca: sıra, klasörler ve kısayollar İndirilenler'e .json olarak yazılır. */
+    private fun backupLayout() {
+        if (!loadedOnce || order.isEmpty()) { toast("Uygulamalar henüz yüklenmedi"); return }
+        val name = "MyL_yedek_" + SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date()) + ".json"
+        val json = JSONObject()
+            .put("app", "MyL")
+            .put("version", 1)
+            .put("time", System.currentTimeMillis())
+            .put("order", JSONArray(order))
+            .put("folders", foldersJson())
+            .put("shortcuts", shortcutsJson())
+            .toString(2)
+        worker.execute {
+            val ok = try {
+                val cv = ContentValues().apply {
+                    put(MediaStore.Downloads.DISPLAY_NAME, name)
+                    put(MediaStore.Downloads.MIME_TYPE, "application/json")
+                    put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+                }
+                val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, cv)
+                if (uri == null) false else {
+                    contentResolver.openOutputStream(uri)?.use { it.write(json.toByteArray(Charsets.UTF_8)) } != null
+                }
+            } catch (e: Exception) { false }
+            main.post {
+                if (!isDestroyed) toast(if (ok) "Yedek İndirilenler klasörüne kaydedildi: $name" else "Yedek alınamadı")
+            }
+        }
+    }
+
+    /**
+     * İlk kurulumdan sonra, launcher varsayılan seçilince (ve uygulamalar yüklenince) bir kez sorar:
+     * "Yedek dosyasından geri yüklensin mi?"
+     */
+    private fun maybeAskRestore() {
+        if (!prefs.getBoolean("restore_pending", false)) return
+        if (!loadedOnce || isFinishing || isDestroyed) return
+        if (restoreDialog?.isShowing == true) return
+        if (!isDefaultLauncher()) return
+        restoreDialog = AlertDialog.Builder(this)
+            .setTitle("Yedekten geri yükle")
+            .setMessage("Daha önce aldığın bir yedek dosyasından ana ekran düzeni geri yüklensin mi?\n\nEvet dersen İndirilenler klasöründeki MyL_yedek_….json dosyasını seçmen istenecek.")
+            .setCancelable(false)
+            .setPositiveButton("Evet") { _, _ ->
+                prefs.edit().putBoolean("restore_pending", false).putBoolean("restore_asked", true).apply()
+                pickBackupFile()
+            }
+            .setNegativeButton("Hayır") { _, _ ->
+                prefs.edit().putBoolean("restore_pending", false).putBoolean("restore_asked", true).apply()
+            }
+            .show()
+    }
+
+    private fun pickBackupFile() {
+        val i = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "*/*"
+            try {
+                putExtra(
+                    DocumentsContract.EXTRA_INITIAL_URI,
+                    Uri.parse("content://com.android.externalstorage.documents/document/primary%3ADownload")
+                )
+            } catch (e: Exception) { }
+        }
+        try { startActivityForResult(i, REQ_RESTORE) } catch (e: Exception) { toast("Dosya seçici açılamadı") }
+    }
+
+    private class Backup(
+        val order: List<String>,
+        val folders: LinkedHashMap<String, Folder>,
+        val shortcuts: LinkedHashMap<String, Sc>
+    )
+
+    /** Seçilen yedek dosyasını arka planda okur/doğrular, sonra ana thread'de uygular. */
+    private fun restoreFrom(uri: Uri) {
+        worker.execute {
+            var b: Backup? = null
+            try {
+                val text = contentResolver.openInputStream(uri)?.use { it.readBytes().toString(Charsets.UTF_8) }
+                if (text != null) {
+                    val j = JSONObject(text)
+                    if (j.optString("app") == "MyL") {
+                        val ord = ArrayList<String>()
+                        val oa = j.getJSONArray("order")
+                        for (n in 0 until oa.length()) ord.add(oa.getString(n))
+                        val fs = LinkedHashMap<String, Folder>()
+                        j.optJSONObject("folders")?.let { o ->
+                            for (k in o.keys()) {
+                                val f = o.getJSONObject(k)
+                                val ch = f.getJSONArray("c")
+                                val l = mutableListOf<String>()
+                                for (n in 0 until ch.length()) l.add(ch.getString(n))
+                                fs[k] = Folder(f.getString("n"), l)
+                            }
+                        }
+                        val ss = LinkedHashMap<String, Sc>()
+                        j.optJSONObject("shortcuts")?.let { o ->
+                            for (k in o.keys()) {
+                                val x = o.getJSONObject(k)
+                                ss[k] = Sc(x.getString("p"), x.getString("i"), x.getString("l"))
+                            }
+                        }
+                        if (ord.isNotEmpty()) b = Backup(ord, fs, ss)
+                    }
+                }
+            } catch (e: Exception) { }
+            val result = b
+            main.post {
+                if (isDestroyed) return@post
+                if (result == null) { toast("Geçerli bir MyL yedek dosyası değil"); return@post }
+                folderDialog?.dismiss()
+                order.clear(); order.addAll(result.order)
+                folders.clear(); folders.putAll(result.folders)
+                shortcuts.clear(); shortcuts.putAll(result.shortcuts)
+                // Yüklü olmayan uygulamalar elenir, yeni uygulamalar sona eklenir.
+                normalize()
+                savePrefs()
+                refreshGrid()
+                startReload()   // geri gelen kısayolların simgelerini hazırla
+                toast("Düzen geri yüklendi")
+            }
+        }
     }
 
     private fun persistAndRefresh() {
@@ -1237,6 +1395,7 @@ class MainActivity : Activity() {
         if (search.text.isNotEmpty()) updateResults(search.text.toString())
         loadedOnce = true
         pendingPinIntent?.let { pendingPinIntent = null; handleIntent(it) }
+        maybeAskRestore()
     }
 
     /**

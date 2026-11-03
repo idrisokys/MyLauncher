@@ -51,6 +51,11 @@ The **✥ button** at the top right toggles edit mode.
 - Long-press an app inside a folder → **Remove from folder**
 - A folder left with a single app is dissolved automatically
 
+### 💾 Backup & restore
+- **Long-press the ✥ button** → your layout (order, folders, shortcuts) is saved automatically to the **Downloads** folder as `MyL_yedek_<date>_<time>.json`
+- On a **fresh install**, after you pick MyL as the default launcher, it asks **"Restore from a backup file?"**. Tap **Yes**, then choose the backup file; your layout is restored (apps that are not installed are skipped, new ones are added at the end)
+- No extra permission is needed (MediaStore + system file picker)
+
 ### 📌 Long-press menu (when edit mode is off)
 **For apps**
 - The app's own shortcuts (up to 8), e.g. "New message", "Camera → Selfie"
@@ -220,6 +225,11 @@ Sağ üstteki **✥ düğmesi** düzenleme modunu açar/kapatır.
 - Klasör menüsü: **Yeniden adlandır**, **Klasörü dağıt**
 - Klasör içindeki bir uygulamaya uzun bas → **Klasörden çıkar**
 - İçinde tek uygulama kalan klasör otomatik dağılır
+
+### 💾 Yedekleme ve geri yükleme
+- **✥ düğmesine uzun bas** → düzenin (sıra, klasörler, kısayollar) **İndirilenler** klasörüne `MyL_yedek_<tarih>_<saat>.json` olarak otomatik kaydedilir
+- **İlk kurulumda**, MyL'i varsayılan launcher seçtikten sonra **"Yedek dosyasından geri yüklensin mi?"** diye sorar. **Evet** dersen yedek dosyasını seçersin ve düzen geri gelir (yüklü olmayan uygulamalar atlanır, yeniler sona eklenir)
+- Ek izin gerekmez (MediaStore + sistem dosya seçici)
 
 ### 📌 Uzun basma menüsü (düzenleme kapalıyken)
 **Uygulamalar için**

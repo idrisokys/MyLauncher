@@ -37,12 +37,14 @@ Tap the **search bar** at the top to start searching.
 - Contact lookup runs in the background, so the UI never freezes while typing
 
 ### ⚙️ Settings button
-Next to the edit button there is a **⚙ button**: **Default home app** and **System settings** shortcuts.
+Next to the edit button there is a **⚙ button** with: **Back up layout** (saves the order, folders and shortcuts as a `.json` file in the Downloads folder), **Restore layout** (pick a backup file to replace the current layout; apps no longer installed are dropped) and **Settings** (system settings).
 
 ### 📁 Edit mode and folders
 The **✥ button** at the top right toggles edit mode. In edit mode the ⚙ button turns into a **folder button**.
 
-- **Long-press and drag** an icon onto another icon → the dragged icon **takes its place** and the replaced icon **moves to the very end** of the list (no folder is created by dragging). A **blue ring** on the target shows what will be replaced
+- **Long-press and drag** an icon
+  - Drop it on the **center** of another icon → it **takes its place** and the replaced icon **moves to the very end** of the list (no folder is created by dragging). A **blue ring** on the target shows what will be replaced
+  - Drop it on the **edge** of an icon (between two icons) → it is **inserted between them**. A **blue bar** shows where it will go
 - **Folder button**: pick **"New folder"** (with a name) or an **existing folder**, tick any number of apps and tap **Add**
 - In edit mode, tapping an app does **not** launch it
 - The folder icon shows a **mini preview** of its first 4 apps
@@ -207,12 +209,14 @@ Sade, hızlı ve gösterişten uzak bir Android ana ekran uygulaması. Tek ekran
 - Kişi araması arka planda yapılır, yazarken arayüz donmaz
 
 ### ⚙️ Ayarlar düğmesi
-Düzenle düğmesinin yanında bir **⚙ düğmesi** vardır: **Varsayılan ana ekran uygulaması** ve **Sistem ayarları** kısayolları.
+Düzenle düğmesinin yanında bir **⚙ düğmesi** vardır: **Düzeni yedekle** (sıra, klasörler ve kısayolları İndirilenler klasörüne `.json` dosyası olarak kaydeder), **Düzeni geri al** (yedek dosyasını seçince mevcut düzenin yerine yükler; artık yüklü olmayan uygulamalar atlanır) ve **Ayarlar** (sistem ayarları).
 
 ### 📁 Düzenleme modu ve klasörler
 Sağ üstteki **✥ düğmesi** düzenleme modunu açar/kapatır. Düzenleme modunda ⚙ düğmesi **klasör düğmesine** dönüşür.
 
-- Simgeye **uzun bas ve başka bir simgenin üstüne sürükle** → sürüklenen simge onun **yerini alır**, yeri alınan simge listenin **en sonuna** gider (sürükleyerek klasör oluşmaz). Hedefteki **mavi halka** hangi simgenin yer değiştireceğini gösterir
+- Simgeye **uzun bas ve sürükle**
+  - Başka bir simgenin **ortasına** bırak → onun **yerini alır**, yeri alınan simge listenin **en sonuna** gider (sürükleyerek klasör oluşmaz). Hedefteki **mavi halka** hangi simgenin yer değiştireceğini gösterir
+  - Bir simgenin **kenarına** (iki simgenin arasına) bırak → o iki simgenin **arasına girer**. **Mavi çubuk** nereye gireceğini gösterir
 - **Klasör düğmesi**: **"Yeni klasör"** (adıyla) ya da **var olan bir klasörü** seç, istediğin kadar uygulamayı işaretle ve **Ekle**'ye dokun
 - Düzenleme modunda uygulamaya dokunmak uygulamayı **açmaz**
 - Klasör simgesi içindeki ilk 4 uygulamanın **mini önizlemesini** gösterir

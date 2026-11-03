@@ -5,6 +5,7 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.app.Dialog
 import android.content.ContentUris
+import android.content.ContentValues
 import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.LauncherActivityInfo
@@ -25,11 +26,13 @@ import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.os.Process
 import android.os.UserHandle
 import android.provider.ContactsContract
+import android.provider.MediaStore
 import android.provider.Settings
 import android.text.Editable
 import android.text.TextUtils
@@ -60,6 +63,8 @@ import androidx.recyclerview.widget.SimpleItemAnimator
 import org.json.JSONArray
 import org.json.JSONObject
 import java.text.Collator
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.Callable
@@ -415,14 +420,100 @@ class MainActivity : Activity() {
         editMode = on
         (moveBtn.background as GradientDrawable).setColor(if (on) 0xCCEC4899.toInt() else 0x66000000)
         actionBtn.setImageResource(if (on) R.drawable.ic_folder_add else R.drawable.ic_settings)
-        toast(if (on) "Düzenleme açık: simgeyi başka simgenin üstüne sürükle, yerini alır. Klasör için üstteki klasör düğmesini kullan" else "Düzenleme kapalı")
+        toast(if (on) "Düzenleme açık: simgeyi ortasına bırakırsan yerini alır, kenarına (arasına) bırakırsan araya girer. Klasör için üstteki klasör düğmesini kullan" else "Düzenleme kapalı")
     }
 
     private fun showSettingsMenu(anchor: View) {
         val pm = PopupMenu(this, anchor)
-        pm.menu.add("Varsayılan ana ekran uygulaması").setOnMenuItemClickListener { openDefaultLauncherSettings(); true }
-        pm.menu.add("Sistem ayarları").setOnMenuItemClickListener { safeStart(Intent(Settings.ACTION_SETTINGS)); true }
+        pm.menu.add("Düzeni yedekle").setOnMenuItemClickListener { backupLayout(); true }
+        pm.menu.add("Düzeni geri al").setOnMenuItemClickListener { confirmRestore(); true }
+        pm.menu.add("Ayarlar").setOnMenuItemClickListener { safeStart(Intent(Settings.ACTION_SETTINGS)); true }
         pm.show()
+    }
+
+    // ---------- Düzen yedekleme / geri yükleme ----------
+    /** Yerleşim düzenini (sıra, klasörler, kısayollar) İndirilenler klasörüne JSON olarak kaydeder. */
+    private fun backupLayout() {
+        try {
+            val fo = JSONObject()
+            for ((k, f) in folders) fo.put(k, JSONObject().put("n", f.name).put("c", JSONArray(f.children)))
+            val so = JSONObject()
+            for ((k, sc) in shortcuts) so.put(k, JSONObject().put("p", sc.pkg).put("i", sc.id).put("l", sc.label))
+            val json = JSONObject()
+                .put("myl", 1)
+                .put("order", JSONArray(order))
+                .put("folders", fo)
+                .put("shortcuts", so)
+                .toString(2)
+            val name = "myl-duzen-" + SimpleDateFormat("yyyyMMdd-HHmm", Locale.US).format(Date()) + ".json"
+            val cv = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, name)
+                put(MediaStore.MediaColumns.MIME_TYPE, "application/json")
+                put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+            }
+            val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, cv)
+            if (uri == null) { toast("Yedek kaydedilemedi"); return }
+            contentResolver.openOutputStream(uri)?.use { it.write(json.toByteArray(Charsets.UTF_8)) }
+            toast("Yedeklendi: İndirilenler/$name")
+        } catch (e: Exception) {
+            toast("Yedek kaydedilemedi")
+        }
+    }
+
+    private fun confirmRestore() {
+        AlertDialog.Builder(this)
+            .setTitle("Düzeni geri al")
+            .setMessage("Mevcut yerleşim düzeni, seçeceğin yedek dosyasındaki düzenle değiştirilecek.")
+            .setPositiveButton("Dosya seç") { _, _ ->
+                val i = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                    addCategory(Intent.CATEGORY_OPENABLE)
+                    type = "*/*"
+                }
+                try { startActivityForResult(i, REQ_RESTORE) } catch (e: Exception) { toast("Dosya seçici açılamadı") }
+            }
+            .setNegativeButton("İptal", null)
+            .show()
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(req: Int, res: Int, data: Intent?) {
+        super.onActivityResult(req, res, data)
+        if (req != REQ_RESTORE || res != RESULT_OK) return
+        val uri = data?.data ?: return
+        try {
+            val text = contentResolver.openInputStream(uri)?.use { String(it.readBytes(), Charsets.UTF_8) }
+                ?: run { toast("Dosya okunamadı"); return }
+            val o = JSONObject(text)
+            if (!o.has("order") || !o.has("folders") || !o.has("shortcuts")) { toast("Geçersiz yedek dosyası"); return }
+            val ord = ArrayList<String>()
+            o.getJSONArray("order").let { a -> for (i in 0 until a.length()) ord.add(a.getString(i)) }
+            val fol = LinkedHashMap<String, Folder>()
+            o.getJSONObject("folders").let { fo ->
+                for (k in fo.keys()) {
+                    val f = fo.getJSONObject(k)
+                    val ch = f.getJSONArray("c")
+                    val l = mutableListOf<String>()
+                    for (i in 0 until ch.length()) l.add(ch.getString(i))
+                    fol[k] = Folder(f.getString("n"), l)
+                }
+            }
+            val scs = LinkedHashMap<String, Sc>()
+            o.getJSONObject("shortcuts").let { so ->
+                for (k in so.keys()) {
+                    val x = so.getJSONObject(k)
+                    scs[k] = Sc(x.getString("p"), x.getString("i"), x.getString("l"))
+                }
+            }
+            folderDialog?.dismiss()
+            order.clear(); order.addAll(ord)
+            folders.clear(); folders.putAll(fol)
+            shortcuts.clear(); shortcuts.putAll(scs)
+            persistAndRefresh()   // yüklü olmayan uygulamalar ayıklanır, yeniler sona eklenir
+            startReload()         // geri yüklenen kısayolların simgeleri hazırlanır
+            toast("Düzen geri yüklendi")
+        } catch (e: Exception) {
+            toast("Geçersiz yedek dosyası")
+        }
     }
 
     private fun openUrl(url: String) {
@@ -611,6 +702,7 @@ class MainActivity : Activity() {
 
     private companion object {
         const val REQ_CALL = 2
+        const val REQ_RESTORE = 3
         const val MAX_RESULTS = 5   // kişi + uygulama sonuçları toplamı
         const val WA_PKG = "com.whatsapp"
         const val WA_BIZ_PKG = "com.whatsapp.w4b"
@@ -768,10 +860,13 @@ class MainActivity : Activity() {
     }
 
     // ---------- Sürükle-bırak: yer değiştirme ----------
-    // Sürüklenen simge bir simgenin üstüne gelince hedef mavi halkayla işaretlenir:
-    // bırakınca sürüklenen simge hedefin yerini alır, hedef ise listenin EN SONUNA gider.
+    // Hedefin ORTASINA getirince mavi halka: sürüklenen simge hedefin yerini alır, hedef listenin EN SONUNA gider.
+    // Hedefin KENARINA (iki simge arasına) getirince mavi çubuk: simge o iki simgenin arasına girer.
     // (Klasör oluşturmak/klasöre eklemek için üstteki klasör düğmesi kullanılır.)
     private var hintView: View? = null
+    private var hintInsert = false
+    private var hintBefore = false
+    private val hintBar = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF38BDF8.toInt() }
     private val hintRect = RectF()
     private val hintFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x3338BDF8 }
     private val hintRing = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -795,11 +890,28 @@ class MainActivity : Activity() {
         val cy = iv.top + iv.height / 2f + dY
         val t = if (pos >= 0) findTarget(rv, iv, cx, cy) else null
         val tp = if (t != null) rv.getChildAdapterPosition(t) else -1
-        hintView = if (t == null || tp < 0 || tp >= shownKeys.size || tp == pos) null else t
+        if (t == null || tp < 0 || tp >= shownKeys.size || tp == pos) { hintView = null; return }
+        hintView = t
+        hintInsert = isEdgeDrop(t, cx, cy)
+        hintBefore = cx > t.left + t.width / 2f   // ızgara sağdan sola: sağ taraf = hedefin ÖNCESİ
+    }
+
+    /** Hedefin merkezinden yeterince uzakta (kenar/arası) bırakılıyorsa araya girme sayılır. */
+    private fun isEdgeDrop(t: View, cx: Float, cy: Float): Boolean {
+        val tcx = t.left + t.width / 2f
+        val tcy = t.top + t.height / 2f
+        return hypot(cx - tcx, cy - tcy) > t.width * 0.3f
     }
 
     private fun drawHint(c: Canvas) {
         val t = hintView ?: return
+        if (hintInsert) {
+            val x = if (hintBefore) t.right - dp(1).toFloat() else t.left + dp(1).toFloat()
+            val half = dp(3).toFloat()
+            hintRect.set(x - half, t.top + dp(8).toFloat(), x + half, t.bottom - dp(8).toFloat())
+            c.drawRoundRect(hintRect, half, half, hintBar)
+            return
+        }
         val r = dp(18).toFloat()
         hintRect.set(t.left + dp(2).toFloat(), t.top + dp(2).toFloat(), t.right - dp(2).toFloat(), t.bottom - dp(2).toFloat())
         hintRing.strokeWidth = dp(2) + dp(1) / 2f
@@ -859,8 +971,20 @@ class MainActivity : Activity() {
         val tp = rv.getChildAdapterPosition(target)
         if (tp < 0 || tp >= shownKeys.size || tp == pos) return
         val targetKey = shownKeys[tp]
+        val insert = isEdgeDrop(target, cx, cy)
+        val before = cx > target.left + target.width / 2f
         // Değişiklik, RecyclerView kendi çizim/animasyon döngüsünden çıktıktan sonra uygulanır.
-        rv.post { replaceAt(key, targetKey) }
+        rv.post { if (insert) insertNear(key, targetKey, before) else replaceAt(key, targetKey) }
+    }
+
+    /** Sürüklenen öğeyi hedefin hemen önüne/arkasına (iki öğenin arasına) yerleştirir. */
+    private fun insertNear(drag: String, target: String, before: Boolean) {
+        val from = order.indexOf(drag)
+        if (from < 0 || !order.contains(target) || drag == target) return
+        order.removeAt(from)
+        val idx = order.indexOf(target)
+        order.add(if (before) idx else idx + 1, drag)
+        persistAndRefresh()
     }
 
     /** Sürüklenen öğe hedefin yerini alır; yeri alınan hedef listenin en sonuna gider. */

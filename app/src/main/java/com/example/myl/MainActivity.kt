@@ -487,13 +487,17 @@ class MainActivity : Activity() {
         val seen = HashSet<String>()
         try {
             val esc = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-            val D = ContactsContract.Data
             contentResolver.query(
-                D.CONTENT_URI,
-                arrayOf(D._ID, D.RAW_CONTACT_ID, D.DISPLAY_NAME, D.MIMETYPE),
-                "${D.MIMETYPE} IN (?, ?) AND ${D.DISPLAY_NAME} LIKE ? ESCAPE '\\'",
+                ContactsContract.Data.CONTENT_URI,
+                arrayOf(
+                    ContactsContract.Data._ID,
+                    ContactsContract.Data.RAW_CONTACT_ID,
+                    ContactsContract.Data.DISPLAY_NAME,
+                    ContactsContract.Data.MIMETYPE
+                ),
+                "${ContactsContract.Data.MIMETYPE} IN (?, ?) AND ${ContactsContract.Data.DISPLAY_NAME} LIKE ? ESCAPE '\\'",
                 arrayOf(WA_CHAT, WA_BIZ_CHAT, "%$esc%"),
-                "${D.DISPLAY_NAME} COLLATE LOCALIZED ASC LIMIT 20"
+                "${ContactsContract.Data.DISPLAY_NAME} COLLATE LOCALIZED ASC LIMIT 20"
             )?.use { c ->
                 while (c.moveToNext() && out.size < MAX_RESULTS) {
                     val dataId = c.getLong(0)

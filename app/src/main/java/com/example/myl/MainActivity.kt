@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.Activity
 import android.app.AlertDialog
 import android.app.Dialog
+import android.content.ContentUris
 import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.LauncherActivityInfo
@@ -72,7 +73,14 @@ class MainActivity : Activity() {
     // ---------- Veri modelleri ----------
     class Folder(var name: String, val children: MutableList<String>)
     class Sc(val pkg: String, val id: String, var label: String)
-    class Row(val title: String, val sub: String?, val icon: Bitmap?, val action: () -> Unit)
+    class Row(
+        val title: String,
+        val sub: String?,
+        val icon: Bitmap?,
+        val waChat: (() -> Unit)? = null,   // kişinin WhatsApp sohbetini aç (yoksa null)
+        val waCall: (() -> Unit)? = null,   // kişiye WhatsApp sesli arama başlat (yoksa null)
+        val action: () -> Unit
+    )
 
     /** Arka planda hazırlanan, ana thread'e hazır halde teslim edilen uygulama listesi. */
     private class Snapshot(
@@ -462,7 +470,8 @@ class MainActivity : Activity() {
 
     /** Arka plan thread'inde çalışır. */
     private fun findContacts(q: String): List<Row> {
-        val out = mutableListOf<Row>()
+        class C(val id: Long, val lookup: String?, val name: String)
+        val found = mutableListOf<C>()
         try {
             val name = ContactsContract.Contacts.DISPLAY_NAME_PRIMARY
             val esc = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
@@ -473,21 +482,105 @@ class MainActivity : Activity() {
                 "$name COLLATE LOCALIZED ASC LIMIT 5"
             )?.use { c ->
                 while (c.moveToNext()) {
-                    val id = c.getLong(0)
-                    val lookup = c.getString(1)
                     val nm = c.getString(2) ?: continue
-                    out.add(Row(nm, "Kişi", null) {
-                        try {
-                            startActivity(Intent(Intent.ACTION_VIEW, ContactsContract.Contacts.getLookupUri(id, lookup)))
-                        } catch (e: Exception) { toast("Kişi açılamadı") }
-                    })
+                    found.add(C(c.getLong(0), c.getString(1), nm))
                 }
             }
         } catch (e: Exception) { }
+        if (found.isEmpty()) return emptyList()
+
+        val wa = whatsappActions(found.map { it.id })
+        return found.map { c ->
+            val acts = wa[c.id]
+            Row(c.name, "Kişi", null, acts?.first, acts?.second) {
+                try {
+                    startActivity(Intent(Intent.ACTION_VIEW, ContactsContract.Contacts.getLookupUri(c.id, c.lookup)))
+                } catch (e: Exception) { toast("Kişi açılamadı") }
+            }
+        }
+    }
+
+    /**
+     * Kişilerin rehberdeki WhatsApp kayıtlarını (sohbet + sesli arama) bulur; WhatsApp'ı olmayan kişi için kayıt çıkmaz.
+     * WhatsApp ve WhatsApp Business desteklenir (önce normal WhatsApp). Arka plan thread'inde çalışır.
+     */
+    private fun whatsappActions(ids: List<Long>): Map<Long, Pair<(() -> Unit)?, (() -> Unit)?>> {
+        // mimetype -> (paket, sıra: 0 = sohbet, 1 = sesli arama, öncelik)
+        val chatMimes = listOf(WA_CHAT to WA_PKG, WA_BIZ_CHAT to WA_BIZ_PKG)
+        val callMimes = listOf(WA_CALL to WA_PKG, WA_BIZ_CALL to WA_BIZ_PKG)
+        val chat = HashMap<Long, Pair<Long, Int>>()   // contactId -> (dataId, mimeIndex)
+        val call = HashMap<Long, Pair<Long, Int>>()
+        try {
+            val mimes = (chatMimes + callMimes).map { it.first }
+            val idPh = ids.joinToString(",") { "?" }
+            val mimePh = mimes.joinToString(",") { "?" }
+            val args = (ids.map { it.toString() } + mimes).toTypedArray()
+            contentResolver.query(
+                ContactsContract.Data.CONTENT_URI,
+                arrayOf(
+                    ContactsContract.Data._ID,
+                    ContactsContract.Data.CONTACT_ID,
+                    ContactsContract.Data.MIMETYPE
+                ),
+                "${ContactsContract.Data.CONTACT_ID} IN ($idPh) AND ${ContactsContract.Data.MIMETYPE} IN ($mimePh)",
+                args, null
+            )?.use { c ->
+                while (c.moveToNext()) {
+                    val dataId = c.getLong(0)
+                    val cid = c.getLong(1)
+                    val mime = c.getString(2) ?: continue
+                    val ci = chatMimes.indexOfFirst { it.first == mime }
+                    val vi = callMimes.indexOfFirst { it.first == mime }
+                    if (ci >= 0) { val o = chat[cid]; if (o == null || ci < o.second) chat[cid] = dataId to ci }
+                    if (vi >= 0) { val o = call[cid]; if (o == null || vi < o.second) call[cid] = dataId to vi }
+                }
+            }
+        } catch (e: Exception) { }
+
+        val out = HashMap<Long, Pair<(() -> Unit)?, (() -> Unit)?>>()
+        for (id in ids) {
+            val ch = chat[id]
+            val ca = call[id]
+            if (ch == null && ca == null) continue
+            var chatAct: (() -> Unit)? = null
+            var callAct: (() -> Unit)? = null
+            if (ch != null) {
+                val (dataId, i) = ch
+                val m = chatMimes[i]
+                chatAct = { openWhatsApp(dataId, m.first, m.second) }
+            }
+            if (ca != null) {
+                val (dataId, i) = ca
+                val m = callMimes[i]
+                callAct = { openWhatsApp(dataId, m.first, m.second) }
+            }
+            out[id] = Pair(chatAct, callAct)
+        }
         return out
     }
 
-    private class RowHolder(val icon: ImageView, val title: TextView, val sub: TextView) {
+    private fun openWhatsApp(dataId: Long, mime: String, pkg: String) {
+        try {
+            val uri = ContentUris.withAppendedId(ContactsContract.Data.CONTENT_URI, dataId)
+            startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, mime).setPackage(pkg))
+        } catch (e: Exception) {
+            toast("WhatsApp açılamadı")
+        }
+    }
+
+    private companion object {
+        const val WA_PKG = "com.whatsapp"
+        const val WA_BIZ_PKG = "com.whatsapp.w4b"
+        const val WA_CHAT = "vnd.android.cursor.item/vnd.com.whatsapp.profile"
+        const val WA_CALL = "vnd.android.cursor.item/vnd.com.whatsapp.voip.call"
+        const val WA_BIZ_CHAT = "vnd.android.cursor.item/vnd.com.whatsapp.w4b.profile"
+        const val WA_BIZ_CALL = "vnd.android.cursor.item/vnd.com.whatsapp.w4b.voip.call"
+    }
+
+    private class RowHolder(
+        val icon: ImageView, val title: TextView, val sub: TextView,
+        val chatBtn: ImageView, val callBtn: ImageView
+    ) {
         val placeholder = GradientDrawable().apply {
             shape = GradientDrawable.OVAL
             setColor(0x44FFFFFF)
@@ -520,7 +613,11 @@ class MainActivity : Activity() {
                 col.addView(title)
                 col.addView(sub)
                 line.addView(col, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(14) })
-                h = RowHolder(iv, title, sub)
+                val chatBtn = waButton(R.drawable.ic_wa_chat, "WhatsApp sohbet")
+                val callBtn = waButton(R.drawable.ic_wa_call, "WhatsApp sesli arama")
+                line.addView(chatBtn, LinearLayout.LayoutParams(dp(40), dp(40)).apply { marginStart = dp(6) })
+                line.addView(callBtn, LinearLayout.LayoutParams(dp(40), dp(40)).apply { marginStart = dp(6) })
+                h = RowHolder(iv, title, sub, chatBtn, callBtn)
                 line.tag = h
                 v = line
             } else {
@@ -531,7 +628,31 @@ class MainActivity : Activity() {
             if (r.icon != null) h.icon.setImageBitmap(r.icon) else h.icon.setImageDrawable(h.placeholder)
             h.title.text = r.title
             if (r.sub != null) { h.sub.text = r.sub; h.sub.visibility = View.VISIBLE } else h.sub.visibility = View.GONE
+            bindWaButton(h.chatBtn, r.waChat)
+            bindWaButton(h.callBtn, r.waCall)
             return v
+        }
+    }
+
+    private fun waButton(res: Int, desc: String) = ImageView(this).apply {
+        setImageResource(res)
+        contentDescription = desc
+        setPadding(dp(8), dp(8), dp(8), dp(8))
+        background = GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(0x33FFFFFF)
+        }
+        visibility = View.GONE
+    }
+
+    private fun bindWaButton(b: ImageView, action: (() -> Unit)?) {
+        if (action == null) {
+            b.visibility = View.GONE
+            b.setOnClickListener(null)
+            b.isClickable = false   // satır dokunuşunu engellemesin
+        } else {
+            b.visibility = View.VISIBLE
+            b.setOnClickListener { closeSearch(); action() }
         }
     }
 

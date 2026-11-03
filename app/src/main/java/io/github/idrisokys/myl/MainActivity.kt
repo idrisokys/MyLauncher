@@ -1,4 +1,4 @@
-package com.example.myl
+package io.github.idrisokys.myl
 
 import android.Manifest
 import android.app.Activity

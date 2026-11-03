@@ -111,7 +111,7 @@ There is **no internet permission**. Web searches are handed off to your browser
 | minSdk / targetSdk / compileSdk | 30 (Android 11) / 34 / 34 |
 | Dependency | `androidx.recyclerview:recyclerview:1.3.2` |
 | UI | Built entirely in code (no XML layouts) |
-| Package | `com.example.myl` |
+| Package | `io.github.idrisokys.myl` |
 
 ### Project structure
 ```
@@ -124,7 +124,7 @@ MyLauncher/
     ├── proguard-rules.pro
     └── src/main/
         ├── AndroidManifest.xml
-        ├── java/com/example/myl/MainActivity.kt   # all logic + FolderDrawable
+        ├── java/io/github/idrisokys/myl/MainActivity.kt   # all logic + FolderDrawable
         └── res/
             ├── drawable/   # app icon and edit button
             ├── mipmap-anydpi/
@@ -283,7 +283,7 @@ Bu sürüm hız için baştan optimize edildi:
 | minSdk / targetSdk / compileSdk | 30 (Android 11) / 34 / 34 |
 | Bağımlılık | `androidx.recyclerview:recyclerview:1.3.2` |
 | Arayüz | Tamamen kodla oluşturulur (XML layout yok) |
-| Paket | `com.example.myl` |
+| Paket | `io.github.idrisokys.myl` |
 
 ### Proje yapısı
 ```
@@ -296,7 +296,7 @@ MyLauncher/
     ├── proguard-rules.pro
     └── src/main/
         ├── AndroidManifest.xml
-        ├── java/com/example/myl/MainActivity.kt   # tüm mantık + FolderDrawable
+        ├── java/io/github/idrisokys/myl/MainActivity.kt   # tüm mantık + FolderDrawable
         └── res/
             ├── drawable/   # uygulama ikonu ve düzenleme düğmesi
             ├── mipmap-anydpi/

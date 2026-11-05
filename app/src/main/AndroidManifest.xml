@@ -5,6 +5,7 @@
     <uses-permission android:name="android.permission.CALL_PHONE" />
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
     <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
+    <uses-permission android:name="android.permission.SET_WALLPAPER" />
 
     <application
         android:allowBackup="false"
@@ -32,6 +33,25 @@
             <!-- Sohbet içinden "Ana ekrana ekle" denince sistem bu filtreyle varsayılan başlatıcıyı çağırır -->
             <intent-filter>
                 <action android:name="android.content.pm.action.CONFIRM_PIN_SHORTCUT" />
+            </intent-filter>
+        </activity>
+        <!-- Paylaş menüsünde "Duvar kağıdı yap": görseli ana ekran + kilit ekranı yapar (arayüzsüz) -->
+        <activity
+            android:name=".SetWallpaperActivity"
+            android:exported="true"
+            android:label="Duvar kağıdı yap"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.ATTACH_DATA" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
             </intent-filter>
         </activity>
     </application>

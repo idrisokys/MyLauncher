@@ -39,6 +39,9 @@ Tap the **search bar** at the top to start searching.
 ### ⚙️ Settings button
 Next to the edit button there is a **⚙ button** with: **Back up layout** (saves the order, folders and shortcuts as a `.json` file in the Downloads folder), **Restore layout** (pick a backup file to replace the current layout; apps no longer installed are dropped) and **Settings** (system settings).
 
+### 🖼 Set as wallpaper (share menu)
+Share any image from any app and pick **"Duvar kağıdı yap"** (Set as wallpaper). The image is fitted to the screen without cropping and applied to both the **home screen and lock screen**. It has no UI of its own; it only appears in the share menu.
+
 ### 📁 Edit mode and folders
 The **✥ button** at the top right toggles edit mode. In edit mode the ⚙ button turns into a **folder button**.
 
@@ -97,6 +100,7 @@ This version was optimized from the ground up for speed:
 | `CALL_PHONE` | Place a call directly when a contact is tapped in search (asked on first call; if denied, the dialer opens instead) |
 | `QUERY_ALL_PACKAGES` | List all installed apps and their shortcuts |
 | `REQUEST_DELETE_PACKAGES` | Open the uninstall screen from the menu |
+| `SET_WALLPAPER` | Set the shared image as wallpaper (normal permission, no prompt) |
 
 There is **no internet permission**. Web searches are handed off to your browser. Data is stored only on the device (`SharedPreferences`), and backup is disabled (`allowBackup=false`).
 
@@ -125,6 +129,7 @@ MyLauncher/
     └── src/main/
         ├── AndroidManifest.xml
         ├── java/io/github/idrisokys/myl/MainActivity.kt   # all logic + FolderDrawable
+        ├── java/io/github/idrisokys/myl/SetWallpaperActivity.kt   # share menu: set wallpaper
         └── res/
             ├── drawable/   # app icon and edit button
             ├── mipmap-anydpi/
@@ -211,6 +216,9 @@ Sade, hızlı ve gösterişten uzak bir Android ana ekran uygulaması. Tek ekran
 ### ⚙️ Ayarlar düğmesi
 Düzenle düğmesinin yanında bir **⚙ düğmesi** vardır: **Düzeni yedekle** (sıra, klasörler ve kısayolları İndirilenler klasörüne `.json` dosyası olarak kaydeder), **Düzeni geri al** (yedek dosyasını seçince mevcut düzenin yerine yükler; artık yüklü olmayan uygulamalar atlanır) ve **Ayarlar** (sistem ayarları).
 
+### 🖼 Duvar kağıdı yap (Paylaş menüsü)
+Herhangi bir uygulamadan bir görseli paylaşıp **"Duvar kağıdı yap"** seçeneğine dokunun. Görsel kırpılmadan ekrana sığdırılır ve **ana ekran ile kilit ekranına** birlikte uygulanır. Kendi arayüzü yoktur, yalnızca Paylaş menüsünde görünür.
+
 ### 📁 Düzenleme modu ve klasörler
 Sağ üstteki **✥ düğmesi** düzenleme modunu açar/kapatır. Düzenleme modunda ⚙ düğmesi **klasör düğmesine** dönüşür.
 
@@ -269,6 +277,7 @@ Bu sürüm hız için baştan optimize edildi:
 | `CALL_PHONE` | Aramada bir kişiye dokununca doğrudan arama yapmak (ilk aramada istenir, reddedersen çevirici açılır) |
 | `QUERY_ALL_PACKAGES` | Yüklü tüm uygulamaları ve kısayollarını listelemek |
 | `REQUEST_DELETE_PACKAGES` | Menüden uygulama kaldırma ekranını açmak |
+| `SET_WALLPAPER` | Paylaşılan görseli duvar kağıdı yapmak (normal izin, sorulmaz) |
 
 İnternet izni **yoktur**. Web aramaları tarayıcıya yönlendirilerek yapılır. Veriler yalnızca cihazda (`SharedPreferences`) tutulur, yedekleme kapalıdır (`allowBackup=false`).
 
@@ -297,6 +306,7 @@ MyLauncher/
     └── src/main/
         ├── AndroidManifest.xml
         ├── java/io/github/idrisokys/myl/MainActivity.kt   # tüm mantık + FolderDrawable
+        ├── java/io/github/idrisokys/myl/SetWallpaperActivity.kt   # Paylaş menüsü: duvar kağıdı yap
         └── res/
             ├── drawable/   # uygulama ikonu ve düzenleme düğmesi
             ├── mipmap-anydpi/

@@ -85,6 +85,7 @@ class MainActivity : Activity() {
         val icon: Bitmap?,
         val onLong: (() -> Unit)? = null,   // basılı tutma (kişilerde: WhatsApp sohbeti)
         val spacer: Boolean = false,        // sonuçlar arasındaki dokunulmaz boş satır
+        val key: String? = null,            // uygulama sonuçlarında "app:<component>" (basılı tutunca menü açar)
         val action: () -> Unit
     )
 
@@ -360,9 +361,16 @@ class MainActivity : Activity() {
                     act()
                 }
             }
-            setOnItemLongClickListener { _, _, p, _ ->
-                val lc = rows.getOrNull(p)?.onLong
-                if (lc != null) { closeSearch(); lc(); true } else false
+            setOnItemLongClickListener { _, v, p, _ ->
+                val r = rows.getOrNull(p) ?: return@setOnItemLongClickListener false
+                val k = r.key
+                val lc = r.onLong
+                when {
+                    // Uygulama sonucu: ana ekrandaki gibi menü (kısayollar, Uygulama bilgisi, Kaldır)
+                    k != null && apps.containsKey(k) -> { showMenu(k, v, null); true }
+                    lc != null -> { closeSearch(); lc(); true }
+                    else -> false
+                }
             }
         }
         frame.addView(results, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
@@ -525,6 +533,20 @@ class MainActivity : Activity() {
         closeSearch()
     }
 
+    /** Play Store uygulamasında arar; yüklü değilse tarayıcıda Play Store web aramasını açar. */
+    private fun openPlayStore(q: String) {
+        val enc = Uri.encode(q)
+        try {
+            startActivity(
+                Intent(Intent.ACTION_VIEW, Uri.parse("market://search?q=$enc&c=apps"))
+                    .setPackage("com.android.vending")
+            )
+            closeSearch()
+        } catch (e: Exception) {
+            openUrl("https://play.google.com/store/search?q=$enc&c=apps")
+        }
+    }
+
     private fun safeStart(i: Intent) {
         try { startActivity(i) } catch (e: Exception) { toast("Açılamadı") }
     }
@@ -582,12 +604,12 @@ class MainActivity : Activity() {
         matches.sortWith(compareBy<String>({ normLabels[it]?.startsWith(fq) != true }, { normLabels[it] ?: "" }))
         for (k in matches.take((MAX_RESULTS - rows.size).coerceAtLeast(0))) {
             val label = labels[k] ?: continue
-            rows.add(Row(label, "Uygulama", iconCache[k]) { launch(k) })
+            rows.add(Row(label, "Uygulama", iconCache[k], key = k) { launch(k) })
         }
         val enc = Uri.encode(q)
         rows.add(Row("Google'da ara: $q", null, null) { openUrl("https://www.google.com/search?q=$enc") })
         rows.add(Row("Yandex'te ara: $q", null, null) { openUrl("https://yandex.com/search/?text=$enc") })
-        rows.add(Row("IMDb'de ara: $q", null, null) { openUrl("https://www.imdb.com/find/?q=$enc") })
+        rows.add(Row("Play Store'da ara: $q", null, null) { openPlayStore(q) })
         // Yanlış dokunmayı önlemek için her sonucun altına dokunulmaz boş satır
         val withGaps = ArrayList<Row>(rows.size * 2)
         for (r in rows) { withGaps.add(r); withGaps.add(Row("", null, null, spacer = true) {}) }

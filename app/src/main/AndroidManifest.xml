@@ -54,5 +54,11 @@
                 <data android:mimeType="image/*" />
             </intent-filter>
         </activity>
+        <!-- Ayarlar > Duvar kağıdı: görseli ekran oranında kırpıp duvar kağıdı yapar -->
+        <activity
+            android:name=".CropWallpaperActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.Black.NoTitleBar" />
     </application>
 </manifest>

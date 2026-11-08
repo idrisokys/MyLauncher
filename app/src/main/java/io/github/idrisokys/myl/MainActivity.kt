@@ -435,6 +435,7 @@ class MainActivity : Activity() {
         val pm = PopupMenu(this, anchor)
         pm.menu.add("Düzeni yedekle").setOnMenuItemClickListener { backupLayout(); true }
         pm.menu.add("Düzeni geri al").setOnMenuItemClickListener { confirmRestore(); true }
+        pm.menu.add("Duvar kağıdı").setOnMenuItemClickListener { pickWallpaper(); true }
         pm.menu.add("Ayarlar").setOnMenuItemClickListener { safeStart(Intent(Settings.ACTION_SETTINGS)); true }
         pm.show()
     }
@@ -468,6 +469,15 @@ class MainActivity : Activity() {
         }
     }
 
+    /** Galeriden görsel seç, ardından kırpma ekranını aç. */
+    private fun pickWallpaper() {
+        val i = Intent(Intent.ACTION_GET_CONTENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "image/*"
+        }
+        try { startActivityForResult(i, REQ_WALLPAPER) } catch (e: Exception) { toast("Görsel seçici açılamadı") }
+    }
+
     private fun confirmRestore() {
         AlertDialog.Builder(this)
             .setTitle("Düzeni geri al")
@@ -486,6 +496,16 @@ class MainActivity : Activity() {
     @Deprecated("Deprecated in Java")
     override fun onActivityResult(req: Int, res: Int, data: Intent?) {
         super.onActivityResult(req, res, data)
+        if (req == REQ_WALLPAPER) {
+            if (res != RESULT_OK) return
+            val img = data?.data ?: return
+            startActivity(
+                Intent(this, CropWallpaperActivity::class.java)
+                    .setData(img)
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            )
+            return
+        }
         if (req != REQ_RESTORE || res != RESULT_OK) return
         val uri = data?.data ?: return
         try {
@@ -725,6 +745,7 @@ class MainActivity : Activity() {
     private companion object {
         const val REQ_CALL = 2
         const val REQ_RESTORE = 3
+        const val REQ_WALLPAPER = 4
         const val MAX_RESULTS = 5   // kişi + uygulama sonuçları toplamı
         const val WA_PKG = "com.whatsapp"
         const val WA_BIZ_PKG = "com.whatsapp.w4b"

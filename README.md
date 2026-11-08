@@ -37,7 +37,7 @@ Tap the **search bar** at the top to start searching.
 - Contact lookup runs in the background, so the UI never freezes while typing
 
 ### ⚙️ Settings button
-Next to the edit button there is a **⚙ button** with: **Back up layout** (saves the order, folders and shortcuts as a `.json` file in the Downloads folder), **Restore layout** (pick a backup file to replace the current layout; apps no longer installed are dropped) and **Settings** (system settings).
+Next to the edit button there is a **⚙ button** with: **Back up layout** (saves the order, folders and shortcuts as a `.json` file in the Downloads folder), **Restore layout** (pick a backup file to replace the current layout; apps no longer installed are dropped), **Duvar kağıdı** (pick an image, drag/pinch it inside a frame that matches your screen ratio, tap **Ayarla** to set it as home + lock screen wallpaper) and **Settings** (system settings).
 
 ### 🖼 Set as wallpaper (share menu)
 Share any image from any app and pick **"Duvar kağıdı yap"** (Set as wallpaper). The image is fitted to the screen without cropping and applied to both the **home screen and lock screen**. It has no UI of its own; it only appears in the share menu.
@@ -214,7 +214,7 @@ Sade, hızlı ve gösterişten uzak bir Android ana ekran uygulaması. Tek ekran
 - Kişi araması arka planda yapılır, yazarken arayüz donmaz
 
 ### ⚙️ Ayarlar düğmesi
-Düzenle düğmesinin yanında bir **⚙ düğmesi** vardır: **Düzeni yedekle** (sıra, klasörler ve kısayolları İndirilenler klasörüne `.json` dosyası olarak kaydeder), **Düzeni geri al** (yedek dosyasını seçince mevcut düzenin yerine yükler; artık yüklü olmayan uygulamalar atlanır) ve **Ayarlar** (sistem ayarları).
+Düzenle düğmesinin yanında bir **⚙ düğmesi** vardır: **Düzeni yedekle** (sıra, klasörler ve kısayolları İndirilenler klasörüne `.json` dosyası olarak kaydeder), **Düzeni geri al** (yedek dosyasını seçince mevcut düzenin yerine yükler; artık yüklü olmayan uygulamalar atlanır), **Duvar kağıdı** (görsel seç, ekran oranındaki çerçevede sürükleyip yakınlaştır, **Ayarla** ile ana ekran + kilit ekranı duvar kağıdı yap) ve **Ayarlar** (sistem ayarları).
 
 ### 🖼 Duvar kağıdı yap (Paylaş menüsü)
 Herhangi bir uygulamadan bir görseli paylaşıp **"Duvar kağıdı yap"** seçeneğine dokunun. Görsel kırpılmadan ekrana sığdırılır ve **ana ekran ile kilit ekranına** birlikte uygulanır. Kendi arayüzü yoktur, yalnızca Paylaş menüsünde görünür.

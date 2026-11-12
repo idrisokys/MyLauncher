@@ -2,7 +2,9 @@ package io.github.idrisokys.myl
 
 import android.Manifest
 import android.app.Activity
+import android.app.ActivityManager
 import android.app.AlertDialog
+import android.app.ApplicationExitInfo
 import android.app.Dialog
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -60,6 +62,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ListView
 import android.widget.PopupMenu
+import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.recyclerview.widget.DiffUtil
@@ -69,6 +72,7 @@ import androidx.recyclerview.widget.RecyclerView
 import androidx.recyclerview.widget.SimpleItemAnimator
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
 import java.text.Collator
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -163,6 +167,8 @@ class MainActivity : Activity() {
     // ---------- Yaşam döngüsü ----------
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        installCrashLogger()
+        logLife("onCreate " + (if (savedInstanceState == null) "yeni" else "kayitli") + " pid=" + Process.myPid())
         launcherApps = getSystemService(LauncherApps::class.java)
         prefs = getSharedPreferences("myl", MODE_PRIVATE)
         if (Build.VERSION.SDK_INT >= 30) {
@@ -186,6 +192,7 @@ class MainActivity : Activity() {
 
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
+        logLife("onNewIntent")
         handleIntent(intent)
         promptDefaultIfNeeded(intent)
     }
@@ -203,9 +210,30 @@ class MainActivity : Activity() {
         // Artık simge önbelleği silinmiyor; arka planda hızlıca kontrol edilir,
         // bir şey değişmediyse ekrana hiç dokunulmaz.
         if (skipNextResumeReload) skipNextResumeReload = false else startReload()
+        root.post { refreshWindow() }
+        logLife("onResume")
+    }
+
+    override fun onStop() {
+        logLife("onStop")
+        super.onStop()
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) refreshWindow()
+    }
+
+    /** Kilit ekranından dönüşte pencere boş kalırsa (yalnız duvar kağıdı) yerleşimi ve çizimi zorla yeniler. */
+    private fun refreshWindow() {
+        root.requestApplyInsets()
+        root.requestLayout()
+        root.invalidate()
+        grid.invalidate()
     }
 
     override fun onDestroy() {
+        logLife("onDestroy finishing=$isFinishing")
         launcherApps.unregisterCallback(callback)
         main.removeCallbacksAndMessages(null)
         worker.shutdown()
@@ -279,7 +307,12 @@ class MainActivity : Activity() {
         root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         root.setOnApplyWindowInsetsListener { v, ins ->
             if (Build.VERSION.SDK_INT >= 30) {
-                val i = ins.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.ime())
+                // Klavye boşluğunu yalnızca arama kutusu odaktayken uygula; aksi halde kilit ekranından
+                // dönüşte bayat bir IME değeri tüm içeriği ekran dışına sıkıştırabilir.
+                val types = if (::search.isInitialized && search.hasFocus())
+                    WindowInsets.Type.systemBars() or WindowInsets.Type.ime()
+                else WindowInsets.Type.systemBars()
+                val i = ins.getInsets(types)
                 v.setPadding(i.left, i.top, i.right, i.bottom)
                 WindowInsets.CONSUMED
             } else {
@@ -383,6 +416,10 @@ class MainActivity : Activity() {
         frame.addView(results, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         root.addView(frame, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         setContentView(root)
+        // EditText ilk odaklanabilir görünüm olduğu için kendiliğinden odak alıp klavyeyi çağırıyordu.
+        root.descendantFocusability = ViewGroup.FOCUS_BEFORE_DESCENDANTS
+        root.isFocusableInTouchMode = true
+        root.requestFocus()
 
         search.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
@@ -455,7 +492,87 @@ class MainActivity : Activity() {
         pm.menu.add("Düzeni geri al").setOnMenuItemClickListener { confirmRestore(); true }
         pm.menu.add("Duvar kağıdı").setOnMenuItemClickListener { pickWallpaper(); true }
         pm.menu.add("Ayarlar").setOnMenuItemClickListener { safeStart(Intent(Settings.ACTION_SETTINGS)); true }
+        pm.menu.add("Tanı kaydı").setOnMenuItemClickListener { showDiag(); true }
         pm.show()
+    }
+
+    // ---------- Tanı kaydı (boş ekran sorununu bulmak için) ----------
+    private fun logFile() = File(filesDir, "life.txt")
+    private fun crashFile() = File(filesDir, "crash.txt")
+    private fun stamp(t: Long = System.currentTimeMillis()) =
+        SimpleDateFormat("MM-dd HH:mm:ss", Locale.US).format(Date(t))
+
+    /** Yaşam döngüsü olaylarını küçük bir dosyaya yazar (son 60 satır). */
+    private fun logLife(ev: String) {
+        try {
+            val f = logFile()
+            val old = if (f.exists()) f.readLines().takeLast(59) else emptyList()
+            f.writeText((old + (stamp() + " " + ev)).joinToString("\n") + "\n")
+        } catch (e: Exception) { }
+    }
+
+    /** Yakalanmamış bir hata olursa yığın izini dosyaya yazar, sonra sistemin normal işleyişine bırakır. */
+    private fun installCrashLogger() {
+        val prev = Thread.getDefaultUncaughtExceptionHandler()
+        val dir = filesDir
+        Thread.setDefaultUncaughtExceptionHandler { th, ex ->
+            try {
+                File(dir, "crash.txt").writeText(stamp() + " " + th.name + "\n" + android.util.Log.getStackTraceString(ex))
+            } catch (e2: Exception) { }
+            prev?.uncaughtException(th, ex)
+        }
+    }
+
+    private fun reasonName(r: Int): String = when (r) {
+        ApplicationExitInfo.REASON_CRASH -> "CRASH"
+        ApplicationExitInfo.REASON_CRASH_NATIVE -> "CRASH_NATIVE"
+        ApplicationExitInfo.REASON_ANR -> "ANR"
+        ApplicationExitInfo.REASON_LOW_MEMORY -> "LOW_MEMORY"
+        ApplicationExitInfo.REASON_SIGNALED -> "SIGNALED"
+        ApplicationExitInfo.REASON_USER_REQUESTED -> "USER_REQUESTED"
+        ApplicationExitInfo.REASON_USER_STOPPED -> "USER_STOPPED"
+        ApplicationExitInfo.REASON_DEPENDENCY_DIED -> "DEPENDENCY_DIED"
+        ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE -> "EXCESSIVE_RESOURCE"
+        ApplicationExitInfo.REASON_INITIALIZATION_FAILURE -> "INIT_FAILURE"
+        ApplicationExitInfo.REASON_PERMISSION_CHANGE -> "PERMISSION_CHANGE"
+        ApplicationExitInfo.REASON_EXIT_SELF -> "EXIT_SELF"
+        ApplicationExitInfo.REASON_FREEZER -> "FREEZER"
+        ApplicationExitInfo.REASON_OTHER -> "OTHER"
+        else -> "KOD_$r"
+    }
+
+    /** Sistemin tuttuğu "süreç neden öldü" kaydı (Android 11+). */
+    private fun exitReasons(): String {
+        if (Build.VERSION.SDK_INT < 30) return "(Android 11 altında kayıt yok)"
+        return try {
+            val am = getSystemService(ActivityManager::class.java)
+            val l = am.getHistoricalProcessExitReasons(packageName, 0, 8)
+            if (l.isEmpty()) "Kayıt yok"
+            else l.joinToString("\n") { stamp(it.timestamp) + "  " + reasonName(it.reason) + "  " + (it.description ?: "") }
+        } catch (e: Exception) { "Okunamadı" }
+    }
+
+    private fun showDiag() {
+        val crash = try { crashFile().takeIf { it.exists() }?.readText()?.take(1500) } catch (e: Exception) { null } ?: "Yok"
+        val life = try {
+            logFile().takeIf { it.exists() }?.readLines()?.takeLast(25)?.joinToString("\n")
+        } catch (e: Exception) { null } ?: "Yok"
+        val msg = "Süreç sonları:\n" + exitReasons() + "\n\nSon çökme:\n" + crash + "\n\nYaşam döngüsü (son 25):\n" + life
+        val tv = TextView(this).apply {
+            text = msg
+            textSize = 11f
+            setTextIsSelectable(true)
+            setPadding(dp(20), dp(12), dp(20), dp(12))
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Tanı kaydı")
+            .setView(ScrollView(this).apply { addView(tv) })
+            .setPositiveButton("Kopyala") { _, _ ->
+                getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("tani", msg))
+                toast("Kopyalandı")
+            }
+            .setNegativeButton("Kapat", null)
+            .show()
     }
 
     /** Bilgi satırı için yuvarlak kırpılmış küçük resim. */

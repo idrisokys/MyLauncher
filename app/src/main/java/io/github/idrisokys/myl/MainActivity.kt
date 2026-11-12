@@ -789,15 +789,15 @@ class MainActivity : Activity() {
             if (pkg != null) setPackage(pkg)
         }
         val attempts = listOf(
-            view(docUri, "com.google.android.documentsui"),
-            view(docUri, "com.android.documentsui"),
-            view(docUri),
-            view(treeUri),
-            // Son çare: sistem klasör seçicisini o klasörde açar
+            // Android 11+ üzerinde en güvenilir yol: sistem klasör seçicisini o klasörde açar
             Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
                 putExtra(android.provider.DocumentsContract.EXTRA_INITIAL_URI, docUri)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
+            },
+            view(docUri, "com.google.android.documentsui"),
+            view(docUri, "com.android.documentsui"),
+            view(docUri),
+            view(treeUri)
         )
         for ((n, i) in attempts.withIndex()) {
             try { startActivity(i); toast("Link açıldı (yöntem ${n + 1}/${attempts.size})"); return } catch (e: Exception) { /* sıradakini dene */ }

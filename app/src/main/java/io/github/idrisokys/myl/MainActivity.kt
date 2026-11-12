@@ -481,7 +481,7 @@ class MainActivity : Activity() {
         toast(if (on) "Düzenleme açık: simgeyi başka bir simgenin ortasına bırakırsan yer değiştirirler, kenarına (arasına) bırakırsan araya girer. Klasör için üstteki klasör düğmesini kullan" else "Düzenleme kapalı")
     }
 
-    private fun showSettingsMenu(anchor: View, infoOpen: Boolean = false) {
+    private fun showSettingsMenu(anchor: View) {
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(0, dp(8), 0, dp(4))
@@ -507,25 +507,8 @@ class MainActivity : Activity() {
             }, LinearLayout.LayoutParams(dp(50), dp(40)))
         }
 
-        // En üstte: ikon, altında bilgi simgesi (dokununca e-posta ve Github adresi), altında Tanı kaydı
-        box.addView(ImageView(this).apply { setImageDrawable(infoIcon(dp(44))) },
-            LinearLayout.LayoutParams(dp(44), dp(44)).apply { gravity = Gravity.CENTER_HORIZONTAL; bottomMargin = dp(2); marginStart = dp(3); marginEnd = dp(3) })
-        row("Bilgi", R.drawable.ic_menu_info) { showSettingsMenu(anchor, !infoOpen) }
-        if (infoOpen) {
-            fun link(text: String, onClick: () -> Unit) {
-                box.addView(TextView(this).apply {
-                    this.text = text
-                    setTextColor(0xFF4FC3F7.toInt())
-                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-                    gravity = Gravity.CENTER_VERTICAL
-                    setPadding(dp(14), 0, dp(14), 0)
-                    if (sel.resourceId != 0) setBackgroundResource(sel.resourceId)
-                    setOnClickListener { pw.dismiss(); onClick() }
-                }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(38)))
-            }
-            link(INFO_EMAIL) { safeStart(Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:$INFO_EMAIL"))) }
-            link("github.com/idrisokys/") { safeStart(Intent(Intent.ACTION_VIEW, Uri.parse(INFO_GITHUB))) }
-        }
+        // En üstte bilgi simgesi: dokununca ayrı küçük kartta gemi ikonu, e-posta ve Github
+        row("Bilgi", R.drawable.ic_menu_info) { showInfoCard(anchor) }
         row("Tanı kaydı", R.drawable.ic_menu_diag) { showDiag() }
 
         box.addView(View(this).apply { setBackgroundColor(0x33FFFFFF) },
@@ -539,6 +522,39 @@ class MainActivity : Activity() {
         row("Ayarlar", R.drawable.ic_settings) { safeStart(Intent(Settings.ACTION_SETTINGS)) }
 
 
+        pw.showAsDropDown(anchor, 0, dp(4), Gravity.END)
+    }
+
+    /** Küçük bilgi kartı: gemi ikonu, altında e-posta, altında Github (dokununca açılır). */
+    private fun showInfoCard(anchor: View) {
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(dp(8), dp(10), dp(8), dp(6))
+            background = GradientDrawable().apply { setColor(0xFF2A2A2A.toInt()); cornerRadius = dp(14).toFloat() }
+        }
+        val pw = PopupWindow(box, ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, true)
+        pw.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+        pw.isOutsideTouchable = true
+        pw.elevation = dp(8).toFloat()
+        val sel = TypedValue()
+        theme.resolveAttribute(android.R.attr.selectableItemBackground, sel, true)
+
+        box.addView(ImageView(this).apply { setImageDrawable(infoIcon(dp(44))) },
+            LinearLayout.LayoutParams(dp(44), dp(44)).apply { bottomMargin = dp(4) })
+        fun link(text: String, onClick: () -> Unit) {
+            box.addView(TextView(this).apply {
+                this.text = text
+                setTextColor(0xFF4FC3F7.toInt())
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+                gravity = Gravity.CENTER
+                setPadding(dp(10), 0, dp(10), 0)
+                if (sel.resourceId != 0) setBackgroundResource(sel.resourceId)
+                setOnClickListener { pw.dismiss(); onClick() }
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(38)))
+        }
+        link(INFO_EMAIL) { safeStart(Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:$INFO_EMAIL"))) }
+        link("github.com/idrisokys/") { safeStart(Intent(Intent.ACTION_VIEW, Uri.parse(INFO_GITHUB))) }
         pw.showAsDropDown(anchor, 0, dp(4), Gravity.END)
     }
 

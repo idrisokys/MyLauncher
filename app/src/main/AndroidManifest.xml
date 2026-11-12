@@ -7,10 +7,14 @@
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
     <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
     <uses-permission android:name="android.permission.SET_WALLPAPER" />
+    <!-- Veriler <ana dizin>/Link içinde tutulur (Notlarım) -->
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="29" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" />
 
     <application
         android:allowBackup="false"
+        android:requestLegacyExternalStorage="true"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher"
         android:label="MyL"
@@ -35,6 +39,38 @@
             <!-- Sohbet içinden "Ana ekrana ekle" denince sistem bu filtreyle varsayılan başlatıcıyı çağırır -->
             <intent-filter>
                 <action android:name="android.content.pm.action.CONFIRM_PIN_SHORTCUT" />
+            </intent-filter>
+        </activity>
+        <!-- Notlarım (eski adıyla LinkCepte). LAUNCHER girişi sayesinde ana ekran ızgarasında "Notlarım" simgesi olarak görünür;
+             edit simgesine basılı tutunca da açılır. Kendi görevinde çalışır, Home ile launcher'ı etkilemez. -->
+        <activity
+            android:name=".NotesActivity"
+            android:exported="true"
+            android:label="Notlarım"
+            android:icon="@mipmap/ic_notes"
+            android:roundIcon="@mipmap/ic_notes"
+            android:theme="@style/NotesTheme"
+            android:launchMode="singleTask"
+            android:taskAffinity="io.github.idrisokys.myl.notes"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <!-- Paylaş menüsünde "Notlarım": link ve metinler Store.submit ile kaydedilir (arayüzsüz) -->
+        <activity
+            android:name=".ShareActivity"
+            android:exported="true"
+            android:label="Notlarım"
+            android:icon="@mipmap/ic_notes"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@style/ShareTheme">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
             </intent-filter>
         </activity>
         <!-- Paylaş menüsünde "Duvar kağıdı yap": görseli ana ekran + kilit ekranı yapar (arayüzsüz) -->

@@ -357,8 +357,8 @@ class MainActivity : Activity() {
                 setColor(0x66000000)
             }
             setOnClickListener { setEditMode(!editMode) }
-            // Basılı tut: Link klasörünü aç
-            setOnLongClickListener { openLinkFolder(); true }
+            // Basılı tut: Notlarım (eski adıyla LinkCepte) açılır
+            setOnLongClickListener { openNotes(); true }
         }
         actionBtn = ImageView(this).apply {
             setImageResource(R.drawable.ic_settings)
@@ -440,7 +440,7 @@ class MainActivity : Activity() {
                 requestPermissions(arrayOf(Manifest.permission.READ_CONTACTS), 1)
             }
         }
-        // Gönder / Enter: LinkCepte'deki gibi — link ise link, uzun metin .txt, kısa metin not olarak Link klasörüne kaydeder
+        // Gönder / Enter: link ise link, uzun metin .txt, kısa metin not olarak Notlarım'a kaydeder
         search.setOnEditorActionListener { _, id, ev ->
             val enter = id == EditorInfo.IME_NULL && ev != null && ev.keyCode == android.view.KeyEvent.KEYCODE_ENTER
             if (id == EditorInfo.IME_ACTION_SEND || enter) {
@@ -450,23 +450,19 @@ class MainActivity : Activity() {
         }
     }
 
-    /** Arama kutusundaki metni Link klasörüne kaydeder (LinkCepte'deki gönder davranışı). */
+    /** Arama kutusundaki metni Notlarım'a kaydeder; kural Store.submit'te (Notlarım ekranı ve Paylaş menüsüyle ortak). */
     private fun submitToLink() {
         val text = search.text.toString().trim()
         if (text.isEmpty()) return
-        if (!Environment.isExternalStorageManager()) {
+        val root = Store.root(this)
+        if (root == null) {
             toast("Tüm dosyalara erişim izni ver, sonra tekrar dene")
-            try {
-                startActivity(Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:$packageName")))
-            } catch (e: Exception) {
-                safeStart(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
-            }
+            if (!Store.openAccessSettings(this)) requestPermissions(arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE), 5)
             return
         }
-        val dir = linkDir()
         closeSearch()
         Thread {
-            val ok = LinkSave.submit(dir, text)
+            val ok = Store.submit(applicationContext, root, text)
             main.post { if (!isDestroyed) toast(if (ok) "Eklendi" else "Eklenemedi") }
         }.start()
     }
@@ -881,50 +877,16 @@ class MainActivity : Activity() {
         toast("\"$real\" klasörü açılamadı")
     }
 
-    /** Ana dizindeki "link" klasörünün gerçek adı (büyük/küçük harf farkı olabilir). */
-    private fun linkDir(): File {
-        val root = Environment.getExternalStorageDirectory()
-        val real = try {
-            root.list()?.firstOrNull { it.equals("link", ignoreCase = true) } ?: "link"
-        } catch (e: Exception) { "link" }
-        return File(root, real)
-    }
-
-    /** Bir klasörü yalnızca com.alphainventor.filemanager (File Manager Plus) ile açar. */
-    private fun openFolderInFm(dir: File) {
-        val i = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(Uri.parse("file://" + dir.absolutePath), "resource/folder")
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            setPackage("com.alphainventor.filemanager")
-        }
-        val oldPolicy = android.os.StrictMode.getVmPolicy()
-        android.os.StrictMode.setVmPolicy(android.os.StrictMode.VmPolicy.Builder().build())
-        try {
-            startActivity(i)
-        } catch (e: Exception) {
-            toast("File Manager Plus açılamadı")
-        } finally {
-            android.os.StrictMode.setVmPolicy(oldPolicy)
-        }
-    }
-
-    private fun openLinkFolder() = openFolderInFm(linkDir())
-
-    // ---------- Link'te arama: LinkCepte uygulamasına devredilir ----------
-    private val LINKCEPTE_PKG = "io.github.idrisokys.linkcepte"
-
-    /** Aramayı LinkCepte'de yapar ve sonucu doğrudan LinkCepte içinde gösterir. */
-    private fun searchInLinkCepte(q: String) {
-        val i = Intent("$LINKCEPTE_PKG.SEARCH").apply {
-            setPackage(LINKCEPTE_PKG)
-            putExtra("query", q)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-        }
+    // ---------- Notlarım (eski adıyla LinkCepte): artık aynı uygulamanın içinde ----------
+    /** Notlarım'ı açar; [query] verilirse sonuçları doğrudan gösterir. */
+    private fun openNotes(query: String? = null) {
+        val i = Intent(this, NotesActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        if (query != null) i.putExtra(EXTRA_QUERY, query)
         try {
             startActivity(i)
             closeSearch()
         } catch (e: Exception) {
-            toast("LinkCepte açılamadı (kurulu mu?)")
+            toast("Notlarım açılamadı")
         }
     }
 
@@ -995,7 +957,7 @@ class MainActivity : Activity() {
             rows.add(Row(label, "Uygulama", iconCache[k], key = k) { launch(k) })
         }
         val enc = Uri.encode(q)
-        rows.add(Row("Link'te ara: $q", null, null) { searchInLinkCepte(q) })
+        rows.add(Row("Notlarımda ara: $q", null, null) { openNotes(q) })
         rows.add(Row("Google'da ara: $q", null, null) { openUrl("https://www.google.com/search?q=$enc") })
         rows.add(Row("Yandex'te ara: $q", null, null) { openUrl("https://yandex.com/search/?text=$enc") })
         rows.add(Row("Play Store'da ara: $q", null, null) { openPlayStore(q) })
@@ -1708,7 +1670,7 @@ class MainActivity : Activity() {
             when {
                 key.startsWith("app:") -> {
                     val a = apps[key] ?: return
-                    if (a.componentName.packageName == packageName) openDefaultLauncherSettings()
+                    if (a.componentName.className == MainActivity::class.java.name) openDefaultLauncherSettings()
                     else launcherApps.startMainActivity(a.componentName, me, null, null)
                 }
                 key.startsWith("sc:") -> {

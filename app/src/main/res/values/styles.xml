@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="AppTheme" parent="@android:style/Theme.DeviceDefault.Wallpaper.NoTitleBar" />
+    <!-- Notlarım (Compose ekranı): duvar kağıdı değil, düz koyu zemin -->
+    <style name="NotesTheme" parent="android:Theme.Material.NoActionBar" />
+    <!-- Paylaş menüsünden açılan arayüzsüz kaydetme etkinliği -->
+    <style name="ShareTheme" parent="android:Theme.Translucent.NoTitleBar" />
 </resources>

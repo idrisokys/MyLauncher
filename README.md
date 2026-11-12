@@ -4,6 +4,9 @@
   🇬🇧 <a href="#-english">English</a> · 🇹🇷 <a href="#-türkçe">Türkçe</a>
 </p>
 
+
+> **v1.5 — LinkCepte merged in:** the former *LinkCepte* app now lives inside MyL as **Notlarım** (My Notes). Search shows **"Notlarımda ara"**, the share menu shows **"Notlarım"** (links and text), long-pressing the edit icon opens Notlarım, and Notlarım also has its own icon on the home grid. Links/notes are still stored as `.url` / `.txt` files in `<storage>/Link`. One shared `Store.submit` rule is used by the search box, Notlarım and the share menu.
+
 ---
 
 # 🇬🇧 English

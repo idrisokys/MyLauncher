@@ -491,37 +491,30 @@ class MainActivity : Activity() {
 
         val sel = TypedValue()
         theme.resolveAttribute(android.R.attr.selectableItemBackground, sel, true)
-        fun row(label: String, icon: Int = 0, color: Int = Color.WHITE, underline: Boolean = false, onClick: () -> Unit) {
-            box.addView(TextView(this).apply {
-                text = label
-                textSize = 15f
-                setTextColor(color)
-                gravity = Gravity.CENTER_VERTICAL or Gravity.START
-                setPadding(dp(14), dp(7), dp(14), dp(7))
-                // İkon: sol sütun. İkonsuz satırda boş yer bırakılır ki yazılar hizalı kalsın
-                val ic: Drawable = if (icon != 0) getDrawable(icon)!!.mutate().apply { setTint(color) }
-                                   else ColorDrawable(Color.TRANSPARENT)
-                ic.setBounds(0, 0, dp(18), dp(18))
-                setCompoundDrawables(ic, null, null, null)
-                compoundDrawablePadding = dp(12)
-                if (underline) paintFlags = paintFlags or Paint.UNDERLINE_TEXT_FLAG
+        // Sadece ikon: yazı yok, erişilebilirlik için contentDescription var
+        fun row(label: String, icon: Int, color: Int = Color.WHITE, onClick: () -> Unit) {
+            box.addView(ImageView(this).apply {
+                setImageDrawable(getDrawable(icon)!!.mutate().apply { setTint(color) })
+                contentDescription = label
+                scaleType = ImageView.ScaleType.FIT_CENTER
+                setPadding(dp(13), dp(9), dp(13), dp(9))
                 if (sel.resourceId != 0) setBackgroundResource(sel.resourceId)
                 setOnClickListener { pw.dismiss(); onClick() }
-            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            }, LinearLayout.LayoutParams(dp(50), dp(40)))
         }
 
         // En üstte: ikon, altında e-posta, altında Github, altında Tanı kaydı
         box.addView(ImageView(this).apply { setImageDrawable(infoIcon(dp(44))) },
-            LinearLayout.LayoutParams(dp(44), dp(44)).apply { gravity = Gravity.CENTER_HORIZONTAL; bottomMargin = dp(2); marginStart = dp(12); marginEnd = dp(12) })
+            LinearLayout.LayoutParams(dp(44), dp(44)).apply { gravity = Gravity.CENTER_HORIZONTAL; bottomMargin = dp(2); marginStart = dp(3); marginEnd = dp(3) })
         row(INFO_EMAIL, R.drawable.ic_menu_mail) {
             getSystemService(ClipboardManager::class.java)
                 .setPrimaryClip(ClipData.newPlainText("e-posta", INFO_EMAIL))
             toast("E-posta kopyalandı")
         }
-        row("Github", R.drawable.ic_menu_github, 0xFF4FC3F7.toInt(), true) {
+        row("Github", R.drawable.ic_menu_github, 0xFF4FC3F7.toInt()) {
             safeStart(Intent(Intent.ACTION_VIEW, Uri.parse(INFO_GITHUB)))
         }
-        row("Tanı kaydı") { showDiag() }
+        row("Tanı kaydı", R.drawable.ic_menu_diag) { showDiag() }
 
         box.addView(View(this).apply { setBackgroundColor(0x33FFFFFF) },
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)).apply {

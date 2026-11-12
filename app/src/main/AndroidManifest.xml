@@ -36,6 +36,16 @@
                 <action android:name="android.content.pm.action.CONFIRM_PIN_SHORTCUT" />
             </intent-filter>
         </activity>
+        <!-- Link klasöründeki dosyaları başka uygulamalarda açmak için content:// köprüsü -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
         <!-- Paylaş menüsünde "Duvar kağıdı yap": görseli ana ekran + kilit ekranı yapar (arayüzsüz) -->
         <activity
             android:name=".SetWallpaperActivity"

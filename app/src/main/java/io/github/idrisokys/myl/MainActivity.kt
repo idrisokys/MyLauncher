@@ -1003,14 +1003,21 @@ class MainActivity : Activity() {
         }
         val mime = android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext)
             ?: if (ext in textExts) "text/plain" else "*/*"
+        // file:// yerine content:// (FileProvider) ver: diğer uygulamalar okuma izniyle açabilsin
+        val uri = try {
+            androidx.core.content.FileProvider.getUriForFile(this, "$packageName.fileprovider", f)
+        } catch (e: Exception) { toast("Açılamadı"); return }
         val i = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(Uri.fromFile(f), mime)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            setDataAndType(uri, mime)
+            clipData = ClipData.newRawUri(f.name, uri)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        val oldPolicy = android.os.StrictMode.getVmPolicy()
-        android.os.StrictMode.setVmPolicy(android.os.StrictMode.VmPolicy.Builder().build())
-        try { startActivity(i) } catch (e: Exception) { toast("Açılamadı") }
-        finally { android.os.StrictMode.setVmPolicy(oldPolicy) }
+        try {
+            startActivity(i)
+        } catch (e: Exception) {
+            // Mime türünü kabul eden uygulama yoksa metin olarak dene
+            try { startActivity(Intent(i).setDataAndType(uri, "*/*")) } catch (e2: Exception) { toast("Açılamadı") }
+        }
     }
 
     private fun openDownloads() {

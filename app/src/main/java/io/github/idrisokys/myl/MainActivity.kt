@@ -956,9 +956,14 @@ class MainActivity : Activity() {
             val label = labels[k] ?: continue
             rows.add(Row(label, "Uygulama", iconCache[k], key = k) { launch(k) })
         }
+        // ColorOS 13 ayarları: sonuçlar doğrudan listede görünür, dokununca ilgili ayar sayfası açılır
+        for (st in SettingsIndex.search(q, MAX_SETTINGS)) {
+            rows.add(Row(L(st.tr, st.en), "Ayarlar", null) {
+                if (!SettingsIndex.open(this, st)) toast("Açılamadı")
+            })
+        }
         val enc = Uri.encode(q)
         rows.add(Row("Notlarımda ara: $q", null, null) { openNotes(q) })
-        rows.add(Row("Google'da ara: $q", null, null) { openUrl("https://www.google.com/search?q=$enc") })
         rows.add(Row("Yandex'te ara: $q", null, null) { openUrl("https://yandex.com/search/?text=$enc") })
         rows.add(Row("Play Store'da ara: $q", null, null) { openPlayStore(q) })
         // Yanlış dokunmayı önlemek için her sonucun altına dokunulmaz boş satır
@@ -1081,6 +1086,7 @@ class MainActivity : Activity() {
         const val REQ_WALLPAPER = 4
         const val MAX_RESULTS = 5   // kişi + uygulama sonuçları toplamı
         const val MAX_CONTACTS = 3  // en fazla kişi sayısı
+        const val MAX_SETTINGS = 5  // en fazla ayar sonucu
         const val WA_PKG = "com.whatsapp"
         const val WA_BIZ_PKG = "com.whatsapp.w4b"
         const val WA_CHAT = "vnd.android.cursor.item/vnd.com.whatsapp.profile"

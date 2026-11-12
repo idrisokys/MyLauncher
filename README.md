@@ -33,9 +33,8 @@ Tap the **search bar** at the top to start searching.
 |---|---|
 | 👤 **Contacts** | Searches contacts by name (permission is requested on first search). **Tap** = phone call (a number picker appears if the contact has several), **long-press** = opens their WhatsApp chat |
 | 📱 **Apps** | Prefix matches first. Contacts + apps are limited to 5 results in total; large text and a non-tappable blank line between results prevent mis-taps |
-| 🌐 **Web** | One-tap search on Google, Yandex and the Play Store |
+| 🌐 **Web** | Search ColorOS 13 settings right in the results, plus one-tap Yandex and Play Store search |
 
-- The keyboard **Search** key searches Google directly
 - **Turkish-character aware**: `ısı`, `isi` and `Isı` all return the same result (ı/i, ö/o, ü/u, ş/s, ç/c, ğ/g)
 - Contact lookup runs in the background, so the UI never freezes while typing
 
@@ -210,9 +209,8 @@ Sade, hızlı ve gösterişten uzak bir Android ana ekran uygulaması. Tek ekran
 |---|---|
 | 👤 **Kişiler** | Rehberde ada göre arar (ilk aramada izin istenir). **Dokununca** telefon araması yapar (birden çok numara varsa seçim çıkar), **basılı tutunca** WhatsApp sohbetini açar |
 | 📱 **Uygulamalar** | Baştan eşleşenler üstte. Kişi + uygulama sonuçları toplam 5 ile sınırlı; büyük yazı ve sonuçlar arasındaki dokunulmaz boş satır yanlış dokunmayı önler |
-| 🌐 **Web** | Google, Yandex ve Play Store'da tek dokunuşla arama |
+| 🌐 **Web** | ColorOS 13 ayarlarında doğrudan sonuçlarda arama; Yandex ve Play Store'da tek dokunuşla arama |
 
-- Klavyede **Ara** tuşu doğrudan Google'da arar
 - **Türkçe karakter duyarlı**: `ısı`, `isi`, `Isı` hepsi aynı sonucu bulur (ı/i, ö/o, ü/u, ş/s, ç/c, ğ/g)
 - Kişi araması arka planda yapılır, yazarken arayüz donmaz
 

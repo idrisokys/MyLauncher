@@ -1,8 +1,10 @@
 import java.util.Properties
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 // İmza bilgileri proje kökündeki keystore.properties dosyasından okunur (git'e EKLEME).
@@ -15,16 +17,17 @@ val hasReleaseKey = keystoreProps.getProperty("storeFile") != null
 
 android {
     namespace = "io.github.idrisokys.myl"
-    compileSdk = 34
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "io.github.idrisokys.myl"
         minSdk = 29
         targetSdk = 34
-        versionCode = 9
-        versionName = "1.6"
-        resourceConfigurations += listOf("tr", "en")
+        versionCode = 11
+        versionName = "1.8"
     }
+
+    androidResources { localeFilters += listOf("tr", "en") }
 
     signingConfigs {
         if (hasReleaseKey) {
@@ -51,21 +54,23 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions { jvmTarget = "17" }
 
-    // Notlarım ekranı (eski LinkCepte) Jetpack Compose ile yazılmıştır
+    // Notlarım ekranı (eski LinkCepte) Jetpack Compose ile yazılmıştır (Kotlin 2.x: Compose derleyicisi eklenti olarak gelir)
     buildFeatures { compose = true }
-    composeOptions { kotlinCompilerExtensionVersion = "1.5.14" }
     lint { checkReleaseBuilds = false; abortOnError = false }
     packaging { resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" } }
 }
 
+kotlin {
+    compilerOptions { jvmTarget.set(JvmTarget.JVM_17) }
+}
+
 dependencies {
-    implementation("androidx.recyclerview:recyclerview:1.3.2")
-    implementation("androidx.core:core:1.12.0")
+    implementation("androidx.recyclerview:recyclerview:1.4.0")
+    implementation("androidx.core:core:1.16.0")
     // Notlarım (Compose)
-    implementation(platform("androidx.compose:compose-bom:2024.06.00"))
+    implementation(platform("androidx.compose:compose-bom:2025.12.00"))
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
-    implementation("androidx.activity:activity-compose:1.9.0")
+    implementation("androidx.activity:activity-compose:1.10.1")
 }

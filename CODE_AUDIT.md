@@ -1,4 +1,24 @@
-# MyL 1.6 — Kod denetimi ve değişiklikler
+# MyL 1.8 — Kod denetimi ve değişiklikler
+
+## 1.8 (araç zinciri yükseltmesi — derleme denenmedi)
+
+- Android Gradle Plugin 8.5.2 → 8.13.2, Gradle 8.7 → 8.13 (CI dosyası da güncellendi).
+- Kotlin 1.9.24 → 2.2.20; Compose derleyicisi artık `org.jetbrains.kotlin.plugin.compose` eklentisiyle gelir (`composeOptions` kaldırıldı).
+- `kotlinOptions` (Kotlin 2.2'de hata) → `kotlin { compilerOptions }`; `resourceConfigurations` → `androidResources.localeFilters`.
+- Compose BOM 2024.06.00 → 2025.12.00, activity-compose 1.9.0 → 1.10.1, RecyclerView 1.3.2 → 1.4.0, AndroidX Core 1.12.0 → 1.16.0.
+- `compileSdk` 34 → 36. `targetSdk` bilerek 34'te bırakıldı (davranış değişikliği riski).
+- Geri dönüş: bir önceki 1.7 zip'i çalışan sürümdür.
+
+## 1.7 değişiklikleri
+
+## 1.7 değişiklikleri
+
+- Tanı kaydı özelliği tamamen kaldırıldı: menü satırı, çökme/yaşam döngüsü kayıt kodu, simge ve ilgili importlar. Eski sürümlerden kalan `life.txt` ve `crash.txt` dosyaları silinmez; zararsızdır.
+- Arama sonuçlarından "Google'da ara" kaldırıldı; yerine ColorOS 13 ayarlarında yerel arama eklendi (`SettingsIndex.kt`).
+- Uygulama listesi yenilemesinde beklenmedik bir hata (bellek hatası dahil) `loading` bayrağını takılı bırakmasın diye yakalama genişletildi.
+- Sürüm `1.7 (versionCode 10)`.
+
+## 1.6 değişiklikleri
 
 ## Yapılan değişiklikler
 

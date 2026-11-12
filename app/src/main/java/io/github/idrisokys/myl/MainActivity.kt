@@ -369,7 +369,7 @@ class MainActivity : Activity() {
             }
             setOnClickListener { if (editMode) showFolderPicker() else showSettingsMenu(this) }
             // Basılı tut (düzenleme modu kapalıyken): ana depolamadaki "link" klasörünü aç
-            setOnLongClickListener { if (editMode) false else { openStorageFolder("Documents"); true } }
+            setOnLongClickListener { if (editMode) false else { openLinkFolder(); true } }
         }
         bar.addView(actionBtn, LinearLayout.LayoutParams(dp(46), dp(46)).apply { marginStart = dp(8) })
         bar.addView(moveBtn, LinearLayout.LayoutParams(dp(46), dp(46)).apply { marginStart = dp(8) })
@@ -530,23 +530,6 @@ class MainActivity : Activity() {
         row("Duvar kağıdı", R.drawable.ic_menu_wallpaper) { pickWallpaper() }
         row("Ayarlar", R.drawable.ic_settings) { safeStart(Intent(Settings.ACTION_SETTINGS)) }
 
-        // En altta: ana depolamadaki klasör kısayolları (alt alta)
-        box.addView(View(this).apply { setBackgroundColor(0x33FFFFFF) },
-            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)).apply {
-                topMargin = dp(3); bottomMargin = dp(3); marginStart = dp(10); marginEnd = dp(10)
-            })
-        for (f in listOf("DCIM", "backups", "Documents", "Movies", "Music",
-                         "My Documents", "MyFiles", "Pictures", "X Video Player")) {
-            box.addView(TextView(this).apply {
-                text = f
-                setTextColor(Color.WHITE)
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-                gravity = Gravity.CENTER_VERTICAL
-                setPadding(dp(14), 0, dp(14), 0)
-                if (sel.resourceId != 0) setBackgroundResource(sel.resourceId)
-                setOnClickListener { pw.dismiss(); openStorageFolder(f) }
-            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(38)))
-        }
 
         pw.showAsDropDown(anchor, 0, dp(4), Gravity.END)
     }
@@ -850,6 +833,53 @@ class MainActivity : Activity() {
             android.os.StrictMode.setVmPolicy(oldPolicy)
         }
         toast("\"$real\" klasörü açılamadı")
+    }
+
+    /**
+     * Ana dizindeki "link" klasörünü açar.
+     * 1) com.alphainventor.filemanager (File Manager Plus) ile dener,
+     * 2) olmazsa OpenIntents yöntemiyle (resource/folder, VIEW_DIRECTORY) dener,
+     * 3) en son genel yöntemlere (openStorageFolder) düşer.
+     */
+    private fun openLinkFolder() {
+        val root = Environment.getExternalStorageDirectory()
+        val real = try {
+            root.list()?.firstOrNull { it.equals("link", ignoreCase = true) } ?: "link"
+        } catch (e: Exception) { "link" }
+        val path = java.io.File(root, real).absolutePath
+        val fileUri = Uri.parse("file://" + path)
+        val auth = "com.android.externalstorage.documents"
+        val docUri = android.provider.DocumentsContract.buildDocumentUri(auth, "primary:$real")
+        val treeUri = android.provider.DocumentsContract.buildTreeDocumentUri(auth, "primary:$real")
+        val fm = "com.alphainventor.filemanager"
+
+        fun i(action: String, uri: Uri, type: String?, pkg: String? = null) = Intent(action).apply {
+            if (type != null) setDataAndType(uri, type) else data = uri
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            if (pkg != null) setPackage(pkg)
+        }
+        val attempts = ArrayList<Pair<String, Intent>>()
+        // 1) File Manager Plus
+        attempts += "alphainventor/file" to i(Intent.ACTION_VIEW, fileUri, "resource/folder", fm)
+        attempts += "alphainventor/doc" to i(Intent.ACTION_VIEW, docUri, "vnd.android.document/directory", fm)
+        attempts += "alphainventor/tree" to i(Intent.ACTION_VIEW, treeUri, "vnd.android.document/directory", fm)
+        attempts += "alphainventor/düz" to i(Intent.ACTION_VIEW, fileUri, null, fm)
+        // 2) OpenIntents yöntemi (herhangi bir uygun dosya yöneticisi)
+        attempts += "openintents/view" to i(Intent.ACTION_VIEW, fileUri, "resource/folder")
+        attempts += "openintents/dir" to i("org.openintents.action.VIEW_DIRECTORY", fileUri, null)
+        attempts += "openintents/pick" to i("org.openintents.action.PICK_DIRECTORY", fileUri, null)
+
+        val oldPolicy = android.os.StrictMode.getVmPolicy()
+        android.os.StrictMode.setVmPolicy(android.os.StrictMode.VmPolicy.Builder().build())
+        try {
+            for ((n, intent) in attempts) {
+                try { startActivity(intent); return } catch (e: Exception) { /* sıradakini dene */ }
+            }
+        } finally {
+            android.os.StrictMode.setVmPolicy(oldPolicy)
+        }
+        // 3) Son çare
+        openStorageFolder(real)
     }
 
     private fun openDownloads() {

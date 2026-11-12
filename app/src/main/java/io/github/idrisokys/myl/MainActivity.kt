@@ -340,7 +340,7 @@ class MainActivity : Activity() {
             setTextColor(Color.WHITE)
             textSize = 18f
             setSingleLine()
-            imeOptions = EditorInfo.IME_ACTION_SEARCH
+            imeOptions = EditorInfo.IME_ACTION_SEND
             setPadding(dp(16), 0, dp(16), 0)
             background = GradientDrawable().apply {
                 cornerRadius = dp(25).toFloat()
@@ -357,8 +357,8 @@ class MainActivity : Activity() {
                 setColor(0x66000000)
             }
             setOnClickListener { setEditMode(!editMode) }
-            // Basılı tut: Download klasörünü aç
-            setOnLongClickListener { openDownloads(); true }
+            // Basılı tut: Link klasörünü aç
+            setOnLongClickListener { openLinkFolder(); true }
         }
         actionBtn = ImageView(this).apply {
             setImageResource(R.drawable.ic_settings)
@@ -368,8 +368,8 @@ class MainActivity : Activity() {
                 setColor(0x66000000)
             }
             setOnClickListener { if (editMode) showFolderPicker() else showSettingsMenu(this) }
-            // Basılı tut (düzenleme modu kapalıyken): ana depolamadaki "link" klasörünü aç
-            setOnLongClickListener { if (editMode) false else { openLinkFolder(); true } }
+            // Basılı tut (düzenleme modu kapalıyken): Download klasörünü aç
+            setOnLongClickListener { if (editMode) false else { openDownloads(); true } }
         }
         bar.addView(actionBtn, LinearLayout.LayoutParams(dp(46), dp(46)).apply { marginStart = dp(8) })
         bar.addView(moveBtn, LinearLayout.LayoutParams(dp(46), dp(46)).apply { marginStart = dp(8) })
@@ -440,13 +440,35 @@ class MainActivity : Activity() {
                 requestPermissions(arrayOf(Manifest.permission.READ_CONTACTS), 1)
             }
         }
-        search.setOnEditorActionListener { _, id, _ ->
-            if (id == EditorInfo.IME_ACTION_SEARCH) {
-                val q = search.text.toString().trim()
-                if (q.isNotEmpty()) openUrl("https://www.google.com/search?q=" + Uri.encode(q))
+        // Gönder / Enter: LinkCepte'deki gibi — link ise link, uzun metin .txt, kısa metin not olarak Link klasörüne kaydeder
+        search.setOnEditorActionListener { _, id, ev ->
+            val enter = id == EditorInfo.IME_NULL && ev != null && ev.keyCode == android.view.KeyEvent.KEYCODE_ENTER
+            if (id == EditorInfo.IME_ACTION_SEND || enter) {
+                if (!enter || ev!!.action == android.view.KeyEvent.ACTION_DOWN) submitToLink()
                 true
             } else false
         }
+    }
+
+    /** Arama kutusundaki metni Link klasörüne kaydeder (LinkCepte'deki gönder davranışı). */
+    private fun submitToLink() {
+        val text = search.text.toString().trim()
+        if (text.isEmpty()) return
+        if (!Environment.isExternalStorageManager()) {
+            toast("Tüm dosyalara erişim izni ver, sonra tekrar dene")
+            try {
+                startActivity(Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:$packageName")))
+            } catch (e: Exception) {
+                safeStart(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
+            }
+            return
+        }
+        val dir = linkDir()
+        closeSearch()
+        Thread {
+            val ok = LinkSave.submit(dir, text)
+            main.post { if (!isDestroyed) toast(if (ok) "Eklendi" else "Eklenemedi") }
+        }.start()
     }
 
     private fun closeSearch() {
@@ -1074,7 +1096,7 @@ class MainActivity : Activity() {
 
     private fun showRows(q: String, contacts: List<Row>) {
         rows.clear()
-        rows.addAll(contacts.take(MAX_RESULTS))
+        rows.addAll(contacts.take(MAX_CONTACTS))
         val fq = fold(q)
         val matches = ArrayList<String>()
         for (k in apps.keys) {
@@ -1110,7 +1132,7 @@ class MainActivity : Activity() {
                 ContactsContract.Contacts.CONTENT_URI,
                 arrayOf(ContactsContract.Contacts._ID, name),
                 "$name LIKE ? ESCAPE '\\'", arrayOf("%$esc%"),
-                "$name COLLATE LOCALIZED ASC LIMIT 5"
+                "$name COLLATE LOCALIZED ASC LIMIT $MAX_CONTACTS"
             )?.use { c ->
                 while (c.moveToNext()) {
                     val id = c.getLong(0)
@@ -1210,6 +1232,7 @@ class MainActivity : Activity() {
         const val REQ_RESTORE = 3
         const val REQ_WALLPAPER = 4
         const val MAX_RESULTS = 5   // kişi + uygulama sonuçları toplamı
+        const val MAX_CONTACTS = 3  // en fazla kişi sayısı
         const val WA_PKG = "com.whatsapp"
         const val WA_BIZ_PKG = "com.whatsapp.w4b"
         const val WA_CHAT = "vnd.android.cursor.item/vnd.com.whatsapp.profile"
@@ -1234,7 +1257,7 @@ class MainActivity : Activity() {
         override fun getView(p: Int, cv: View?, parent: ViewGroup?): View {
             if (rows[p].spacer) {
                 return cv ?: View(this@MainActivity).apply {
-                    layoutParams = AbsListView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(24))
+                    layoutParams = AbsListView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(14))
                 }
             }
             val h: RowHolder

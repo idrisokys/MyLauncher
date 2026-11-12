@@ -913,13 +913,14 @@ class MainActivity : Activity() {
         val shown = ArrayList<String>()
         val cancelled = java.util.concurrent.atomic.AtomicBoolean(false)
         val status = TextView(this).apply {
-            setTextColor(0xFFBBBBBB.toInt()); setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+            setTextColor(0xFFBBBBBB.toInt()); setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
             setPadding(dp(16), dp(10), dp(16), dp(6)); text = "Aranıyor…"
         }
         val adapter = object : android.widget.ArrayAdapter<String>(this, android.R.layout.simple_list_item_1, shown) {
             override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
                 val v = super.getView(position, convertView, parent) as TextView
-                v.setTextColor(Color.WHITE); v.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+                v.setTextColor(Color.WHITE); v.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f)
+                v.setPadding(dp(16), dp(10), dp(16), dp(10))
                 return v
             }
         }
@@ -953,7 +954,7 @@ class MainActivity : Activity() {
             var scanned = 0
             try {
                 for (f in root.walkTopDown()) {
-                    if (cancelled.get() || hits.size >= 300) break
+                    if (cancelled.get() || hits.size >= 20) break
                     if (f == root) continue
                     scanned++
                     val nameHit = fold(f.name).contains(fq)
@@ -990,6 +991,16 @@ class MainActivity : Activity() {
 
     private fun openLinkFile(f: File) {
         val ext = f.extension.lowercase()
+        if (ext == "url") {
+            // Windows internet kısayolu: içindeki "URL=" adresini tarayıcıda aç
+            val url = try {
+                f.readLines().firstOrNull { it.trim().startsWith("URL=", ignoreCase = true) }
+                    ?.trim()?.substring(4)?.trim()
+            } catch (e: Exception) { null }
+            if (!url.isNullOrEmpty()) { openUrl(url); return }
+            toast("Dosyada adres bulunamadı")
+            return
+        }
         val mime = android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext)
             ?: if (ext in textExts) "text/plain" else "*/*"
         val i = Intent(Intent.ACTION_VIEW).apply {

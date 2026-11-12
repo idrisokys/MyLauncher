@@ -4,6 +4,8 @@ import android.Manifest
 import android.app.Activity
 import android.app.AlertDialog
 import android.app.Dialog
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.ContentUris
 import android.content.ContentValues
 import android.content.Intent
@@ -14,12 +16,17 @@ import android.content.pm.LauncherApps.ShortcutQuery
 import android.content.pm.PackageManager
 import android.content.pm.ShortcutInfo
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.ColorFilter
 import android.graphics.Paint
 import android.graphics.PixelFormat
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffXfermode
+import android.graphics.Rect
 import android.graphics.RectF
+import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
@@ -433,12 +440,39 @@ class MainActivity : Activity() {
 
     private fun showSettingsMenu(anchor: View) {
         val pm = PopupMenu(this, anchor)
+        pm.setForceShowIcon(true)
+        // Bilgi: menünün en üstünde (yuvarlak resim + e-posta, altında GitHub linki)
+        pm.menu.add(INFO_EMAIL).setIcon(infoIcon()).setOnMenuItemClickListener {
+            val cm = getSystemService(ClipboardManager::class.java)
+            cm.setPrimaryClip(ClipData.newPlainText("e-posta", INFO_EMAIL))
+            toast("E-posta kopyalandı")
+            true
+        }
+        pm.menu.add(INFO_GITHUB.removePrefix("https://")).setOnMenuItemClickListener {
+            safeStart(Intent(Intent.ACTION_VIEW, Uri.parse(INFO_GITHUB))); true
+        }
         pm.menu.add("Düzeni yedekle").setOnMenuItemClickListener { backupLayout(); true }
         pm.menu.add("Düzeni geri al").setOnMenuItemClickListener { confirmRestore(); true }
         pm.menu.add("Duvar kağıdı").setOnMenuItemClickListener { pickWallpaper(); true }
         pm.menu.add("Ayarlar").setOnMenuItemClickListener { safeStart(Intent(Settings.ACTION_SETTINGS)); true }
         pm.show()
     }
+
+    /** Bilgi satırı için yuvarlak kırpılmış küçük resim. */
+    private fun infoIcon(): Drawable? = try {
+        val src = BitmapFactory.decodeResource(resources, R.drawable.releases_icon)
+        if (src == null) null else {
+            val sz = dp(32)
+            val out = Bitmap.createBitmap(sz, sz, Bitmap.Config.ARGB_8888)
+            val c = Canvas(out)
+            val p = Paint(Paint.ANTI_ALIAS_FLAG)
+            c.drawCircle(sz / 2f, sz / 2f, sz / 2f, p)
+            p.xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_IN)
+            c.drawBitmap(src, Rect(0, 0, src.width, src.height), Rect(0, 0, sz, sz), p)
+            src.recycle()
+            BitmapDrawable(resources, out)
+        }
+    } catch (e: Exception) { null }
 
     // ---------- Düzen yedekleme / geri yükleme ----------
     /** Yerleşim düzenini (sıra, klasörler, kısayollar) İndirilenler klasörüne JSON olarak kaydeder. */
@@ -743,6 +777,8 @@ class MainActivity : Activity() {
     }
 
     private companion object {
+        const val INFO_EMAIL = "sislivadi@gmail.com"
+        const val INFO_GITHUB = "https://github.com/idrisokys/"
         const val REQ_CALL = 2
         const val REQ_RESTORE = 3
         const val REQ_WALLPAPER = 4

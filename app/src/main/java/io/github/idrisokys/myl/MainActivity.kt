@@ -807,19 +807,47 @@ class MainActivity : Activity() {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             if (pkg != null) setPackage(pkg)
         }
-        val attempts = listOf(
-            // Android 11+ üzerinde en güvenilir yol: sistem klasör seçicisini o klasörde açar
-            Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
-                putExtra(android.provider.DocumentsContract.EXTRA_INITIAL_URI, docUri)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            },
-            view(docUri, "com.google.android.documentsui"),
-            view(docUri, "com.android.documentsui"),
-            view(docUri),
-            view(treeUri)
-        )
-        for ((n, i) in attempts.withIndex()) {
-            try { startActivity(i); toast("Link açıldı (yöntem ${n + 1}/${attempts.size})"); return } catch (e: Exception) { /* sıradakini dene */ }
+        // Bazı dosya yöneticileri (ColorOS/OPPO) yol olarak file:// + "resource/folder" ister
+        val path = java.io.File(root, real).absolutePath
+        fun viewFile(pkg: String? = null) = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(Uri.parse("file://" + path), "resource/folder")
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            if (pkg != null) setPackage(pkg)
+        }
+        val fmPkgs = listOf("com.alphainventor.filemanager", "com.coloros.filemanager", "com.oplus.filemanager", "com.heytap.filemanager")
+        val attempts = ArrayList<Pair<String, Intent>>()
+        // DocumentsUI açıksa: klasör seçicisi, sonra doğrudan görüntüleme
+        attempts += "seçici" to Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
+            putExtra(android.provider.DocumentsContract.EXTRA_INITIAL_URI, docUri)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        attempts += "documentsui" to view(docUri, "com.google.android.documentsui")
+        attempts += "documentsui2" to view(docUri, "com.android.documentsui")
+        // ColorOS / OPPO dosya yöneticisi
+        for (pk in fmPkgs) {
+            attempts += "$pk/doc" to view(docUri, pk)
+            attempts += "$pk/file" to viewFile(pk)
+            attempts += "$pk/tree" to view(treeUri, pk)
+            attempts += "$pk/düz" to Intent(Intent.ACTION_VIEW, Uri.parse("file://" + path))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK).setPackage(pk)
+        }
+        attempts += "genel/doc" to view(docUri)
+        attempts += "genel/file" to viewFile()
+        attempts += "genel/tree" to view(treeUri)
+        // Son çare: dosya yöneticisini aç (klasöre gitmeyebilir)
+        for (pk in fmPkgs) packageManager.getLaunchIntentForPackage(pk)?.let {
+            attempts += "$pk/ana ekran" to it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+
+        // file:// yolunun başka uygulamaya verilmesine izin ver (yalnız bu çağrı için)
+        val oldPolicy = android.os.StrictMode.getVmPolicy()
+        android.os.StrictMode.setVmPolicy(android.os.StrictMode.VmPolicy.Builder().build())
+        try {
+            for ((name2, i) in attempts) {
+                try { startActivity(i); toast("Açıldı: $name2"); return } catch (e: Exception) { /* sıradakini dene */ }
+            }
+        } finally {
+            android.os.StrictMode.setVmPolicy(oldPolicy)
         }
         toast("\"$real\" klasörü açılamadı")
     }

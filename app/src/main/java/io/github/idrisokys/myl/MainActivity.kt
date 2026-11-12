@@ -357,6 +357,8 @@ class MainActivity : Activity() {
                 setColor(0x66000000)
             }
             setOnClickListener { setEditMode(!editMode) }
+            // Basılı tut: Download klasörünü aç
+            setOnLongClickListener { openDownloads(); true }
         }
         actionBtn = ImageView(this).apply {
             setImageResource(R.drawable.ic_settings)
@@ -366,6 +368,8 @@ class MainActivity : Activity() {
                 setColor(0x66000000)
             }
             setOnClickListener { if (editMode) showFolderPicker() else showSettingsMenu(this) }
+            // Basılı tut (düzenleme modu kapalıyken): ana depolamadaki "link" klasörünü aç
+            setOnLongClickListener { if (editMode) false else { openStorageFolder("link"); true } }
         }
         bar.addView(actionBtn, LinearLayout.LayoutParams(dp(46), dp(46)).apply { marginStart = dp(8) })
         bar.addView(moveBtn, LinearLayout.LayoutParams(dp(46), dp(46)).apply { marginStart = dp(8) })
@@ -765,6 +769,25 @@ class MainActivity : Activity() {
         } catch (e: Exception) {
             openUrl("https://play.google.com/store/search?q=$enc&c=apps")
         }
+    }
+
+    /** Ana depolamadaki (iç depolama kökü) bir klasörü dosya yöneticisinde açar. */
+    private fun openStorageFolder(name: String) {
+        val uri = android.provider.DocumentsContract.buildDocumentUri(
+            "com.android.externalstorage.documents", "primary:$name")
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "vnd.android.document/directory")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            })
+        } catch (e: Exception) { toast("\"$name\" klasörü açılamadı") }
+    }
+
+    private fun openDownloads() {
+        try {
+            startActivity(Intent(android.app.DownloadManager.ACTION_VIEW_DOWNLOADS)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (e: Exception) { openStorageFolder("Download") }
     }
 
     private fun safeStart(i: Intent) {

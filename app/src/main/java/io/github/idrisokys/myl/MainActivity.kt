@@ -481,7 +481,7 @@ class MainActivity : Activity() {
         toast(if (on) "Düzenleme açık: simgeyi başka bir simgenin ortasına bırakırsan yer değiştirirler, kenarına (arasına) bırakırsan araya girer. Klasör için üstteki klasör düğmesini kullan" else "Düzenleme kapalı")
     }
 
-    private fun showSettingsMenu(anchor: View) {
+    private fun showSettingsMenu(anchor: View, infoOpen: Boolean = false) {
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(0, dp(8), 0, dp(4))
@@ -507,16 +507,24 @@ class MainActivity : Activity() {
             }, LinearLayout.LayoutParams(dp(50), dp(40)))
         }
 
-        // En üstte: ikon, altında e-posta, altında Github, altında Tanı kaydı
+        // En üstte: ikon, altında bilgi simgesi (dokununca e-posta ve Github adresi), altında Tanı kaydı
         box.addView(ImageView(this).apply { setImageDrawable(infoIcon(dp(44))) },
             LinearLayout.LayoutParams(dp(44), dp(44)).apply { gravity = Gravity.CENTER_HORIZONTAL; bottomMargin = dp(2); marginStart = dp(3); marginEnd = dp(3) })
-        row(INFO_EMAIL, R.drawable.ic_menu_mail) {
-            getSystemService(ClipboardManager::class.java)
-                .setPrimaryClip(ClipData.newPlainText("e-posta", INFO_EMAIL))
-            toast("E-posta kopyalandı")
-        }
-        row("Github", R.drawable.ic_menu_github, 0xFF4FC3F7.toInt()) {
-            safeStart(Intent(Intent.ACTION_VIEW, Uri.parse(INFO_GITHUB)))
+        row("Bilgi", R.drawable.ic_menu_info) { showSettingsMenu(anchor, !infoOpen) }
+        if (infoOpen) {
+            fun link(text: String, onClick: () -> Unit) {
+                box.addView(TextView(this).apply {
+                    this.text = text
+                    setTextColor(0xFF4FC3F7.toInt())
+                    setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(dp(14), 0, dp(14), 0)
+                    if (sel.resourceId != 0) setBackgroundResource(sel.resourceId)
+                    setOnClickListener { pw.dismiss(); onClick() }
+                }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(38)))
+            }
+            link(INFO_EMAIL) { safeStart(Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:$INFO_EMAIL"))) }
+            link("github.com/idrisokys/") { safeStart(Intent(Intent.ACTION_VIEW, Uri.parse(INFO_GITHUB))) }
         }
         row("Tanı kaydı", R.drawable.ic_menu_diag) { showDiag() }
 
@@ -835,51 +843,147 @@ class MainActivity : Activity() {
         toast("\"$real\" klasörü açılamadı")
     }
 
-    /**
-     * Ana dizindeki "link" klasörünü açar.
-     * 1) com.alphainventor.filemanager (File Manager Plus) ile dener,
-     * 2) olmazsa OpenIntents yöntemiyle (resource/folder, VIEW_DIRECTORY) dener,
-     * 3) en son genel yöntemlere (openStorageFolder) düşer.
-     */
-    private fun openLinkFolder() {
+    /** Ana dizindeki "link" klasörünün gerçek adı (büyük/küçük harf farkı olabilir). */
+    private fun linkDir(): File {
         val root = Environment.getExternalStorageDirectory()
         val real = try {
             root.list()?.firstOrNull { it.equals("link", ignoreCase = true) } ?: "link"
         } catch (e: Exception) { "link" }
-        val path = java.io.File(root, real).absolutePath
-        val fileUri = Uri.parse("file://" + path)
-        val auth = "com.android.externalstorage.documents"
-        val docUri = android.provider.DocumentsContract.buildDocumentUri(auth, "primary:$real")
-        val treeUri = android.provider.DocumentsContract.buildTreeDocumentUri(auth, "primary:$real")
-        val fm = "com.alphainventor.filemanager"
+        return File(root, real)
+    }
 
-        fun i(action: String, uri: Uri, type: String?, pkg: String? = null) = Intent(action).apply {
-            if (type != null) setDataAndType(uri, type) else data = uri
+    /** Bir klasörü yalnızca com.alphainventor.filemanager (File Manager Plus) ile açar. */
+    private fun openFolderInFm(dir: File) {
+        val i = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(Uri.parse("file://" + dir.absolutePath), "resource/folder")
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            if (pkg != null) setPackage(pkg)
+            setPackage("com.alphainventor.filemanager")
         }
-        val attempts = ArrayList<Pair<String, Intent>>()
-        // 1) File Manager Plus
-        attempts += "alphainventor/file" to i(Intent.ACTION_VIEW, fileUri, "resource/folder", fm)
-        attempts += "alphainventor/doc" to i(Intent.ACTION_VIEW, docUri, "vnd.android.document/directory", fm)
-        attempts += "alphainventor/tree" to i(Intent.ACTION_VIEW, treeUri, "vnd.android.document/directory", fm)
-        attempts += "alphainventor/düz" to i(Intent.ACTION_VIEW, fileUri, null, fm)
-        // 2) OpenIntents yöntemi (herhangi bir uygun dosya yöneticisi)
-        attempts += "openintents/view" to i(Intent.ACTION_VIEW, fileUri, "resource/folder")
-        attempts += "openintents/dir" to i("org.openintents.action.VIEW_DIRECTORY", fileUri, null)
-        attempts += "openintents/pick" to i("org.openintents.action.PICK_DIRECTORY", fileUri, null)
-
         val oldPolicy = android.os.StrictMode.getVmPolicy()
         android.os.StrictMode.setVmPolicy(android.os.StrictMode.VmPolicy.Builder().build())
         try {
-            for ((n, intent) in attempts) {
-                try { startActivity(intent); return } catch (e: Exception) { /* sıradakini dene */ }
-            }
+            startActivity(i)
+        } catch (e: Exception) {
+            toast("File Manager Plus açılamadı")
         } finally {
             android.os.StrictMode.setVmPolicy(oldPolicy)
         }
-        // 3) Son çare
-        openStorageFolder(real)
+    }
+
+    private fun openLinkFolder() = openFolderInFm(linkDir())
+
+    // ---------- Link klasöründe arama ----------
+    private val textExts = setOf("txt", "md", "log", "csv", "tsv", "json", "xml", "html", "htm", "js", "css",
+        "kt", "java", "py", "ini", "conf", "cfg", "yml", "yaml", "srt", "sub", "vtt", "sh", "bat", "sql",
+        "properties", "gradle", "tex", "rtf", "url", "nfo", "lrc")
+
+    private class LinkHit(val file: File, val rel: String, val snippet: String?)
+
+    /** Link klasöründe (alt klasörler dahil) dosya/klasör adı ve metin dosyası içeriğinde arar. */
+    private fun searchLink(q: String) {
+        if (!Environment.isExternalStorageManager()) {
+            toast("Tüm dosyalara erişim izni ver, sonra tekrar dene")
+            try {
+                startActivity(Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:$packageName")))
+            } catch (e: Exception) {
+                safeStart(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
+            }
+            return
+        }
+        val root = linkDir()
+        if (!root.isDirectory) { toast("Link klasörü bulunamadı"); return }
+
+        val hits = ArrayList<LinkHit>()
+        val shown = ArrayList<String>()
+        val cancelled = java.util.concurrent.atomic.AtomicBoolean(false)
+        val status = TextView(this).apply {
+            setTextColor(0xFFBBBBBB.toInt()); setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+            setPadding(dp(16), dp(10), dp(16), dp(6)); text = "Aranıyor…"
+        }
+        val adapter = object : android.widget.ArrayAdapter<String>(this, android.R.layout.simple_list_item_1, shown) {
+            override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
+                val v = super.getView(position, convertView, parent) as TextView
+                v.setTextColor(Color.WHITE); v.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+                return v
+            }
+        }
+        val list = ListView(this).apply {
+            this.adapter = adapter
+            divider = ColorDrawable(0x33FFFFFF); dividerHeight = dp(1)
+        }
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(0xFF2A2A2A.toInt())
+            addView(status)
+            addView(list, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        }
+        val dlg = AlertDialog.Builder(this).setTitle("Link: $q").setView(box)
+            .setNegativeButton("Kapat", null).create()
+        dlg.setOnDismissListener { cancelled.set(true) }
+        list.setOnItemClickListener { _, _, p, _ ->
+            val h = hits.getOrNull(p) ?: return@setOnItemClickListener
+            if (h.file.isDirectory) openFolderInFm(h.file) else openLinkFile(h.file)
+        }
+        // Basılı tut: dosyanın bulunduğu klasörü aç
+        list.setOnItemLongClickListener { _, _, p, _ ->
+            val h = hits.getOrNull(p) ?: return@setOnItemLongClickListener false
+            openFolderInFm(if (h.file.isDirectory) h.file else (h.file.parentFile ?: root)); true
+        }
+        dlg.show()
+        dlg.window?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, (resources.displayMetrics.heightPixels * 0.8).toInt())
+
+        val fq = fold(q)
+        Thread {
+            var scanned = 0
+            try {
+                for (f in root.walkTopDown()) {
+                    if (cancelled.get() || hits.size >= 300) break
+                    if (f == root) continue
+                    scanned++
+                    val nameHit = fold(f.name).contains(fq)
+                    var snip: String? = null
+                    if (f.isFile && f.extension.lowercase() in textExts && f.length() <= 5L * 1024 * 1024) {
+                        try {
+                            f.bufferedReader(Charsets.UTF_8).use { r ->
+                                while (true) {
+                                    val line = r.readLine() ?: break
+                                    if (fold(line.take(4000)).contains(fq)) { snip = line.trim().take(120); break }
+                                }
+                            }
+                        } catch (e: Exception) { }
+                    }
+                    if (nameHit || snip != null) {
+                        val rel = f.relativeTo(root).path + if (f.isDirectory) "/" else ""
+                        val h = LinkHit(f, rel, snip)
+                        val line = if (snip != null) "$rel\n   ↳ $snip" else rel
+                        main.post {
+                            if (!cancelled.get()) {
+                                hits.add(h); shown.add(line); adapter.notifyDataSetChanged()
+                                status.text = "Aranıyor… ${hits.size} sonuç"
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) { }
+            main.post {
+                if (!cancelled.get()) status.text =
+                    if (hits.isEmpty()) "Sonuç yok ($scanned öğe tarandı)" else "${hits.size} sonuç (bir öğeye dokun: aç, basılı tut: klasörünü aç)"
+            }
+        }.start()
+    }
+
+    private fun openLinkFile(f: File) {
+        val ext = f.extension.lowercase()
+        val mime = android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext)
+            ?: if (ext in textExts) "text/plain" else "*/*"
+        val i = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(Uri.fromFile(f), mime)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        val oldPolicy = android.os.StrictMode.getVmPolicy()
+        android.os.StrictMode.setVmPolicy(android.os.StrictMode.VmPolicy.Builder().build())
+        try { startActivity(i) } catch (e: Exception) { toast("Açılamadı") }
+        finally { android.os.StrictMode.setVmPolicy(oldPolicy) }
     }
 
     private fun openDownloads() {
@@ -949,6 +1053,7 @@ class MainActivity : Activity() {
             rows.add(Row(label, "Uygulama", iconCache[k], key = k) { launch(k) })
         }
         val enc = Uri.encode(q)
+        rows.add(Row("Link'te ara: $q", null, null) { searchLink(q) })
         rows.add(Row("Google'da ara: $q", null, null) { openUrl("https://www.google.com/search?q=$enc") })
         rows.add(Row("Yandex'te ara: $q", null, null) { openUrl("https://yandex.com/search/?text=$enc") })
         rows.add(Row("Play Store'da ara: $q", null, null) { openPlayStore(q) })

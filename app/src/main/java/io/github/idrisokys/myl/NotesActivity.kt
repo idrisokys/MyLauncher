@@ -445,7 +445,7 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
         LazyColumn(Modifier.padding(pad).fillMaxSize(), state = listState) {
             items(list, key = { it.key }) { e ->
                 val sel = e.key in selected
-                Column(Modifier.animateItemPlacement()) {
+                Column(Modifier.animateItem()) {
                     ListItem(
                         modifier = Modifier.combinedClickable(
                             onClick = {

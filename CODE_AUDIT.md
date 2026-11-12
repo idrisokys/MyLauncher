@@ -7,6 +7,7 @@
 - `kotlinOptions` (Kotlin 2.2'de hata) → `kotlin { compilerOptions }`; `resourceConfigurations` → `androidResources.localeFilters`.
 - Compose BOM 2024.06.00 → 2025.12.00, activity-compose 1.9.0 → 1.10.1, RecyclerView 1.3.2 → 1.4.0, AndroidX Core 1.12.0 → 1.16.0.
 - `compileSdk` 34 → 36. `targetSdk` bilerek 34'te bırakıldı (davranış değişikliği riski).
+- `NotesActivity.kt`: kaldırılan `animateItemPlacement()` → `animateItem()` (GitHub derlemesinde çıkan tek hata).
 - Geri dönüş: bir önceki 1.7 zip'i çalışan sürümdür.
 
 ## 1.7 değişiklikleri

@@ -46,6 +46,7 @@ import android.provider.Settings
 import android.text.Editable
 import android.text.TextUtils
 import android.text.TextWatcher
+import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -62,6 +63,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ListView
 import android.widget.PopupMenu
+import android.widget.PopupWindow
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
@@ -476,24 +478,57 @@ class MainActivity : Activity() {
     }
 
     private fun showSettingsMenu(anchor: View) {
-        val pm = PopupMenu(this, anchor)
-        pm.setForceShowIcon(true)
-        // Bilgi: menünün en üstünde (yuvarlak resim + e-posta, altında GitHub linki)
-        pm.menu.add(INFO_EMAIL).setIcon(infoIcon()).setOnMenuItemClickListener {
-            val cm = getSystemService(ClipboardManager::class.java)
-            cm.setPrimaryClip(ClipData.newPlainText("e-posta", INFO_EMAIL))
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            minimumWidth = dp(230)
+            setPadding(0, dp(12), 0, dp(8))
+            background = GradientDrawable().apply { setColor(0xFF2A2A2A.toInt()); cornerRadius = dp(14).toFloat() }
+        }
+        val pw = PopupWindow(ScrollView(this).apply { addView(box) },
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, true)
+        pw.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+        pw.isOutsideTouchable = true
+        pw.elevation = dp(8).toFloat()
+
+        val sel = TypedValue()
+        theme.resolveAttribute(android.R.attr.selectableItemBackground, sel, true)
+        fun row(label: String, color: Int = Color.WHITE, underline: Boolean = false, onClick: () -> Unit) {
+            box.addView(TextView(this).apply {
+                text = label
+                textSize = 16f
+                setTextColor(color)
+                gravity = Gravity.CENTER
+                setPadding(dp(24), dp(12), dp(24), dp(12))
+                if (underline) paintFlags = paintFlags or Paint.UNDERLINE_TEXT_FLAG
+                if (sel.resourceId != 0) setBackgroundResource(sel.resourceId)
+                setOnClickListener { pw.dismiss(); onClick() }
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        }
+
+        // En üstte: ikon, altında e-posta, altında Github, altında Tanı kaydı
+        box.addView(ImageView(this).apply { setImageDrawable(infoIcon(dp(56))) },
+            LinearLayout.LayoutParams(dp(56), dp(56)).apply { gravity = Gravity.CENTER_HORIZONTAL; bottomMargin = dp(4) })
+        row(INFO_EMAIL) {
+            getSystemService(ClipboardManager::class.java)
+                .setPrimaryClip(ClipData.newPlainText("e-posta", INFO_EMAIL))
             toast("E-posta kopyalandı")
-            true
         }
-        pm.menu.add(INFO_GITHUB.removePrefix("https://")).setOnMenuItemClickListener {
-            safeStart(Intent(Intent.ACTION_VIEW, Uri.parse(INFO_GITHUB))); true
+        row("Github", 0xFF4FC3F7.toInt(), true) {
+            safeStart(Intent(Intent.ACTION_VIEW, Uri.parse(INFO_GITHUB)))
         }
-        pm.menu.add("Düzeni yedekle").setOnMenuItemClickListener { backupLayout(); true }
-        pm.menu.add("Düzeni geri al").setOnMenuItemClickListener { confirmRestore(); true }
-        pm.menu.add("Duvar kağıdı").setOnMenuItemClickListener { pickWallpaper(); true }
-        pm.menu.add("Ayarlar").setOnMenuItemClickListener { safeStart(Intent(Settings.ACTION_SETTINGS)); true }
-        pm.menu.add("Tanı kaydı").setOnMenuItemClickListener { showDiag(); true }
-        pm.show()
+        row("Tanı kaydı") { showDiag() }
+
+        box.addView(View(this).apply { setBackgroundColor(0x33FFFFFF) },
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)).apply {
+                topMargin = dp(6); bottomMargin = dp(6); marginStart = dp(16); marginEnd = dp(16)
+            })
+
+        row("Düzeni yedekle") { backupLayout() }
+        row("Düzeni geri al") { confirmRestore() }
+        row("Duvar kağıdı") { pickWallpaper() }
+        row("Ayarlar") { safeStart(Intent(Settings.ACTION_SETTINGS)) }
+
+        pw.showAsDropDown(anchor, 0, dp(4), Gravity.END)
     }
 
     // ---------- Tanı kaydı (boş ekran sorununu bulmak için) ----------
@@ -576,10 +611,9 @@ class MainActivity : Activity() {
     }
 
     /** Bilgi satırı için yuvarlak kırpılmış küçük resim. */
-    private fun infoIcon(): Drawable? = try {
+    private fun infoIcon(sz: Int = dp(32)): Drawable? = try {
         val src = BitmapFactory.decodeResource(resources, R.drawable.releases_icon)
         if (src == null) null else {
-            val sz = dp(32)
             val out = Bitmap.createBitmap(sz, sz, Bitmap.Config.ARGB_8888)
             val c = Canvas(out)
             val p = Paint(Paint.ANTI_ALIAS_FLAG)

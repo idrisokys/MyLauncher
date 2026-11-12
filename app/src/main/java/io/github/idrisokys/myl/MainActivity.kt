@@ -910,135 +910,21 @@ class MainActivity : Activity() {
 
     private fun openLinkFolder() = openFolderInFm(linkDir())
 
-    // ---------- Link klasöründe arama ----------
-    private val textExts = setOf("txt", "md", "log", "csv", "tsv", "json", "xml", "html", "htm", "js", "css",
-        "kt", "java", "py", "ini", "conf", "cfg", "yml", "yaml", "srt", "sub", "vtt", "sh", "bat", "sql",
-        "properties", "gradle", "tex", "rtf", "url", "nfo", "lrc")
+    // ---------- Link'te arama: LinkCepte uygulamasına devredilir ----------
+    private val LINKCEPTE_PKG = "io.github.idrisokys.linkcepte"
 
-    private class LinkHit(val file: File, val rel: String, val snippet: String?)
-
-    /** Link klasöründe (alt klasörler dahil) dosya/klasör adı ve metin dosyası içeriğinde arar. */
-    private fun searchLink(q: String) {
-        if (!Environment.isExternalStorageManager()) {
-            toast("Tüm dosyalara erişim izni ver, sonra tekrar dene")
-            try {
-                startActivity(Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:$packageName")))
-            } catch (e: Exception) {
-                safeStart(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
-            }
-            return
-        }
-        val root = linkDir()
-        if (!root.isDirectory) { toast("Link klasörü bulunamadı"); return }
-
-        val hits = ArrayList<LinkHit>()
-        val shown = ArrayList<String>()
-        val cancelled = java.util.concurrent.atomic.AtomicBoolean(false)
-        val status = TextView(this).apply {
-            setTextColor(0xFFBBBBBB.toInt()); setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-            setPadding(dp(16), dp(10), dp(16), dp(6)); text = "Aranıyor…"
-        }
-        val adapter = object : android.widget.ArrayAdapter<String>(this, android.R.layout.simple_list_item_1, shown) {
-            override fun getView(position: Int, convertView: View?, parent: ViewGroup): View {
-                val v = super.getView(position, convertView, parent) as TextView
-                v.setTextColor(Color.WHITE); v.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f)
-                v.setPadding(dp(16), dp(10), dp(16), dp(10))
-                return v
-            }
-        }
-        val list = ListView(this).apply {
-            this.adapter = adapter
-            divider = ColorDrawable(0x33FFFFFF); dividerHeight = dp(1)
-        }
-        val box = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setBackgroundColor(0xFF2A2A2A.toInt())
-            addView(status)
-            addView(list, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
-        }
-        val dlg = AlertDialog.Builder(this).setTitle("Link: $q").setView(box)
-            .setNegativeButton("Kapat", null).create()
-        dlg.setOnDismissListener { cancelled.set(true) }
-        list.setOnItemClickListener { _, _, p, _ ->
-            val h = hits.getOrNull(p) ?: return@setOnItemClickListener
-            if (h.file.isDirectory) openFolderInFm(h.file) else openLinkFile(h.file)
-        }
-        // Basılı tut: dosyanın bulunduğu klasörü aç
-        list.setOnItemLongClickListener { _, _, p, _ ->
-            val h = hits.getOrNull(p) ?: return@setOnItemLongClickListener false
-            openFolderInFm(if (h.file.isDirectory) h.file else (h.file.parentFile ?: root)); true
-        }
-        dlg.show()
-        dlg.window?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, (resources.displayMetrics.heightPixels * 0.8).toInt())
-
-        val fq = fold(q)
-        Thread {
-            var scanned = 0
-            try {
-                for (f in root.walkTopDown()) {
-                    if (cancelled.get() || hits.size >= 20) break
-                    if (f == root) continue
-                    scanned++
-                    val nameHit = fold(f.name).contains(fq)
-                    var snip: String? = null
-                    if (f.isFile && f.extension.lowercase() in textExts && f.length() <= 5L * 1024 * 1024) {
-                        try {
-                            f.bufferedReader(Charsets.UTF_8).use { r ->
-                                while (true) {
-                                    val line = r.readLine() ?: break
-                                    if (fold(line.take(4000)).contains(fq)) { snip = line.trim().take(120); break }
-                                }
-                            }
-                        } catch (e: Exception) { }
-                    }
-                    if (nameHit || snip != null) {
-                        val rel = f.relativeTo(root).path + if (f.isDirectory) "/" else ""
-                        val h = LinkHit(f, rel, snip)
-                        val line = if (snip != null) "$rel\n   ↳ $snip" else rel
-                        main.post {
-                            if (!cancelled.get()) {
-                                hits.add(h); shown.add(line); adapter.notifyDataSetChanged()
-                                status.text = "Aranıyor… ${hits.size} sonuç"
-                            }
-                        }
-                    }
-                }
-            } catch (e: Exception) { }
-            main.post {
-                if (!cancelled.get()) status.text =
-                    if (hits.isEmpty()) "Sonuç yok ($scanned öğe tarandı)" else "${hits.size} sonuç (bir öğeye dokun: aç, basılı tut: klasörünü aç)"
-            }
-        }.start()
-    }
-
-    private fun openLinkFile(f: File) {
-        val ext = f.extension.lowercase()
-        if (ext == "url") {
-            // Windows internet kısayolu: içindeki "URL=" adresini tarayıcıda aç
-            val url = try {
-                f.readLines().firstOrNull { it.trim().startsWith("URL=", ignoreCase = true) }
-                    ?.trim()?.substring(4)?.trim()
-            } catch (e: Exception) { null }
-            if (!url.isNullOrEmpty()) { openUrl(url); return }
-            toast("Dosyada adres bulunamadı")
-            return
-        }
-        val mime = android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext)
-            ?: if (ext in textExts) "text/plain" else "*/*"
-        // file:// yerine content:// (FileProvider) ver: diğer uygulamalar okuma izniyle açabilsin
-        val uri = try {
-            androidx.core.content.FileProvider.getUriForFile(this, "$packageName.fileprovider", f)
-        } catch (e: Exception) { toast("Açılamadı"); return }
-        val i = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(uri, mime)
-            clipData = ClipData.newRawUri(f.name, uri)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    /** Aramayı LinkCepte'de yapar ve sonucu doğrudan LinkCepte içinde gösterir. */
+    private fun searchInLinkCepte(q: String) {
+        val i = Intent("$LINKCEPTE_PKG.SEARCH").apply {
+            setPackage(LINKCEPTE_PKG)
+            putExtra("query", q)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         }
         try {
             startActivity(i)
+            closeSearch()
         } catch (e: Exception) {
-            // Mime türünü kabul eden uygulama yoksa metin olarak dene
-            try { startActivity(Intent(i).setDataAndType(uri, "*/*")) } catch (e2: Exception) { toast("Açılamadı") }
+            toast("LinkCepte açılamadı (kurulu mu?)")
         }
     }
 
@@ -1109,7 +995,7 @@ class MainActivity : Activity() {
             rows.add(Row(label, "Uygulama", iconCache[k], key = k) { launch(k) })
         }
         val enc = Uri.encode(q)
-        rows.add(Row("Link'te ara: $q", null, null) { searchLink(q) })
+        rows.add(Row("Link'te ara: $q", null, null) { searchInLinkCepte(q) })
         rows.add(Row("Google'da ara: $q", null, null) { openUrl("https://www.google.com/search?q=$enc") })
         rows.add(Row("Yandex'te ara: $q", null, null) { openUrl("https://yandex.com/search/?text=$enc") })
         rows.add(Row("Play Store'da ara: $q", null, null) { openPlayStore(q) })

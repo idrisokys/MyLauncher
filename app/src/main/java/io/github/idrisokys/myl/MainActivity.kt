@@ -369,7 +369,7 @@ class MainActivity : Activity() {
             }
             setOnClickListener { if (editMode) showFolderPicker() else showSettingsMenu(this) }
             // Basılı tut (düzenleme modu kapalıyken): ana depolamadaki "link" klasörünü aç
-            setOnLongClickListener { if (editMode) false else { openStorageFolder("link"); true } }
+            setOnLongClickListener { if (editMode) false else { openStorageFolder("Link"); true } }
         }
         bar.addView(actionBtn, LinearLayout.LayoutParams(dp(46), dp(46)).apply { marginStart = dp(8) })
         bar.addView(moveBtn, LinearLayout.LayoutParams(dp(46), dp(46)).apply { marginStart = dp(8) })
@@ -773,14 +773,31 @@ class MainActivity : Activity() {
 
     /** Ana depolamadaki (iç depolama kökü) bir klasörü dosya yöneticisinde açar. */
     private fun openStorageFolder(name: String) {
-        val uri = android.provider.DocumentsContract.buildDocumentUri(
-            "com.android.externalstorage.documents", "primary:$name")
-        try {
-            startActivity(Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(uri, "vnd.android.document/directory")
+        val real = name
+        val auth = "com.android.externalstorage.documents"
+        val docUri = android.provider.DocumentsContract.buildDocumentUri(auth, "primary:$real")
+        val treeUri = android.provider.DocumentsContract.buildTreeDocumentUri(auth, "primary:$real")
+
+        fun view(uri: Uri, pkg: String? = null) = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, "vnd.android.document/directory")
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            if (pkg != null) setPackage(pkg)
+        }
+        val attempts = listOf(
+            view(docUri, "com.google.android.documentsui"),
+            view(docUri, "com.android.documentsui"),
+            view(docUri),
+            view(treeUri),
+            // Son çare: sistem klasör seçicisini o klasörde açar
+            Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
+                putExtra(android.provider.DocumentsContract.EXTRA_INITIAL_URI, docUri)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            })
-        } catch (e: Exception) { toast("\"$name\" klasörü açılamadı") }
+            }
+        )
+        for (i in attempts) {
+            try { startActivity(i); return } catch (e: Exception) { /* sıradakini dene */ }
+        }
+        toast("\"$real\" klasörü açılamadı")
     }
 
     private fun openDownloads() {

@@ -530,6 +530,24 @@ class MainActivity : Activity() {
         row("Duvar kağıdı", R.drawable.ic_menu_wallpaper) { pickWallpaper() }
         row("Ayarlar", R.drawable.ic_settings) { safeStart(Intent(Settings.ACTION_SETTINGS)) }
 
+        // En altta: ana depolamadaki klasör kısayolları (alt alta)
+        box.addView(View(this).apply { setBackgroundColor(0x33FFFFFF) },
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)).apply {
+                topMargin = dp(3); bottomMargin = dp(3); marginStart = dp(10); marginEnd = dp(10)
+            })
+        for (f in listOf("DCIM", "backups", "Documents", "Movies", "Music",
+                         "My Documents", "MyFiles", "Pictures", "X Video Player")) {
+            box.addView(TextView(this).apply {
+                text = f
+                setTextColor(Color.WHITE)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(14), 0, dp(14), 0)
+                if (sel.resourceId != 0) setBackgroundResource(sel.resourceId)
+                setOnClickListener { pw.dismiss(); openStorageFolder(f) }
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(38)))
+        }
+
         pw.showAsDropDown(anchor, 0, dp(4), Gravity.END)
     }
 
@@ -776,8 +794,9 @@ class MainActivity : Activity() {
         // Klasör adı büyük/küçük harfe duyarlı: diskte gerçekten var olan yazımı bul (link / Link / LINK)
         val root = Environment.getExternalStorageDirectory()
         val real = try {
-            listOf(name, name.lowercase(), name.replaceFirstChar { it.uppercase() }, name.uppercase())
-                .firstOrNull { java.io.File(root, it).isDirectory } ?: name
+            root.list()?.firstOrNull { it.equals(name, ignoreCase = true) }
+                ?: listOf(name, name.lowercase(), name.replaceFirstChar { it.uppercase() }, name.uppercase())
+                    .firstOrNull { java.io.File(root, it).isDirectory } ?: name
         } catch (e: Exception) { name }
         val auth = "com.android.externalstorage.documents"
         val docUri = android.provider.DocumentsContract.buildDocumentUri(auth, "primary:$real")

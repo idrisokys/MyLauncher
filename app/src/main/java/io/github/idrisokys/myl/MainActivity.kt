@@ -369,7 +369,7 @@ class MainActivity : Activity() {
             }
             setOnClickListener { if (editMode) showFolderPicker() else showSettingsMenu(this) }
             // Basılı tut (düzenleme modu kapalıyken): ana depolamadaki "link" klasörünü aç
-            setOnLongClickListener { if (editMode) false else { openStorageFolder("Documents/Link"); true } }
+            setOnLongClickListener { if (editMode) false else { openStorageFolder("Documents"); true } }
         }
         bar.addView(actionBtn, LinearLayout.LayoutParams(dp(46), dp(46)).apply { marginStart = dp(8) })
         bar.addView(moveBtn, LinearLayout.LayoutParams(dp(46), dp(46)).apply { marginStart = dp(8) })

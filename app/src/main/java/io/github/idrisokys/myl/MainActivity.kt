@@ -480,8 +480,7 @@ class MainActivity : Activity() {
     private fun showSettingsMenu(anchor: View) {
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            minimumWidth = dp(230)
-            setPadding(0, dp(12), 0, dp(8))
+            setPadding(0, dp(8), 0, dp(4))
             background = GradientDrawable().apply { setColor(0xFF2A2A2A.toInt()); cornerRadius = dp(14).toFloat() }
         }
         val pw = PopupWindow(ScrollView(this).apply { addView(box) },
@@ -495,10 +494,10 @@ class MainActivity : Activity() {
         fun row(label: String, color: Int = Color.WHITE, underline: Boolean = false, onClick: () -> Unit) {
             box.addView(TextView(this).apply {
                 text = label
-                textSize = 16f
+                textSize = 15f
                 setTextColor(color)
                 gravity = Gravity.CENTER
-                setPadding(dp(24), dp(12), dp(24), dp(12))
+                setPadding(dp(12), dp(7), dp(12), dp(7))
                 if (underline) paintFlags = paintFlags or Paint.UNDERLINE_TEXT_FLAG
                 if (sel.resourceId != 0) setBackgroundResource(sel.resourceId)
                 setOnClickListener { pw.dismiss(); onClick() }
@@ -506,8 +505,8 @@ class MainActivity : Activity() {
         }
 
         // En üstte: ikon, altında e-posta, altında Github, altında Tanı kaydı
-        box.addView(ImageView(this).apply { setImageDrawable(infoIcon(dp(56))) },
-            LinearLayout.LayoutParams(dp(56), dp(56)).apply { gravity = Gravity.CENTER_HORIZONTAL; bottomMargin = dp(4) })
+        box.addView(ImageView(this).apply { setImageDrawable(infoIcon(dp(44))) },
+            LinearLayout.LayoutParams(dp(44), dp(44)).apply { gravity = Gravity.CENTER_HORIZONTAL; bottomMargin = dp(2); marginStart = dp(12); marginEnd = dp(12) })
         row(INFO_EMAIL) {
             getSystemService(ClipboardManager::class.java)
                 .setPrimaryClip(ClipData.newPlainText("e-posta", INFO_EMAIL))
@@ -520,7 +519,7 @@ class MainActivity : Activity() {
 
         box.addView(View(this).apply { setBackgroundColor(0x33FFFFFF) },
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)).apply {
-                topMargin = dp(6); bottomMargin = dp(6); marginStart = dp(16); marginEnd = dp(16)
+                topMargin = dp(3); bottomMargin = dp(3); marginStart = dp(10); marginEnd = dp(10)
             })
 
         row("Düzeni yedekle") { backupLayout() }
@@ -721,9 +720,26 @@ class MainActivity : Activity() {
             order.clear(); order.addAll(ord)
             folders.clear(); folders.putAll(fol)
             shortcuts.clear(); shortcuts.putAll(scs)
+            // Kısayolların asıl sahibi sistemdir: yeni kurulumda eski sabitlemeler (pin) kaybolmuş olur.
+            // Hâlâ var olan kısayolları yeniden sabitle ve kaçının bulunabildiğini say.
+            var found = 0
+            for ((pkg, list) in scs.values.groupBy { it.pkg }) {
+                try {
+                    val existing = shortcutsOf(pkg, pinnedOnly = true).map { it.id }
+                    launcherApps.pinShortcuts(pkg, (existing + list.map { it.id }).distinct(), me)
+                } catch (e: Exception) { }
+                try {
+                    var qf = ShortcutQuery.FLAG_MATCH_PINNED or ShortcutQuery.FLAG_MATCH_DYNAMIC or
+                        ShortcutQuery.FLAG_MATCH_MANIFEST
+                    if (Build.VERSION.SDK_INT >= 30) qf = qf or ShortcutQuery.FLAG_MATCH_CACHED
+                    val q = ShortcutQuery().setPackage(pkg).setShortcutIds(list.map { it.id }).setQueryFlags(qf)
+                    found += launcherApps.getShortcuts(q, me)?.size ?: 0
+                } catch (e: Exception) { }
+            }
             persistAndRefresh()   // yüklü olmayan uygulamalar ayıklanır, yeniler sona eklenir
             startReload()         // geri yüklenen kısayolların simgeleri hazırlanır
-            toast("Düzen geri yüklendi")
+            toast(if (scs.isEmpty()) "Düzen geri yüklendi"
+                  else "Düzen geri yüklendi · kısayol: $found/${scs.size} bulundu")
         } catch (e: Exception) {
             toast("Geçersiz yedek dosyası")
         }

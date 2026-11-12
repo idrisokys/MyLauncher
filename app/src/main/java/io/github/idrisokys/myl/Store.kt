@@ -8,6 +8,11 @@ import android.os.Environment
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.concurrent.Callable
+import java.util.concurrent.ExecutorCompletionService
+import java.util.concurrent.Executors
+import java.util.concurrent.Future
+import java.util.concurrent.TimeUnit
 
 data class Entry(val name: String, val uri: Uri, val isDir: Boolean) {
     /** Liste anahtarı; her seferinde yeniden hesaplanmasın diye bir kez üretilir. */
@@ -33,6 +38,12 @@ object Store {
 
     /** Tüm yazma/okuma işlemleri (uygulama + paylaşım ekranı) bu kilitle sıralanır. */
     private val mutex = Any()
+
+    // Aramalar arasında thread havuzunu yeniden kullan; her aramada yeni 6 thread açma.
+    // Dört işçi, depolama ağırlıklı aramalarda bellek/IO baskısını sınırlarken arayüzü akıcı tutar.
+    private val searchExecutor = Executors.newFixedThreadPool(4) { task ->
+        Thread(task, "MyL-Search").apply { isDaemon = true }
+    }
 
     private fun file(u: Uri): File = File(u.path ?: "")
     private fun uriOf(f: File): Uri = Uri.fromFile(f)
@@ -379,17 +390,31 @@ object Store {
             return Hit(e, path, detail, url == null, terms.all { ft.contains(it) })
         }
 
-        val pool = java.util.concurrent.Executors.newFixedThreadPool(6)
-        val out = ArrayList<Hit>()
+        val completion = ExecutorCompletionService<Hit?>(searchExecutor)
+        val pending = HashSet<Future<Hit?>>()
+        val out = ArrayList<Hit>(minOf(files.size, 500))
+        var nextFile = 0
         try {
-            val futures = files.map { (e, path) ->
-                pool.submit(java.util.concurrent.Callable<Hit?> { if (alive()) match(e, path) else null })
+            // Kuyruğu sınırsız büyütme: en fazla 8 dosya aynı anda işlenmek üzere sıraya girsin.
+            while (alive() && out.size < 500 && (nextFile < files.size || pending.isNotEmpty())) {
+                while (alive() && nextFile < files.size && pending.size < 8) {
+                    val (entry, path) = files[nextFile++]
+                    pending.add(completion.submit(Callable {
+                        if (!Thread.currentThread().isInterrupted) match(entry, path) else null
+                    }))
+                }
+
+                // Sonuçları tamamlanma sırasıyla al: yavaş bir dosya diğer sonuçları bloke etmesin.
+                val completed = completion.poll(100, TimeUnit.MILLISECONDS) ?: continue
+                pending.remove(completed)
+                runCatching { completed.get() }.getOrNull()?.let(out::add)
             }
-            for (f in futures) {
-                if (!alive() || out.size >= 500) break
-                try { f.get()?.let { out.add(it) } } catch (ex: Exception) { }
-            }
-        } finally { pool.shutdownNow() }
+        } catch (e: InterruptedException) {
+            Thread.currentThread().interrupt()
+        } finally {
+            // Kullanıcı aramayı değiştirdiyse bekleyen işleri mümkün olduğunca erken durdur.
+            pending.forEach { it.cancel(true) }
+        }
         return out.sortedBy { !it.titleMatch }   // başlıkta geçenler önce
     }
 

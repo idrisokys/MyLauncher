@@ -296,12 +296,18 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
     // Yenile tuşu: Link klasörünü tekrar kontrol eder (silinmişse yeniden oluşturur), artık var olmayan klasörlerden çıkar, listeyi (arama açıksa aramayı) yeniden yükler
     fun refreshAll() {
         selected = emptySet()
-        root = Store.root(ctx)
+        val refreshedRoot = Store.root(ctx)
+        root = refreshedRoot
         stack = stack.takeWhile { java.io.File(it.uri.path ?: "").isDirectory }
         val q = searchQuery
         if (q != null) {
             searchJob?.cancel(); hits = null
-            searchJob = scope.launch { hits = withContext(Dispatchers.IO) { Store.search(ctx, rootUri, q) { isActive } } }
+            val searchRoot = refreshedRoot
+            if (searchRoot != null) {
+                searchJob = scope.launch {
+                    hits = withContext(Dispatchers.IO) { Store.search(ctx, searchRoot, q) { isActive } }
+                }
+            }
         }
         tick++
         toast(L("Yenilendi", "Refreshed"))

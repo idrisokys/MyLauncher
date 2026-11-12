@@ -369,7 +369,7 @@ class MainActivity : Activity() {
             }
             setOnClickListener { if (editMode) showFolderPicker() else showSettingsMenu(this) }
             // Basılı tut (düzenleme modu kapalıyken): ana depolamadaki "link" klasörünü aç
-            setOnLongClickListener { if (editMode) false else { openStorageFolder("Link"); true } }
+            setOnLongClickListener { if (editMode) false else { openStorageFolder("Documents/Link"); true } }
         }
         bar.addView(actionBtn, LinearLayout.LayoutParams(dp(46), dp(46)).apply { marginStart = dp(8) })
         bar.addView(moveBtn, LinearLayout.LayoutParams(dp(46), dp(46)).apply { marginStart = dp(8) })
@@ -773,7 +773,12 @@ class MainActivity : Activity() {
 
     /** Ana depolamadaki (iç depolama kökü) bir klasörü dosya yöneticisinde açar. */
     private fun openStorageFolder(name: String) {
-        val real = name
+        // Klasör adı büyük/küçük harfe duyarlı: diskte gerçekten var olan yazımı bul (link / Link / LINK)
+        val root = Environment.getExternalStorageDirectory()
+        val real = try {
+            listOf(name, name.lowercase(), name.replaceFirstChar { it.uppercase() }, name.uppercase())
+                .firstOrNull { java.io.File(root, it).isDirectory } ?: name
+        } catch (e: Exception) { name }
         val auth = "com.android.externalstorage.documents"
         val docUri = android.provider.DocumentsContract.buildDocumentUri(auth, "primary:$real")
         val treeUri = android.provider.DocumentsContract.buildTreeDocumentUri(auth, "primary:$real")
@@ -794,8 +799,8 @@ class MainActivity : Activity() {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
         )
-        for (i in attempts) {
-            try { startActivity(i); return } catch (e: Exception) { /* sıradakini dene */ }
+        for ((n, i) in attempts.withIndex()) {
+            try { startActivity(i); toast("Link açıldı (yöntem ${n + 1}/${attempts.size})"); return } catch (e: Exception) { /* sıradakini dene */ }
         }
         toast("\"$real\" klasörü açılamadı")
     }

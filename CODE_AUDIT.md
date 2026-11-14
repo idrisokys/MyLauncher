@@ -2,7 +2,7 @@
 
 - Ana ekran: kalem = dokun Notlarım / basılı tut düzenleme modu (mod açıkken dokunmak modu kapatır); kamera = dokun Galerim / basılı tut kamera; ⚙ menüsünden "Link klasörü" satırı ve `openLinkFolder()` silindi.
 - Dosyalarım: basılı tutmak artık (resim/video silmek yerine) ad değiştirir; `removeMedia` kaldırıldı. Resimler `GalleryActivity.EXTRA_FILE` ile Galerim'in tam ekran gezgininde açılır (aynı klasördeki resim/videolar kaydırılabilir; gezgin kapanınca Galerim kapanır, Dosyalarım'a dönülür).
-- Galerim: basılı tutma (ızgara ve tam ekran) artık `moveToOnemsiz()` ile resmi `<depolama>/.onemsiz` klasörüne taşır (`.nomedia` eklenir, aynı ad varsa `ad_1`…). Seçim modundaki çöp kutusu hâlâ kalıcı siler.
+- Galerim: basılı tutma (ızgara ve tam ekran) artık `moveToOnemsiz()` ile resmi `<depolama>/.onemsiz` klasörüne taşır (`.nomedia` eklenir, aynı ad varsa `ad_1`…). Seçim modundaki çöp kutusu da onay sormadan seçilenleri aynı şekilde `.onemsiz`'e taşır; Galerim artık hiçbir yerde kalıcı silmez.
 - Yeni `EditShareActivity` ("Resmi Editle"): Paylaş menüsünden gelen `image/*` (jpg/png/webp) `EditActivity` ile açılır; okuma izni düzenleyiciye aktarılır.
 
 # MyL 1.13 (Hızlı Paylaş entegrasyonu)

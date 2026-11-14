@@ -46,7 +46,7 @@ import org.fossify.editor.activities.EditActivity
 /**
  * Galerim: telefondaki tüm resim ve videoları tek ızgarada gösterir.
  * - Kalem simgesi: seçim modu (bu modda basılı tutup silme duraklatılır)
- * - Seçim modunda: tümünü seç, klasöre taşı, çöp (seçilenleri sil)
+ * - Seçim modunda: tümünü seç, klasöre taşı, çöp (seçilenleri .onemsiz klasörüne taşı)
  */
 class GalleryActivity : Activity() {
     private val bg = 0xFF121212.toInt(); private val bar = 0xFF212121.toInt(); private val accent = 0xFF4FA3F0.toInt()
@@ -90,7 +90,7 @@ class GalleryActivity : Activity() {
         }
         selAllV = ib(Icons.selectAll(), "Tümünü seç", View.GONE) { selectAll() }
         moveV = ib(Icons.move(), "Klasöre taşı", View.GONE) { moveSelected() }
-        trashV = ib(Icons.delete(), "Seçilenleri sil", View.GONE) { deleteSelected() }   // kalemin hemen solunda
+        trashV = ib(Icons.delete(), "Seçilenleri .onemsiz klasörüne taşı", View.GONE) { deleteSelected() }   // kalemin hemen solunda
         penV = ib(Icons.rename(), "Seç", View.VISIBLE) { setSelMode(!selMode) }
         tb.addView(titleV, LinearLayout.LayoutParams(0, -2, 1f))
         for (b in listOf(selAllV, moveV, trashV, penV)) tb.addView(b, LinearLayout.LayoutParams(dp(44), dp(44)))
@@ -238,22 +238,21 @@ class GalleryActivity : Activity() {
 
     // ======================= SİL / TAŞI =======================
 
+    /** Seçilenleri onay sormadan ana dizindeki gizli .onemsiz klasörüne taşır. */
     private fun deleteSelected() {
-        if (sel.isEmpty()) { toast("Önce silinecek resimleri seçin"); return }
-        AlertDialog.Builder(this).setMessage("${sel.size} öğe silinsin mi?").setPositiveButton("Sil") { _, _ ->
-            val items = sel.toList(); sel.clear()
-            Thread {
-                val gone = HashSet<String>()
-                items.forEach { f -> val ok = try { f.delete() } catch (e: Exception) { false }; if (ok) gone.add(f.path) }
-                if (gone.isNotEmpty()) try { MediaScannerConnection.scanFile(this, gone.toTypedArray(), null, null) } catch (e: Exception) {}
-                runOnUiThread {
-                    media = media.filter { it.path !in gone }
-                    gone.forEach { thumbs.remove(it) }
-                    if (gone.size < items.size) toast("${items.size - gone.size} öğe silinemedi")
-                    selectionChanged(); updateEmpty()
-                }
-            }.start()
-        }.setNegativeButton("İptal", null).show()
+        if (sel.isEmpty()) { toast("Önce taşınacak resimleri seçin"); return }
+        val items = sel.toList(); sel.clear()
+        Thread {
+            val gone = HashSet<String>()
+            items.forEach { f -> if (moveToOnemsiz(f)) gone.add(f.path) }
+            if (gone.isNotEmpty()) try { MediaScannerConnection.scanFile(this, gone.toTypedArray(), null, null) } catch (e: Exception) {}
+            runOnUiThread {
+                media = media.filter { it.path !in gone }
+                gone.forEach { thumbs.remove(it) }
+                if (gone.size < items.size) toast("${items.size - gone.size} öğe taşınamadı")
+                selectionChanged(); updateEmpty()
+            }
+        }.start()
     }
 
     private fun moveSelected() {

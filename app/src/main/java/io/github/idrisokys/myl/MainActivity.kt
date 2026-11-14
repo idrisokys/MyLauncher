@@ -523,7 +523,11 @@ class MainActivity : Activity() {
             }, LinearLayout.LayoutParams(dp(50), dp(40)))
         }
 
-        // En üstte bilgi simgesi: dokununca ayrı küçük kartta gemi ikonu, e-posta ve Github
+        // En üstte Link klasörü, hemen altında Uygulamalar; sonra bilgi simgesi ve diğerleri
+        row("Link klasörü", R.drawable.ic_menu_folder) { openLinkFolder() }
+        row("Uygulamalar", R.drawable.ic_menu_apps) { openApps() }
+
+        // Bilgi simgesi: dokununca ayrı küçük kartta gemi ikonu, e-posta ve Github
         row("Bilgi", R.drawable.ic_menu_info) { showInfoCard(anchor) }
 
         box.addView(View(this).apply { setBackgroundColor(0x33FFFFFF) },
@@ -534,7 +538,6 @@ class MainActivity : Activity() {
         row("Düzeni yedekle", R.drawable.ic_menu_backup) { backupLayout() }
         row("Düzeni geri al", R.drawable.ic_menu_restore) { confirmRestore() }
         row("Duvar kağıdı", R.drawable.ic_menu_wallpaper) { pickWallpaper() }
-        row("Link klasörü", R.drawable.ic_menu_folder) { openLinkFolder() }
         row("Ayarlar", R.drawable.ic_settings) { safeStart(Intent(Settings.ACTION_SETTINGS)) }
 
 
@@ -818,6 +821,18 @@ class MainActivity : Activity() {
             } catch (e: Exception) { /* sıradakini dene */ }
         }
         toast("Kamera açılamadı")
+    }
+
+    /** Uygulamalar bölümünü açar. */
+    private fun openApps() {
+        try {
+            startActivity(
+                Intent(this, io.github.idrisokys.myl.apps.AppsActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        } catch (e: Exception) {
+            toast("Uygulamalar açılamadı")
+        }
     }
 
     /** Galerim bölümünü açar. */

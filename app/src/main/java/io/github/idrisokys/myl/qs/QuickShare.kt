@@ -36,6 +36,8 @@ import java.net.URLDecoder
 import java.net.URLEncoder
 import java.util.UUID
 import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.concurrent.thread
@@ -403,16 +405,22 @@ object Sender {
         }
         Hold.acquire(c)
         try {
-            var err: String? = null
-            for (p in ps) for (u in uris) {
-                try { one(c, p, u) }
-                catch (e: Exception) {
-                    if (err == null) {
-                        val why = e.message ?: L("bağlantı hatası", "connection error")
-                        err = L("Hata: ${p.name}: $why", "Error: ${p.name}: $why")
+            // Çok dosyada her dosya için bağlantı kurma/yanıt bekleme süresi toplamı yavaşlatır: en fazla 3 paralel bağlantı.
+            val tasks = ps.flatMap { p -> uris.map { u -> p to u } }
+            val errs = ConcurrentLinkedQueue<String>()
+            val pool = Executors.newFixedThreadPool(minOf(3, tasks.size))
+            try {
+                tasks.map { (p, u) ->
+                    pool.submit {
+                        try { one(c, p, u) }
+                        catch (e: Exception) {
+                            val why = e.message ?: L("bağlantı hatası", "connection error")
+                            errs.add(L("Hata: ${p.name}: $why", "Error: ${p.name}: $why"))
+                        }
                     }
-                }
-            }
+                }.forEach { it.get() }
+            } finally { pool.shutdown() }
+            val err: String? = errs.peek()
             val msg = err ?: L("Gönderildi", "Sent")
             Bus.set(msg); toast(c, msg)
         } finally { Hold.release() }

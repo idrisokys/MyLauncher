@@ -39,6 +39,8 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 class FilesActivity : Activity() {
+    companion object { const val EXTRA_PATH = "io.github.idrisokys.myl.files.PATH" }
+
     private val dockBg = 0xFF1A1A1A.toInt(); private val bg = 0xFF121212.toInt(); private val bar = 0xFF212121.toInt(); private val card = 0xFF1E1E1E.toInt()
     private lateinit var titleV: TextView; private lateinit var pinV: ImageView; private lateinit var titleRow: LinearLayout; private lateinit var cancelV: TextView; private lateinit var body: FrameLayout; private lateinit var crumbS: HorizontalScrollView; private lateinit var crumbL: LinearLayout; private lateinit var dock: LinearLayout
     private var cur: File? = null; private var list: List<File>? = null; private var listTitle = ""
@@ -117,19 +119,30 @@ class FilesActivity : Activity() {
         col.addView(dock, -1, dp(100))
         setContentView(col); migratePins(); updateDock(); home()
         if (s == null && (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) == 0) handleShare(intent)
+        if (s == null) openRequestedPath(intent)
     }
 
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
         setIntent(intent)
         handleShare(intent)
+        openRequestedPath(intent)
+    }
+
+    /** Başka bir bölümden (örn. ana ekran) istenen klasörü doğrudan açar. */
+    private fun openRequestedPath(i: Intent?) {
+        val p = i?.getStringExtra(EXTRA_PATH) ?: return
+        i.removeExtra(EXTRA_PATH)
+        val d = File(p)
+        if (d.isDirectory) { pendingShare = null; picking = false; browse(d) }
+        else Toast.makeText(this, "Klasör bulunamadı: ${d.name}", Toast.LENGTH_SHORT).show()
     }
 
     private fun hasPerm() = StoragePerm.has(this)
 
     override fun onResume() {
         super.onResume()
-        if (hasPerm()) { if (appsMode) loadApps() }
+        if (hasPerm()) { if (appsMode) loadApps() else if (cur != null || list != null) refresh(true) }
         else if (!asked) {
             asked = true
             StoragePerm.request(this)

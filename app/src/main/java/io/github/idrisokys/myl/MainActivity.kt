@@ -332,6 +332,19 @@ class MainActivity : Activity() {
                 setColor(0x66000000)
             }
         }
+        // Kamera düğmesi (aramanın solunda): dokun = varsayılan kamera, basılı tut = Galerim
+        val camBtn = ImageView(this).apply {
+            setImageResource(R.drawable.ic_camera)
+            contentDescription = "Kamera"
+            setPadding(dp(10), dp(10), dp(10), dp(10))
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(0x66000000)
+            }
+            setOnClickListener { openCamera() }
+            setOnLongClickListener { openGallery(); true }
+        }
+        bar.addView(camBtn, LinearLayout.LayoutParams(dp(46), dp(46)).apply { marginEnd = dp(8) })
         bar.addView(search, LinearLayout.LayoutParams(0, dp(50), 1f))
 
         moveBtn = ImageView(this).apply {
@@ -521,6 +534,7 @@ class MainActivity : Activity() {
         row("Düzeni yedekle", R.drawable.ic_menu_backup) { backupLayout() }
         row("Düzeni geri al", R.drawable.ic_menu_restore) { confirmRestore() }
         row("Duvar kağıdı", R.drawable.ic_menu_wallpaper) { pickWallpaper() }
+        row("Link klasörü", R.drawable.ic_menu_folder) { openLinkFolder() }
         row("Ayarlar", R.drawable.ic_settings) { safeStart(Intent(Settings.ACTION_SETTINGS)) }
 
 
@@ -792,6 +806,44 @@ class MainActivity : Activity() {
             closeSearch()
         } catch (e: Exception) {
             toast("Notlarım açılamadı")
+        }
+    }
+
+    /** Varsayılan kamera uygulamasını açar (sonuç beklemez, izin gerekmez). */
+    private fun openCamera() {
+        for (action in listOf(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA, MediaStore.ACTION_IMAGE_CAPTURE)) {
+            try {
+                startActivity(Intent(action).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                return
+            } catch (e: Exception) { /* sıradakini dene */ }
+        }
+        toast("Kamera açılamadı")
+    }
+
+    /** Galerim bölümünü açar. */
+    private fun openGallery() {
+        try {
+            startActivity(
+                Intent(this, io.github.idrisokys.myl.gallery.GalleryActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        } catch (e: Exception) {
+            toast("Galerim açılamadı")
+        }
+    }
+
+    /** Ana dizindeki Link klasörünü (Notlarım verileri) kendi Dosyalarım bölümünde açar. */
+    private fun openLinkFolder() {
+        val root = Environment.getExternalStorageDirectory()
+        val real = try { root.list()?.firstOrNull { it.equals("Link", ignoreCase = true) } } catch (e: Exception) { null } ?: "Link"
+        try {
+            startActivity(
+                Intent(this, io.github.idrisokys.myl.files.FilesActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    .putExtra(io.github.idrisokys.myl.files.FilesActivity.EXTRA_PATH, java.io.File(root, real).absolutePath)
+            )
+        } catch (e: Exception) {
+            toast("Dosyalarım açılamadı")
         }
     }
 

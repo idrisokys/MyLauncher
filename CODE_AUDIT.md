@@ -9,6 +9,8 @@
 - Dosyalarım artık Paylaş menüsünde (`*/*`) görünür ve gelen dosyaları seçilen klasöre kaydeder.
 - Galerim: kalem = seçim modu (basılı tutup silme duraklar), çöp = seçilenleri sil, taşı simgesi = klasöre/yeni klasöre taşı.
 - Eski bağımsız uygulamaların ayarları (ana ekrana sabitlenen klasörler) bu uygulamaya taşınmaz; yeniden eklenmelidir.
+- Ana ekran arama çubuğunun soluna kamera düğmesi eklendi: dokun = varsayılan kamera, basılı tut = Galerim.
+- Ayarlar menüsüne klasör simgesi eklendi: ana dizindeki Link klasörünü Dosyalarım bölümünde açar (`FilesActivity.EXTRA_PATH`).
 - Sürüm `1.9 (versionCode 12)`. Launcher, Notlarım ve duvar kağıdı kodlarına dokunulmadı.
 
 # MyL 1.8 — Kod denetimi ve değişiklikler

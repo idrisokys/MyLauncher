@@ -21,7 +21,21 @@ jobs:
           gradle-version: 8.13
 
       - name: Release APK derle
-        run: gradle assembleRelease --no-daemon
+        run: |
+          set -o pipefail
+          gradle assembleRelease --no-daemon 2>&1 | tee build.log
+
+      # Derleme başarısız olursa asıl hata satırlarını "Annotations" bölümüne ve özet sayfasına yazar
+      # (günlüklere giriş yapmadan da görülebilsin diye).
+      - name: Hata özeti
+        if: failure()
+        run: |
+          grep -E "Duplicate class|What went wrong|Execution failed|^e: |Could not |Unresolved reference|AAPT|resource .* not found|Manifest merger|Caused by" build.log \
+            | cut -c1-300 | head -30 > errs.txt || true
+          echo '### Gradle hata özeti' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"; cat errs.txt >> "$GITHUB_STEP_SUMMARY"; echo '```' >> "$GITHUB_STEP_SUMMARY"
+          msg=$(sed ':a;N;$!ba;s/%/%25/g;s/\r//g;s/\n/%0A/g' errs.txt)
+          echo "::error title=Gradle hatasi::${msg}"
 
       - name: APK'yı yükle
         uses: actions/upload-artifact@v4

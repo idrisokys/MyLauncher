@@ -1,3 +1,16 @@
+# MyL 1.9 — Kod denetimi ve değişiklikler
+
+## 1.9 (Dosyalarım ve Galerim birleştirildi — Gradle derlemesi denenmedi)
+
+- Ayrı uygulama olan **Dosyalarım** (dosya yöneticisi) ve **Galerim** (resim/video galerisi) bu uygulamanın bölümleri oldu; Notlarım gibi kendi görevinde çalışan ayrı ekranlar (`files/FilesActivity`, `gallery/GalleryActivity`) ve ana ekran ızgarasında kendi simgeleri var.
+- Ortak kaynaklar `common/` paketinde: `Icons` (yol tabanlı simgeler), `KFileProvider` (tek içerik sağlayıcı, `<applicationId>.fp`), `StoragePerm` (tüm dosyalara erişim izni, tek yerden), `uniqueFile`, `promptText`.
+- Ortak izinler: eklenen tek yeni izin `REQUEST_INSTALL_PACKAGES` (Dosyalarım'da APK'ya dokununca yükleme). Diğerleri (`MANAGE_EXTERNAL_STORAGE`, `QUERY_ALL_PACKAGES`, `REQUEST_DELETE_PACKAGES`) zaten vardı.
+- Yeni bağımlılık: `androidx.viewpager:viewpager:1.0.0` (Galerim tam ekran gezgini).
+- Dosyalarım artık Paylaş menüsünde (`*/*`) görünür ve gelen dosyaları seçilen klasöre kaydeder.
+- Galerim: kalem = seçim modu (basılı tutup silme duraklar), çöp = seçilenleri sil, taşı simgesi = klasöre/yeni klasöre taşı.
+- Eski bağımsız uygulamaların ayarları (ana ekrana sabitlenen klasörler) bu uygulamaya taşınmaz; yeniden eklenmelidir.
+- Sürüm `1.9 (versionCode 12)`. Launcher, Notlarım ve duvar kağıdı kodlarına dokunulmadı.
+
 # MyL 1.8 — Kod denetimi ve değişiklikler
 
 ## 1.8 (araç zinciri yükseltmesi — derleme denenmedi)

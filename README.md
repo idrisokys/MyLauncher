@@ -5,6 +5,8 @@
 </p>
 
 
+> **v1.9 — Dosyalarım & Galerim merged in:** the former standalone *Dosyalarım* (file manager) and *Galerim* (photo/video gallery) apps are now sections of MyL, each with its own icon on the home grid (like Notlarım) and sharing one storage permission, one file provider and one icon set. Galerim has a pencil select mode, a trash icon for bulk delete and a move-to-folder button. / *Dosyalarım* ve *Galerim* artık MyL'nin bölümleri: ana ekran ızgarasında kendi simgeleri var; tek depolama izni, tek dosya sağlayıcı ve ortak simgeleri paylaşırlar.
+>
 > **v1.6 — performance and maintenance update:** reuses a bounded background search pool, returns search results as soon as each file finishes (avoiding head-of-line blocking), and fixes refresh-while-searching to use the refreshed storage root. **v1.5 — LinkCepte merged in:** the former *LinkCepte* app now lives inside MyL as **Notlarım** (My Notes). Search shows **"Notlarımda ara"**, the share menu shows **"Notlarım"** (links and text), long-pressing the edit icon opens Notlarım, and Notlarım also has its own icon on the home grid. Links/notes are still stored as `.url` / `.txt` files in `<storage>/Link`. One shared `Store.submit` rule is used by the search box, Notlarım and the share menu.
 
 ---

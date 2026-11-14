@@ -23,8 +23,8 @@ android {
         applicationId = "io.github.idrisokys.myl"
         minSdk = 29
         targetSdk = 34
-        versionCode = 11
-        versionName = "1.8"
+        versionCode = 12
+        versionName = "1.9"
     }
 
     androidResources { localeFilters += listOf("tr", "en") }
@@ -68,6 +68,8 @@ kotlin {
 dependencies {
     implementation("androidx.recyclerview:recyclerview:1.4.0")
     implementation("androidx.core:core:1.16.0")
+    // Galerim: tam ekran resim/video gezgini (ViewPager)
+    implementation("androidx.viewpager:viewpager:1.0.0")
     // Notlarım (Compose)
     implementation(platform("androidx.compose:compose-bom:2025.12.00"))
     implementation("androidx.compose.material3:material3")

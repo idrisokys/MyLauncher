@@ -27,6 +27,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
 import java.io.InputStreamReader
+import java.net.Inet4Address
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.ServerSocket
@@ -212,12 +213,26 @@ class Discovery(c: Context) {
             override fun onServiceResolved(i: NsdServiceInfo) {
                 val f = i.attributes["i"]?.toString(Charsets.UTF_8)
                 val n = i.attributes["n"]?.toString(Charsets.UTF_8)
-                if (f != null && f != Identity.id && i.host != null)
-                    { Peers.put(i.serviceName, Peer(f, n ?: "?", i.host, i.port)); Shortcuts.update(app) }
+                val addr = pickAddress(i)
+                if (f != null && f != Identity.id && addr != null)
+                    { Peers.put(i.serviceName, Peer(f, n ?: "?", addr, i.port)); Shortcuts.update(app) }
                 synchronized(this@Discovery) { tries.remove(s.serviceName) }
                 done()
             }
         })
+    }
+
+    /**
+     * Çözümlenen adresler arasında IPv4'ü tercih eder. NsdManager bazen IPv6 (özellikle kapsamsız fe80:: link-local)
+     * döndürür; bu adrese bağlanılamaz ve cihaz listede görünür ama aktarım hiç başlamaz (Sony TV vb.).
+     */
+    @Suppress("DEPRECATION")
+    private fun pickAddress(i: NsdServiceInfo): InetAddress? {
+        if (Build.VERSION.SDK_INT >= 34) {
+            val all = i.hostAddresses
+            return all.firstOrNull { it is Inet4Address } ?: all.firstOrNull { !it.isLinkLocalAddress } ?: all.firstOrNull()
+        }
+        return i.host
     }
 
     @Synchronized private fun done() { busy = false; pump() }

@@ -1,3 +1,7 @@
+# MyL 1.11 (sahte sürüm uyarısı)
+
+- Düzenleyici açılırken çıkan "You are using a fake version of the app…" uyarısı commons'ın `BaseSimpleActivity.onCreate` denetiminden geliyordu (paket adı `org.fossify.` ile başlamıyor). `EditorBaseActivity`, yalnızca `super.onCreate` sürecinde `getPackageName()` için `org.fossify.editor` bildirir; sonrasında gerçek paket adı döner.
+
 # MyL 1.11 (Android 10+ sağlamlaştırma)
 
 - Düzenleyici izni: Android 11+ "tüm dosyalara erişim", Android 10'da `WRITE_EXTERNAL_STORAGE` varsa ek izin istemeden açılır; yoksa commons izin akışı çalışır.

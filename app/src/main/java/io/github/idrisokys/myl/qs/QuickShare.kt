@@ -80,13 +80,20 @@ object Bus {
 object Hold {
     private var n = 0
     private var wl: WifiManager.WifiLock? = null
+    private var wl2: WifiManager.WifiLock? = null
     private var pl: PowerManager.WakeLock? = null
 
+    @Suppress("DEPRECATION")
     @Synchronized fun acquire(c: Context) {
         if (n++ > 0) return
         val app = c.applicationContext
         wl = (app.getSystemService(Context.WIFI_SERVICE) as WifiManager)
             .createWifiLock(WifiManager.WIFI_MODE_FULL_LOW_LATENCY, "qs").apply { setReferenceCounted(false); acquire() }
+        // Android 14 öncesinde HIGH_PERF de tutulur: düşük gecikme kilidi yalnızca ön plan + ekran açıkken etkindir.
+        if (Build.VERSION.SDK_INT in 29..33) {
+            wl2 = (app.getSystemService(Context.WIFI_SERVICE) as WifiManager)
+                .createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "qs2").apply { setReferenceCounted(false); acquire() }
+        }
         pl = (app.getSystemService(Context.POWER_SERVICE) as PowerManager)
             .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "qs:xfer").apply { setReferenceCounted(false); acquire(30 * 60 * 1000L) }
     }
@@ -94,8 +101,9 @@ object Hold {
     @Synchronized fun release() {
         if (n == 0 || --n > 0) return
         try { wl?.release() } catch (e: Exception) { }
+        try { wl2?.release() } catch (e: Exception) { }
         try { pl?.release() } catch (e: Exception) { }
-        wl = null; pl = null
+        wl = null; wl2 = null; pl = null
     }
 }
 

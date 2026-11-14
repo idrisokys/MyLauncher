@@ -28,6 +28,9 @@ kotlin {
     compilerOptions { jvmTarget.set(JvmTarget.JVM_17) }
 }
 
+// androidphotofilters eski com.android.support paketini getirir; androidx ile çakıştığı için çıkarılır
+configurations.all { exclude(group = "com.android.support") }
+
 dependencies {
     // EditActivity extends commons' BaseSimpleActivity, so commons is part of the public API
     api("org.fossify:commons:7.1.3")

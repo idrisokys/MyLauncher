@@ -1,3 +1,7 @@
+# MyL 1.11 (derleme düzeltmesi)
+
+- `checkReleaseDuplicateClasses` hatası: `androidphotofilters` bağımlılığı eski `com.android.support:support-compat:25.3.0` getiriyordu; `androidx.core` ile aynı sınıfları içerdiği için çakışıyordu. `app` ve `basic-editor` modüllerinde `com.android.support` grubu bağımlılıklardan çıkarıldı.
+
 # MyL 1.11
 
 - Ana ekrandaki ayarlar (dişli) simgesine basılı tutunca Download klasörü artık sistemin İndirilenler ekranı yerine kendi **Dosyalarım** bölümünde açılır (`openDownloads()` → `FilesActivity.EXTRA_PATH`). Sürüm `1.11 (versionCode 14)`.

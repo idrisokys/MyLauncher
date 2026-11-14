@@ -61,6 +61,10 @@ android {
     packaging { resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" } }
 }
 
+// androidphotofilters (editör filtreleri) eski com.android.support:support-compat:25.3.0'ı getiriyor;
+// androidx.core ile aynı sınıfları içerdiği için "Duplicate class" hatası verir. Eski paketi çıkarıyoruz.
+configurations.all { exclude(group = "com.android.support") }
+
 kotlin {
     compilerOptions { jvmTarget.set(JvmTarget.JVM_17) }
 }

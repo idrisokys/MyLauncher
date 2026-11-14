@@ -21,7 +21,6 @@ import android.widget.EditText
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
-import android.widget.Toast
 import java.io.File
 
 /**
@@ -215,10 +214,10 @@ class TextEditor(
             file = f; saved = t
             setModified(false)
             onSaved()
-            Toast.makeText(act, "Kaydedildi: ${f.name}", Toast.LENGTH_SHORT).show()
+            Notice.show(act, "Kaydedildi: ${f.name}", false)
             after?.invoke()
         } catch (e: Exception) {
-            Toast.makeText(act, "Kaydedilemedi: ${e.message}", Toast.LENGTH_LONG).show()
+            Notice.show(act, "Kaydedilemedi: ${e.message}", true)
         }
     }
 

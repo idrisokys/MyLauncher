@@ -1,9 +1,10 @@
 package io.github.idrisokys.myl
 
+import io.github.idrisokys.myl.common.Notice
+
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -128,7 +129,7 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
 
     val maxChars = 220      // ad değiştirme sınırı
     val addMax = Store.ADD_MAX   // alttaki ekleme alanı sınırı
-    fun toast(s: String) = Toast.makeText(ctx, s, Toast.LENGTH_SHORT).show()
+    fun toast(s: String) = Notice.show(ctx, s, false)
     fun run(reload: Boolean = true, block: () -> Unit) {
         scope.launch { lock.withLock { withContext(Dispatchers.IO) { block() } }; if (reload) tick++ }
     }
@@ -585,7 +586,7 @@ fun TxtScreen(
             val ok = onSave(t)
             saving = false
             if (ok) { saved = t; editing = false; askDiscard = false }
-            else Toast.makeText(ctx, L("Kaydedilemedi", "Could not save"), Toast.LENGTH_SHORT).show()
+            else Notice.show(ctx, L("Kaydedilemedi", "Could not save"), false)
         }
     }
     fun back() {

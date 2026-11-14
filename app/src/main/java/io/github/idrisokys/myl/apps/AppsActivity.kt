@@ -1,6 +1,7 @@
 package io.github.idrisokys.myl.apps
 
 import android.app.Activity
+import io.github.idrisokys.myl.common.Notice
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.graphics.Color
@@ -67,11 +68,11 @@ class AppsActivity : Activity() {
         adapter = ad; lv.adapter = ad
         lv.setOnItemClickListener { _, _, p, _ ->
             try { startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${apps[p].pkg}"))) }
-            catch (e: Exception) { Toast.makeText(this, "Uygulama bilgisi açılamadı", Toast.LENGTH_SHORT).show() }
+            catch (e: Exception) { Notice.show(this, "Uygulama bilgisi açılamadı", false) }
         }
         lv.setOnItemLongClickListener { _, _, p, _ ->
             try { startActivity(Intent(Intent.ACTION_DELETE, Uri.parse("package:${apps[p].pkg}"))) }
-            catch (e: Exception) { Toast.makeText(this, "Kaldırılamadı", Toast.LENGTH_SHORT).show() }
+            catch (e: Exception) { Notice.show(this, "Kaldırılamadı", false) }
             true
         }
         col.addView(tb, -1, dp(54)); col.addView(lv, LinearLayout.LayoutParams(-1, 0, 1f))

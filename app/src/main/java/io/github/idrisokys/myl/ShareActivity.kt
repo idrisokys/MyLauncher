@@ -1,9 +1,10 @@
 package io.github.idrisokys.myl
 
+import io.github.idrisokys.myl.common.Notice
+
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
-import android.widget.Toast
 
 class ShareActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -20,8 +21,7 @@ class ShareActivity : Activity() {
                 else -> L("Kaydedilemedi", "Could not save")
             }
             runOnUiThread {
-                Toast.makeText(app, msg, Toast.LENGTH_SHORT).show()
-                finish()
+                Notice.showThenFinish(this, msg, false)
             }
         }.start()
     }

@@ -70,7 +70,7 @@ class GalleryActivity : Activity() {
 
     private fun dp(x: Int) = (x * resources.displayMetrics.density).toInt()
     private fun tv(t: String, s: Float, c: Int) = TextView(this).apply { text = t; textSize = s; setTextColor(c) }
-    private fun toast(m: String) = Toast.makeText(this, m, Toast.LENGTH_SHORT).show()
+    private fun toast(m: String) = Notice.show(this, m, false)
     private fun uri(f: File) = KFileProvider.uriFor(this, f)
 
     override fun onCreate(s: Bundle?) {
@@ -437,7 +437,7 @@ class GalleryActivity : Activity() {
             val i = Intent(Intent.ACTION_SEND).setType(mime).putExtra(Intent.EXTRA_STREAM, u).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             i.clipData = ClipData.newRawUri("", u)
             startActivity(Intent.createChooser(i, "Paylaş"))
-        } catch (e: Exception) { Toast.makeText(this, "Paylaşılamadı", Toast.LENGTH_SHORT).show() }
+        } catch (e: Exception) { Notice.show(this, "Paylaşılamadı", false) }
     }
 
     private fun iconBtn(ic: Drawable, desc: String, rot: Float, click: () -> Unit): ImageView =
@@ -509,7 +509,7 @@ class GalleryActivity : Activity() {
             v.setOnInfoListener { _, what, _ -> if (what == MediaPlayer.MEDIA_INFO_VIDEO_RENDERING_START) img.visibility = View.GONE; false }
             v.setOnCompletionListener { play.visibility = View.VISIBLE }
             v.setOnErrorListener { _, _, _ ->
-                Toast.makeText(this@GalleryActivity, "Video oynatılamadı", Toast.LENGTH_SHORT).show()
+                Notice.show(this@GalleryActivity, "Video oynatılamadı", false)
                 img.visibility = View.VISIBLE; true
             }
             v.setVideoURI(Uri.fromFile(f))

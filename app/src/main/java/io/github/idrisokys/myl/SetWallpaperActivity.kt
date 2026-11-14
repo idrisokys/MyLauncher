@@ -1,5 +1,7 @@
 package io.github.idrisokys.myl
 
+import io.github.idrisokys.myl.common.Notice
+
 import android.app.Activity
 import android.app.WallpaperManager
 import android.content.Context
@@ -17,7 +19,6 @@ import android.os.Build
 import android.os.Bundle
 import android.util.DisplayMetrics
 import android.view.Display
-import android.widget.Toast
 import kotlin.concurrent.thread
 
 /**
@@ -31,12 +32,11 @@ class SetWallpaperActivity : Activity() {
 
         val uri = extractUri(intent)
         if (uri == null) {
-            Toast.makeText(this, "Görsel bulunamadı", Toast.LENGTH_LONG).show()
-            finish()
+            Notice.showThenFinish(this, "Görsel bulunamadı", true)
             return
         }
 
-        Toast.makeText(this, "Duvar kağıdı ayarlanıyor…", Toast.LENGTH_SHORT).show()
+        Notice.show(this, "Duvar kağıdı ayarlanıyor…", false)
         val app = applicationContext
         thread {
             val msg = try {
@@ -48,8 +48,7 @@ class SetWallpaperActivity : Activity() {
                 "Duvar kağıdı ayarlanamadı"
             }
             runOnUiThread {
-                Toast.makeText(app, msg, Toast.LENGTH_LONG).show()
-                finish()
+                Notice.showThenFinish(this, msg, true)
             }
         }
     }

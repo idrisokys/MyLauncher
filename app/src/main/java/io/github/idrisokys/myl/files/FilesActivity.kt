@@ -130,7 +130,7 @@ class FilesActivity : Activity() {
         i.removeExtra(EXTRA_PATH)
         val d = File(p)
         if (d.isDirectory) { pendingShare = null; picking = false; browse(d) }
-        else Toast.makeText(this, "Klasör bulunamadı: ${d.name}", Toast.LENGTH_SHORT).show()
+        else Notice.show(this, "Klasör bulunamadı: ${d.name}", false)
     }
 
     private fun hasPerm() = StoragePerm.has(this)
@@ -190,7 +190,7 @@ class FilesActivity : Activity() {
             } else {
                 v.addView(ImageView(this).apply { setImageDrawable(Icons.folder()) }, dp(54), dp(54))
                 v.addView(tv(f.name, 14f, 0xFFCCCCCC.toInt()).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END; gravity = Gravity.CENTER; setPadding(dp(2), 0, dp(2), 0) })
-                v.setOnClickListener { if (f.isDirectory) { if (pendingShare == null) { picking = false; list = null }; browse(f) } else Toast.makeText(this, "Klasör bulunamadı", Toast.LENGTH_SHORT).show() }
+                v.setOnClickListener { if (f.isDirectory) { if (pendingShare == null) { picking = false; list = null }; browse(f) } else Notice.show(this, "Klasör bulunamadı", false) }
                 v.setOnLongClickListener { if (pendingShare == null) slotMenu(n); true }
                 // dosyaları bu klasöre sürükleyip bırakınca taşı
                 v.setOnDragListener { view, e ->
@@ -212,7 +212,7 @@ class FilesActivity : Activity() {
     }
 
     private fun moveInto(dest: File, files: List<File>) {
-        if (!dest.isDirectory) { Toast.makeText(this, "Hedef klasör bulunamadı", Toast.LENGTH_SHORT).show(); return }
+        if (!dest.isDirectory) { Notice.show(this, "Hedef klasör bulunamadı", false); return }
         Thread {
             var n = 0
             files.forEach { f ->
@@ -223,7 +223,7 @@ class FilesActivity : Activity() {
                 try { if (!f.renameTo(t)) { f.copyRecursively(t); f.deleteRecursively() }; n++ } catch (e: Exception) {}
             }
             runOnUiThread {
-                Toast.makeText(this, if (n > 0) "$n öğe ${dest.name} klasörüne taşındı" else "Taşınacak öğe yok", Toast.LENGTH_SHORT).show()
+                Notice.show(this, if (n > 0) "$n öğe ${dest.name} klasörüne taşındı" else "Taşınacak öğe yok", false)
                 sel.clear()
                 if (list != null) list = list!!.filter { it.exists() }
                 if (cur != null || list != null) refresh()
@@ -274,7 +274,7 @@ class FilesActivity : Activity() {
                 if (f.isDirectory) browse(f) else openAny(f)
             }, {
                 savePins(pinList().filter { it.path != f.path })
-                Toast.makeText(this, "Sabitleme kaldırıldı: ${f.name}", Toast.LENGTH_SHORT).show(); home()
+                Notice.show(this, "Sabitleme kaldırıldı: ${f.name}", false); home()
             }, if (f.isDirectory) Icons.folder() else Icons.file())
         }
         body.addView(ScrollView(this).apply { addView(g) })
@@ -288,7 +288,7 @@ class FilesActivity : Activity() {
         val l = pinList().toMutableList(); var n = 0
         sel.forEach { f -> if (l.none { it.path == f.path }) { l.add(f); n++ } }
         savePins(l); sel.clear(); editMode = false
-        Toast.makeText(this, if (n > 0) "$n öğe ana ekrana sabitlendi" else "Zaten sabitlenmiş", Toast.LENGTH_SHORT).show()
+        Notice.show(this, if (n > 0) "$n öğe ana ekrana sabitlendi" else "Zaten sabitlenmiş", false)
         refresh()
     }
 
@@ -409,7 +409,7 @@ class FilesActivity : Activity() {
         if (ok) {
             list = list?.filter { it.path != f.path }
             try { MediaScannerConnection.scanFile(this, arrayOf(f.path), null, null) } catch (e: Exception) {}
-        } else Toast.makeText(this, "Silinemedi: ${f.name}", Toast.LENGTH_SHORT).show()
+        } else Notice.show(this, "Silinemedi: ${f.name}", false)
         return ok
     }
 
@@ -427,7 +427,7 @@ class FilesActivity : Activity() {
         fun add(ic: Drawable, label: String, enabled: Boolean = true, act: () -> Unit) =
             bar.addView(barBtn(ic, label, enabled, act), LinearLayout.LayoutParams(0, -1, 1f))
         add(Icons.rename(), "Yeniden\nadlandır", sel.size == 1) {
-            if (sel.size != 1) { Toast.makeText(this, "Yeniden adlandırmak için tek öğe seçin", Toast.LENGTH_SHORT).show(); return@add }
+            if (sel.size != 1) { Notice.show(this, "Yeniden adlandırmak için tek öğe seçin", false); return@add }
             val f = sel.first()
             promptText("Yeni ad", f.name) { n -> if (n.isNotEmpty()) f.renameTo(File(f.parentFile, n)); sel.clear(); if (list != null) list = list!!.filter { it.exists() }; refresh() }
         }
@@ -438,10 +438,10 @@ class FilesActivity : Activity() {
             }.setNegativeButton("İptal", null).show()
         }
         add(Icons.share(), "Paylaş") {
-            if (sel.none { it.isFile }) Toast.makeText(this, "Klasörleri paylaşmak için önce sıkıştırın", Toast.LENGTH_SHORT).show() else share()
+            if (sel.none { it.isFile }) Notice.show(this, "Klasörleri paylaşmak için önce sıkıştırın", false) else share()
         }
-        add(Icons.move(), "Taşı") { clip = sel.toList(); cut = true; sel.clear(); editMode = false; refresh(); Toast.makeText(this, "Hedef klasöre gidip Yapıştır'a basın", Toast.LENGTH_SHORT).show() }
-        add(Icons.copy(), "Kopyala") { clip = sel.toList(); cut = false; sel.clear(); editMode = false; refresh(); Toast.makeText(this, "Hedef klasöre gidip Yapıştır'a basın", Toast.LENGTH_SHORT).show() }
+        add(Icons.move(), "Taşı") { clip = sel.toList(); cut = true; sel.clear(); editMode = false; refresh(); Notice.show(this, "Hedef klasöre gidip Yapıştır'a basın", false) }
+        add(Icons.copy(), "Kopyala") { clip = sel.toList(); cut = false; sel.clear(); editMode = false; refresh(); Notice.show(this, "Hedef klasöre gidip Yapıştır'a basın", false) }
         add(Icons.zip(), "Sıkıştır") { zipSelected() }
         val zips = sel.filter { it.isFile && it.extension.lowercase() == "zip" }
         if (zips.isNotEmpty()) add(Icons.unzip(), "Zip'i\naç") { val z = zips.toList(); sel.clear(); z.forEach { unzip(it) } }
@@ -461,12 +461,12 @@ class FilesActivity : Activity() {
     /** Şu an açık olan klasörde yeni klasör oluşturur. */
     private fun newFolder() {
         val d = cur
-        if (d == null || list != null) { Toast.makeText(this, "Yeni klasör için bir klasörün içine girin", Toast.LENGTH_SHORT).show(); return }
+        if (d == null || list != null) { Notice.show(this, "Yeni klasör için bir klasörün içine girin", false); return }
         promptText("Yeni klasör", "Yeni klasör") { n ->
             val name = n.replace("/", "_")
             if (name.isNotEmpty()) {
                 val t = uniqueFile(d, name)
-                if (t.mkdirs()) refresh(true) else Toast.makeText(this, "Klasör oluşturulamadı", Toast.LENGTH_SHORT).show()
+                if (t.mkdirs()) refresh(true) else Notice.show(this, "Klasör oluşturulamadı", false)
             }
         }
     }
@@ -476,7 +476,7 @@ class FilesActivity : Activity() {
         val dir = (if (list == null) cur else null) ?: items.first().parentFile ?: return
         val base = if (items.size == 1) (if (items[0].isDirectory) items[0].name else items[0].nameWithoutExtension) else "Arsiv"
         val out = uniqueFile(dir, "$base.zip"); sel.clear()
-        Toast.makeText(this, "Sıkıştırılıyor…", Toast.LENGTH_SHORT).show()
+        Notice.show(this, "Sıkıştırılıyor…", false)
         Thread {
             var ok = true
             try {
@@ -495,7 +495,7 @@ class FilesActivity : Activity() {
                 }
             } catch (e: Exception) { ok = false; out.delete() }
             runOnUiThread {
-                Toast.makeText(this, if (ok) "Oluşturuldu: ${out.name}" else "Sıkıştırma başarısız", Toast.LENGTH_LONG).show()
+                Notice.show(this, if (ok) "Oluşturuldu: ${out.name}" else "Sıkıştırma başarısız", true)
                 if (list != null) list = list!! + (if (ok) listOf(out) else emptyList())
                 refresh()
             }
@@ -505,7 +505,7 @@ class FilesActivity : Activity() {
     private fun unzip(z: File) {
         val parent = z.parentFile ?: return
         val dest = uniqueFile(parent, z.nameWithoutExtension)
-        Toast.makeText(this, "Çıkarılıyor…", Toast.LENGTH_SHORT).show()
+        Notice.show(this, "Çıkarılıyor…", false)
         Thread {
             var ok = true
             try {
@@ -521,7 +521,7 @@ class FilesActivity : Activity() {
                 }
             } catch (e: Exception) { ok = false; dest.deleteRecursively() }
             runOnUiThread {
-                Toast.makeText(this, if (ok) "Çıkarıldı: ${dest.name}" else "Zip açılamadı", Toast.LENGTH_LONG).show()
+                Notice.show(this, if (ok) "Çıkarıldı: ${dest.name}" else "Zip açılamadı", true)
                 if (list != null) list = list!! + (if (ok) listOf(dest) else emptyList())
                 refresh()
             }
@@ -546,13 +546,13 @@ class FilesActivity : Activity() {
     /** APK'ya dokununca yükleme ekranını açar; "bilinmeyen kaynak" izni yoksa önce o ayar açılır. */
     private fun installApk(f: File) {
         if (Build.VERSION.SDK_INT >= 26 && !packageManager.canRequestPackageInstalls()) {
-            Toast.makeText(this, "Önce bu uygulamaya yükleme izni verin, sonra APK'ya tekrar dokunun", Toast.LENGTH_LONG).show()
+            Notice.show(this, "Önce bu uygulamaya yükleme izni verin, sonra APK'ya tekrar dokunun", true)
             startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName")))
             return
         }
         try {
             startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri(f), "application/vnd.android.package-archive").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
-        } catch (e: ActivityNotFoundException) { Toast.makeText(this, "Yükleyici bulunamadı", Toast.LENGTH_SHORT).show() }
+        } catch (e: ActivityNotFoundException) { Notice.show(this, "Yükleyici bulunamadı", false) }
     }
 
     private fun openEditor(f: File?) {
@@ -566,7 +566,7 @@ class FilesActivity : Activity() {
     private fun open(f: File) {
         val mime = MimeTypeMap.getSingleton().getMimeTypeFromExtension(f.extension.lowercase()) ?: "*/*"
         try { startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri(f), mime).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)) }
-        catch (e: ActivityNotFoundException) { Toast.makeText(this, "Açacak uygulama yok", Toast.LENGTH_SHORT).show() }
+        catch (e: ActivityNotFoundException) { Notice.show(this, "Açacak uygulama yok", false) }
     }
 
     private fun share() {
@@ -598,7 +598,7 @@ class FilesActivity : Activity() {
             else i.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)?.let { us.addAll(it) }
         } catch (e: Exception) {}
         i.clipData?.let { cd -> for (k in 0 until cd.itemCount) cd.getItemAt(k).uri?.let { us.add(it) } }
-        if (us.isEmpty()) { Toast.makeText(this, "Paylaşılan dosya bulunamadı", Toast.LENGTH_SHORT).show(); return }
+        if (us.isEmpty()) { Notice.show(this, "Paylaşılan dosya bulunamadı", false); return }
         pendingShare = us.toList()
         slotPick = -1; picking = true; list = null; sel.clear(); editMode = false
         val last = File(prefs.getString("lastSave", null) ?: "")
@@ -621,7 +621,7 @@ class FilesActivity : Activity() {
                     val safe = nm.replace('/', '_').replace('\\', '_').trim()
                     if (safe.isEmpty() || safe == "." || safe == "..") return@promptText
                     val nd = File(d, safe)
-                    if (nd.isDirectory || nd.mkdirs()) browse(nd) else Toast.makeText(this@FilesActivity, "Klasör oluşturulamadı", Toast.LENGTH_SHORT).show()
+                    if (nd.isDirectory || nd.mkdirs()) browse(nd) else Notice.show(this@FilesActivity, "Klasör oluşturulamadı", false)
                 }
             }
         }, LinearLayout.LayoutParams(0, -2, 1f))
@@ -647,10 +647,10 @@ class FilesActivity : Activity() {
 
     private fun saveShared(dest: File) {
         val us = pendingShare ?: return
-        if (!dest.isDirectory || !dest.canWrite()) { Toast.makeText(this, "Bu klasöre yazılamıyor", Toast.LENGTH_SHORT).show(); return }
+        if (!dest.isDirectory || !dest.canWrite()) { Notice.show(this, "Bu klasöre yazılamıyor", false); return }
         pendingShare = null; picking = false
         prefs.edit().putString("lastSave", dest.path).apply()
-        Toast.makeText(this, "Kaydediliyor…", Toast.LENGTH_SHORT).show()
+        Notice.show(this, "Kaydediliyor…", false)
         Thread {
             val saved = ArrayList<String>()
             us.forEach { u ->
@@ -668,7 +668,7 @@ class FilesActivity : Activity() {
                     saved.size == us.size -> "${saved.size} dosya ${dest.name} klasörüne kaydedildi"
                     else -> "${saved.size}/${us.size} dosya kaydedildi"
                 }
-                Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
+                Notice.show(this, msg, true)
                 browse(dest)
             }
             if (saved.isNotEmpty()) try { MediaScannerConnection.scanFile(this, saved.toTypedArray(), null, null) } catch (e: Exception) {}

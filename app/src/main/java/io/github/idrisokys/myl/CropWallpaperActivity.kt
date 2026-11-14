@@ -1,5 +1,7 @@
 package io.github.idrisokys.myl
 
+import io.github.idrisokys.myl.common.Notice
+
 import android.app.Activity
 import android.app.WallpaperManager
 import android.content.Context
@@ -24,7 +26,6 @@ import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
-import android.widget.Toast
 import kotlin.concurrent.thread
 
 /**
@@ -54,8 +55,7 @@ class CropWallpaperActivity : Activity() {
                 if (scale < 1f) decoder.setTargetSize((w * scale).toInt(), (h * scale).toInt())
             }
         } catch (e: Exception) {
-            Toast.makeText(this, "Görsel açılamadı", Toast.LENGTH_LONG).show()
-            finish()
+            Notice.showThenFinish(this, "Görsel açılamadı", true)
             return
         }
 
@@ -123,8 +123,7 @@ class CropWallpaperActivity : Activity() {
                 "Duvar kağıdı ayarlanamadı"
             }
             runOnUiThread {
-                Toast.makeText(app, msg, Toast.LENGTH_LONG).show()
-                finish()
+                Notice.showThenFinish(this, msg, true)
             }
         }
     }

@@ -1,5 +1,7 @@
 package io.github.idrisokys.myl
 
+import io.github.idrisokys.myl.common.Notice
+
 import android.Manifest
 import android.app.Activity
 import android.app.AlertDialog
@@ -62,7 +64,6 @@ import android.widget.PopupMenu
 import android.widget.PopupWindow
 import android.widget.ScrollView
 import android.widget.TextView
-import android.widget.Toast
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.ItemTouchHelper
@@ -881,7 +882,7 @@ class MainActivity : Activity() {
         try { startActivity(i) } catch (e: Exception) { toast("Açılamadı") }
     }
 
-    private fun toast(s: String) = Toast.makeText(this, s, Toast.LENGTH_SHORT).show()
+    private fun toast(s: String) = Notice.show(this, s, false)
 
     // ---------- Arama ----------
     /** Türkçe karakterleri sadeleştirir: "Işık" ile "isik" birbirini bulur. */

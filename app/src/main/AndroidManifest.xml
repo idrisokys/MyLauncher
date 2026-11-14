@@ -14,7 +14,9 @@
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="29" tools:replace="android:maxSdkVersion" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" tools:replace="android:maxSdkVersion" />
 
+    <!-- tools:replace: androidphotofilters (editör filtreleri) kendi manifest'inde allowBackup/label tanımlıyor; uygulamanınkiler geçerli olsun -->
     <application
+        tools:replace="android:allowBackup,android:label,android:icon,android:roundIcon,android:theme"
         android:allowBackup="false"
         android:requestLegacyExternalStorage="true"
         android:icon="@mipmap/ic_launcher"

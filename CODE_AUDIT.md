@@ -1,5 +1,7 @@
 # MyL 1.11 (derleme düzeltmesi)
 
+- Manifest birleştirme hatası: `androidphotofilters` kendi `<application>` öğesinde `allowBackup=true` ve `label=@string/app_name` tanımlıyordu. Uygulamanın `<application>` öğesine `tools:replace` eklendi; uygulamanın değerleri (allowBackup=false, label=MyL) geçerli.
+
 - Manifest birleştirme hatası: `basic-editor` `WRITE_EXTERNAL_STORAGE` iznini `maxSdkVersion=28`, uygulama `29` ile tanımlıyordu. Uygulamadaki iki depolama izninde `tools:replace="android:maxSdkVersion"` kullanıldı; uygulamanın değeri (29) geçerli.
 
 - `checkReleaseDuplicateClasses` hatası: `androidphotofilters` bağımlılığı eski `com.android.support:support-compat:25.3.0` getiriyordu; `androidx.core` ile aynı sınıfları içerdiği için çakışıyordu. `app` ve `basic-editor` modüllerinde `com.android.support` grubu bağımlılıklardan çıkarıldı.

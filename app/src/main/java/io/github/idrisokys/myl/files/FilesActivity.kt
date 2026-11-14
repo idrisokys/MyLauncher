@@ -49,13 +49,8 @@ class FilesActivity : Activity() {
     private var picking = false; private var slotPick = -1; private val sel = linkedSetOf<File>()
     private var clip = listOf<File>(); private var cut = false
     private var showHidden = true; private var asked = false
-    private var appsMode = false
     private var pendingShare: List<Uri>? = null   // dışarıdan paylaşılan, kaydedilmeyi bekleyen dosyalar
     private var editor: TextEditor? = null
-    private class AppRow(val label: String, val pkg: String, val size: Long, val time: Long, val ai: ApplicationInfo)
-    private var apps = listOf<AppRow>()
-    private var appAdapter: BaseAdapter? = null
-    private val iconCache = HashMap<String, Drawable>()
     private val root: File = Environment.getExternalStorageDirectory()
     private val prefs by lazy { getSharedPreferences("files", 0) }
     private val IMG = setOf("jpg", "jpeg", "png", "gif", "webp", "bmp", "heic", "svg")
@@ -142,7 +137,7 @@ class FilesActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
-        if (hasPerm()) { if (appsMode) loadApps() else if (cur != null || list != null) refresh(true) }
+        if (hasPerm()) { if (cur != null || list != null) refresh(true) }
         else if (!asked) {
             asked = true
             StoragePerm.request(this)
@@ -157,7 +152,7 @@ class FilesActivity : Activity() {
         if (crumbs) buildCrumbs()
         cancelV.visibility = if (editMode) View.VISIBLE else View.GONE
         selAllV.visibility = if (editMode) View.VISIBLE else View.GONE
-        val canEdit = !editMode && !appsMode && pendingShare == null && !picking && (cur != null || list != null)
+        val canEdit = !editMode && pendingShare == null && !picking && (cur != null || list != null)
         penV.visibility = if (canEdit) View.VISIBLE else View.GONE
     }
 
@@ -244,10 +239,10 @@ class FilesActivity : Activity() {
     }
 
     private fun removeSlot(n: Int) { prefs.edit().remove("slot$n").apply(); slotsChanged() }
-    private fun slotsChanged() { updateDock(); if (cur == null && list == null && !picking && !appsMode) home() }
+    private fun slotsChanged() { updateDock(); if (cur == null && list == null && !picking) home() }
 
     private fun home() {
-        cur = null; list = null; sel.clear(); editMode = false; picking = false; appsMode = false; pendingShare = null; body.removeAllViews()
+        cur = null; list = null; sel.clear(); editMode = false; picking = false; pendingShare = null; body.removeAllViews()
         chrome("Dosyalarım")
         val g = GridLayout(this).apply { columnCount = 3; setPadding(dp(6), dp(16), dp(6), dp(16)) }
         fun tile(ic: String, name: String, sub: String, click: () -> Unit, long: (() -> Unit)? = null, res: Drawable? = null, dashed: Boolean = false, big: Boolean = false) {
@@ -273,7 +268,6 @@ class FilesActivity : Activity() {
         }
         tile("", "Ana bellek", "", { browse(root) }, null, Icons.homeColor())
         tile("📥", "İndirilenler", "", { browse(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)) }, null, Icons.folder())
-        tile("", "Uygulamalar", "", { openApps() }, null, Icons.androidApp(), false, true)
         tile("", "Metin düzenleyici", "", { openEditor(null) }, null, Icons.textEditor())
         pinList().filter { it.exists() }.forEach { f ->
             tile("", f.name, "", {
@@ -286,56 +280,6 @@ class FilesActivity : Activity() {
         body.addView(ScrollView(this).apply { addView(g) })
     }
 
-
-    @Suppress("DEPRECATION")
-    private fun loadApps() {
-        Thread {
-            val pm = packageManager
-            val l = pm.getInstalledPackages(0).mapNotNull { pi ->
-                val ai = pi.applicationInfo ?: return@mapNotNull null
-                var size = try { File(ai.sourceDir).length() } catch (e: Exception) { 0L }
-                ai.splitSourceDirs?.forEach { size += File(it).length() }
-                AppRow(ai.loadLabel(pm).toString(), pi.packageName, size, pi.firstInstallTime, ai)
-            }.sortedByDescending { it.time }
-            runOnUiThread { if (appsMode) { apps = l; appAdapter?.notifyDataSetChanged() } }
-        }.start()
-    }
-
-    private fun openApps() {
-        cur = null; list = null; sel.clear(); editMode = false; picking = false; appsMode = true
-        chrome("Uygulamalar")
-        apps = emptyList()
-        val lv = ListView(this).apply { divider = ColorDrawable(0xFF2E2E2E.toInt()); dividerHeight = dp(1); setBackgroundColor(bg) }
-        val ad = object : BaseAdapter() {
-            override fun getCount() = apps.size
-            override fun getItem(p: Int) = apps[p]
-            override fun getItemId(p: Int) = p.toLong()
-            override fun getView(p: Int, v: View?, parent: android.view.ViewGroup?): View {
-                val a = apps[p]
-                val row = LinearLayout(this@FilesActivity).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(dp(12), dp(6), dp(12), dp(6)) }
-                val ic = iconCache.getOrPut(a.pkg) { a.ai.loadIcon(packageManager) }
-                row.addView(ImageView(this@FilesActivity).apply { setImageDrawable(ic) }, dp(50), dp(50))
-                val c = LinearLayout(this@FilesActivity).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(12), 0, 0, 0) }
-                c.addView(tv(a.label, 19f, Color.WHITE).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END })
-                c.addView(tv("${a.pkg} • ${sz(a.size)}", 14f, 0xFF999999.toInt()).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END })
-                row.addView(c, LinearLayout.LayoutParams(0, -2, 1f))
-                return row
-            }
-        }
-        appAdapter = ad
-        lv.adapter = ad
-        lv.setOnItemClickListener { _, _, p, _ ->
-            try { startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${apps[p].pkg}"))) }
-            catch (e: Exception) { Toast.makeText(this, "Uygulama bilgisi açılamadı", Toast.LENGTH_SHORT).show() }
-        }
-        lv.setOnItemLongClickListener { _, _, p, _ ->
-            try { startActivity(Intent(Intent.ACTION_DELETE, Uri.parse("package:${apps[p].pkg}"))) }
-            catch (e: Exception) { Toast.makeText(this, "Kaldırılamadı", Toast.LENGTH_SHORT).show() }
-            true
-        }
-        body.removeAllViews(); body.addView(lv)
-        loadApps()
-    }
 
     private fun pinList(): List<File> = (prefs.getString("hpins", "") ?: "").split("\n").filter { it.isNotEmpty() }.map { File(it) }
     private fun savePins(l: List<File>) { prefs.edit().putString("hpins", l.joinToString("\n") { it.path }).apply() }
@@ -356,8 +300,8 @@ class FilesActivity : Activity() {
 
     private fun setSlot(n: Int, f: File) { prefs.edit().putString("slot$n", f.path).apply(); slotsChanged() }
 
-    private fun browse(d: File) { appsMode = false; cur = d; list = null; sel.clear(); editMode = false; refresh() }
-    private fun openList(t: String, l: List<File>) { appsMode = false; list = l; listTitle = t; sel.clear(); editMode = false; refresh() }
+    private fun browse(d: File) { cur = d; list = null; sel.clear(); editMode = false; refresh() }
+    private fun openList(t: String, l: List<File>) { list = l; listTitle = t; sel.clear(); editMode = false; refresh() }
 
     private fun items(): List<File> {
         val base = list ?: (cur?.listFiles()?.toList() ?: emptyList())
@@ -656,7 +600,7 @@ class FilesActivity : Activity() {
         i.clipData?.let { cd -> for (k in 0 until cd.itemCount) cd.getItemAt(k).uri?.let { us.add(it) } }
         if (us.isEmpty()) { Toast.makeText(this, "Paylaşılan dosya bulunamadı", Toast.LENGTH_SHORT).show(); return }
         pendingShare = us.toList()
-        slotPick = -1; picking = true; appsMode = false; list = null; sel.clear(); editMode = false
+        slotPick = -1; picking = true; list = null; sel.clear(); editMode = false
         val last = File(prefs.getString("lastSave", null) ?: "")
         browse(if (last.isDirectory) last else root)
     }
@@ -736,7 +680,6 @@ class FilesActivity : Activity() {
         when {
             pendingShare != null -> { val c = cur; if (c == null || c == root || c.parentFile?.canRead() != true) cancelShare() else browse(c.parentFile!!) }
             editMode -> { sel.clear(); editMode = false; refresh() }
-            appsMode -> home()
             list != null -> { list = null; if (cur != null) refresh() else home() }
             cur != null -> { val c = cur!!; if (c == root || c.parentFile?.canRead() != true) home() else browse(c.parentFile!!) }
             else -> super.onBackPressed()

@@ -10,7 +10,7 @@
     <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.SET_WALLPAPER" />
-    <!-- Tüm dosyalara erişim: Notlarım (Link klasörü), Dosyalarım ve Galerim bu tek izni ortak kullanır -->
+    <!-- Tüm dosyalara erişim: Notlarım (Link klasörü), Dosyalarım ve Galerim bu tek izni ortak kullanır (Uygulamalar depolama izni istemez) -->
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="29" tools:replace="android:maxSdkVersion" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" tools:replace="android:maxSdkVersion" />
@@ -127,6 +127,21 @@
                 <action android:name="android.intent.action.SEND_MULTIPLE" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="*/*" />
+            </intent-filter>
+        </activity>
+        <!-- Uygulamalar: yüklü uygulamalar listesi (eskiden Dosyalarım'ın içindeydi). Kendi görevinde çalışır ve ana ekran ızgarasında simge olarak görünür. -->
+        <activity
+            android:name=".apps.AppsActivity"
+            android:exported="true"
+            android:label="Uygulamalar"
+            android:icon="@mipmap/ic_apps"
+            android:roundIcon="@mipmap/ic_apps"
+            android:theme="@android:style/Theme.DeviceDefault.NoActionBar"
+            android:launchMode="singleTask"
+            android:taskAffinity="io.github.idrisokys.myl.apps">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
         <!-- Galerim: resim/video galerisi bölümü (seçim modu, toplu silme, klasöre taşıma). Kendi görevinde çalışır. -->

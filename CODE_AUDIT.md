@@ -1,3 +1,8 @@
+# MyL 1.11 (internet erişimi kaldırıldı)
+
+- `Store.fetchTitle` (Notlarım'a link kaydederken sayfa başlığını çeken tek ağ kodu) ve ilgili `HttpURLConnection` kodu silindi. Başlık artık paylaşılan konudan, metinden ya da sitenin adresinden alınır.
+- Manifestten `INTERNET` izni `tools:node="remove"` ile kaldırıldı; kütüphaneler eklese bile birleşik manifestte yer almaz. Uygulama internete erişemez.
+
 # MyL 1.11 (sahte sürüm uyarısı)
 
 - Düzenleyici açılırken çıkan "You are using a fake version of the app…" uyarısı commons'ın `BaseSimpleActivity.onCreate` denetiminden geliyordu (paket adı `org.fossify.` ile başlamıyor). `EditorBaseActivity`, yalnızca `super.onCreate` sürecinde `getPackageName()` için `org.fossify.editor` bildirir; sonrasında gerçek paket adı döner.

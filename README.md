@@ -5,6 +5,10 @@
 </p>
 
 
+> **v1.14 — gesture & gallery changes:** the **pencil** icon now opens **Notlarım** on tap and toggles **edit mode** on long-press; the **camera** icon opens **Galerim** on tap and the camera on long-press; the *Link klasörü* entry was removed from the ⚙ menu. In **Dosyalarım**, long-pressing an item **renames** it, and images open in Galerim's full-screen viewer by default. In **Galerim**, long-pressing a picture no longer deletes it: it is **moved to the hidden `<storage>/.onemsiz` folder** (the bulk trash icon in select mode still deletes). The share menu has a new **"Resmi Editle"** entry that opens a shared image in the same editor as Galerim's magic wand (jpg/png/webp). / Kalem: dokun = Notlarım, basılı tut = düzenleme modu; kamera: dokun = Galerim, basılı tut = kamera; Dosyalarım'da basılı tut = ad değiştir; Galerim'de basılı tut = `.onemsiz` klasörüne taşı; Paylaş menüsünde "Resmi Editle".
+>
+> **v1.13 — Hızlı Paylaş (QuickShare) merged in:** a UI-less quick-share feature. It appears only as a **Quick Settings tile** (tap = start/stop receiving) and as a **"Hızlı Paylaş" entry in the share sheet** (sends files to the devices found on the same Wi-Fi; nearby devices also appear as direct share targets). Received files go to `<storage>/Link`; tapping the notification opens that folder in Dosyalarım. The receiver is **off by default** and only runs (as a foreground service with a notification) while the tile is on. This feature needs the `INTERNET` permission (plain LAN TCP sockets, no internet servers are contacted). / Arayüzsüz Hızlı Paylaş: yalnızca Hızlı Ayarlar kutucuğu ve Paylaş menüsü girişi olarak görünür; kutucuk varsayılan olarak kapalıdır.
+>
 > **v1.12 — Uygulamalar ayrı bölüm oldu:** Dosyalarım içindeki *Uygulamalar* (yüklü uygulamalar listesi) artık MyL'nin kendi bölümü: ana ekran ızgarasında kendi simgesi var (Notlarım/Galerim gibi), kendi görevinde çalışır ve depolama izni istemez. Dokununca uygulama bilgisi, basılı tutunca kaldırma ekranı açılır. / The *Apps* list formerly inside Dosyalarım is now its own MyL section with its own home-grid icon.
 >
 > **v1.9 — Dosyalarım & Galerim merged in:** the former standalone *Dosyalarım* (file manager) and *Galerim* (photo/video gallery) apps are now sections of MyL, each with its own icon on the home grid (like Notlarım) and sharing one storage permission, one file provider and one icon set. Galerim has a pencil select mode, a trash icon for bulk delete and a move-to-folder button. / *Dosyalarım* ve *Galerim* artık MyL'nin bölümleri: ana ekran ızgarasında kendi simgeleri var; tek depolama izni, tek dosya sağlayıcı ve ortak simgeleri paylaşırlar.
@@ -17,7 +21,7 @@
 
 # MyL — A Light and Fast Android Launcher
 
-A simple, fast and no-frills Android home screen. All your apps on one screen, a powerful search bar, drag-and-drop folders and app shortcuts. No extra libraries (only `RecyclerView`), no background services, no ads, no tracking.
+A simple, fast and no-frills Android home screen. All your apps on one screen, a powerful search bar, drag-and-drop folders and app shortcuts. No extra libraries (only `RecyclerView`), no background services unless you turn on the Hızlı Paylaş tile, no ads, no tracking.
 
 ---
 
@@ -108,7 +112,7 @@ This version was optimized from the ground up for speed:
 | `REQUEST_DELETE_PACKAGES` | Open the uninstall screen from the menu |
 | `SET_WALLPAPER` | Set the shared image as wallpaper (normal permission, no prompt) |
 
-There is **no internet permission**. Web searches are handed off to your browser. Data is stored only on the device (`SharedPreferences`), and backup is disabled (`allowBackup=false`).
+The only network use is **Hızlı Paylaş** (local Wi-Fi file sharing, `INTERNET` permission is required for LAN sockets); MyL never contacts internet servers. Web searches are handed off to your browser. Data is stored only on the device (`SharedPreferences`), and backup is disabled (`allowBackup=false`).
 
 ---
 
@@ -193,7 +197,7 @@ Personal project. Feel free to use and modify it as you like.
 
 # MyL — Hafif ve Hızlı Android Launcher
 
-Sade, hızlı ve gösterişten uzak bir Android ana ekran uygulaması. Tek ekranda tüm uygulamalar, güçlü bir arama çubuğu, sürükle-bırak klasörler ve uygulama kısayolları. Ek kütüphane yok (yalnızca `RecyclerView`), arka plan servisi yok, reklam ve izleme yok.
+Sade, hızlı ve gösterişten uzak bir Android ana ekran uygulaması. Tek ekranda tüm uygulamalar, güçlü bir arama çubuğu, sürükle-bırak klasörler ve uygulama kısayolları. Ek kütüphane yok (yalnızca `RecyclerView`), Hızlı Paylaş kutucuğunu açmadıkça arka plan servisi yok, reklam ve izleme yok.
 
 ---
 
@@ -284,7 +288,7 @@ Bu sürüm hız için baştan optimize edildi:
 | `REQUEST_DELETE_PACKAGES` | Menüden uygulama kaldırma ekranını açmak |
 | `SET_WALLPAPER` | Paylaşılan görseli duvar kağıdı yapmak (normal izin, sorulmaz) |
 
-İnternet izni **yoktur**. Web aramaları tarayıcıya yönlendirilerek yapılır. Veriler yalnızca cihazda (`SharedPreferences`) tutulur, yedekleme kapalıdır (`allowBackup=false`).
+Ağ kullanımı yalnızca **Hızlı Paylaş** içindir (yerel Wi-Fi dosya paylaşımı; yerel ağ soketleri için `INTERNET` izni gerekir), MyL internet sunucularına bağlanmaz. Web aramaları tarayıcıya yönlendirilerek yapılır. Veriler yalnızca cihazda (`SharedPreferences`) tutulur, yedekleme kapalıdır (`allowBackup=false`).
 
 ---
 

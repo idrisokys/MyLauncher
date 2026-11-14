@@ -380,12 +380,8 @@ class FilesActivity : Activity() {
         lv.setOnItemLongClickListener { _, v, p, _ ->
             if (pendingShare != null) return@setOnItemLongClickListener true
             val f = l[p]
-            if (editMode) {
-                // seçim modunda satırın kendisi etkisiz; seç/sürükle sadece kutucuktan
-            } else if (f.isFile && (f.extension.lowercase() in IMG || f.extension.lowercase() in VID)) {
-                // resim/video: basılı tutunca onay ve bildirim olmadan sil
-                if (removeMedia(f)) refresh(true)
-            }
+            // seçim modunda satırın kendisi etkisiz (seç/sürükle sadece kutucuktan); aksi halde basılı tutunca ad değiştir
+            if (!editMode) renameItem(f)
             true
         }
         val wrap = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
@@ -403,14 +399,20 @@ class FilesActivity : Activity() {
     }
 
 
-    /** Dosyayı diskten ve ana listeden siler. Onay sormaz (klasör listesinde resme/videoya basılı tutunca). */
-    private fun removeMedia(f: File): Boolean {
-        val ok = try { f.delete() } catch (e: Exception) { false }
-        if (ok) {
-            list = list?.filter { it.path != f.path }
-            try { MediaScannerConnection.scanFile(this, arrayOf(f.path), null, null) } catch (e: Exception) {}
-        } else Notice.show(this, "Silinemedi: ${f.name}", false)
-        return ok
+    /** Basılı tutulan dosya/klasörün adını değiştirir. */
+    private fun renameItem(f: File) {
+        promptText("Yeni ad", f.name) { n ->
+            val name = n.trim()
+            if (name.isEmpty() || name == f.name) return@promptText
+            if (name.contains('/')) { Notice.show(this, "Ad '/' içeremez", false); return@promptText }
+            val t = File(f.parentFile, name)
+            if (t.exists()) { Notice.show(this, "Bu adda bir öğe zaten var", false); return@promptText }
+            if (!f.renameTo(t)) { Notice.show(this, "Yeniden adlandırılamadı", false); return@promptText }
+            try { MediaScannerConnection.scanFile(this, arrayOf(f.path, t.path), null, null) } catch (e: Exception) {}
+            sel.clear()
+            list = list?.map { if (it.path == f.path) t else it }
+            refresh(true)
+        }
     }
 
     override fun onDestroy() { editor?.dismiss(); super.onDestroy() }
@@ -540,7 +542,17 @@ class FilesActivity : Activity() {
     private fun isText(f: File) = f.extension.lowercase() in TXT && f.length() <= 1_000_000
 
     private fun openAny(f: File) {
-        if (f.extension.lowercase() == "zip") zipDialog(f) else if (f.extension.lowercase() == "apk") installApk(f) else if (isText(f)) openEditor(f) else open(f)
+        if (f.extension.lowercase() == "zip") zipDialog(f) else if (f.extension.lowercase() == "apk") installApk(f)
+        else if (f.extension.lowercase() in IMG) openInGallery(f) else if (isText(f)) openEditor(f) else open(f)
+    }
+
+    /** Resimler varsayılan olarak Galerim'in tam ekran gezgininde açılır. */
+    private fun openInGallery(f: File) {
+        try {
+            startActivity(Intent(this, io.github.idrisokys.myl.gallery.GalleryActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                .putExtra(io.github.idrisokys.myl.gallery.GalleryActivity.EXTRA_FILE, f.absolutePath))
+        } catch (e: Exception) { open(f) }
     }
 
     /** APK'ya dokununca yükleme ekranını açar; "bilinmeyen kaynak" izni yoksa önce o ayar açılır. */

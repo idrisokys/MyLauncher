@@ -44,6 +44,24 @@ fun uniqueFile(d: File, name: String): File {
     return t
 }
 
+/**
+ * Silmek yerine dosyayı ana dizindeki gizli ".onemsiz" klasörüne taşır (aynı ad varsa ad_1, ad_2…).
+ * Klasörde .nomedia olduğundan taşınan resimler hiçbir galeride görünmez; Galerim de gizli klasörleri taramaz.
+ */
+fun moveToOnemsiz(f: File): Boolean = try {
+    val d = File(Environment.getExternalStorageDirectory(), ".onemsiz")
+    d.mkdirs()
+    try { File(d, ".nomedia").createNewFile() } catch (e: Exception) { }
+    val t = uniqueFile(d, f.name)
+    if (f.renameTo(t)) true
+    else {
+        val lm = f.lastModified()
+        f.copyTo(t, overwrite = false)
+        t.setLastModified(lm)
+        if (f.delete()) true else { t.delete(); false }
+    }
+} catch (e: Exception) { false }
+
 /** Tek satırlık metin girişi diyaloğu. */
 fun Activity.promptText(title: String, init: String, ok: (String) -> Unit) {
     val e = EditText(this).apply { setText(init); setSingleLine() }

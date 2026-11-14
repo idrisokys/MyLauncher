@@ -2,8 +2,15 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- Uygulama internete hiç erişemez: izin kütüphane manifestlerinden gelse bile kaldırılır -->
-    <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />
+    <!-- Hızlı Paylaş: aynı Wi-Fi'deki cihazlarla TCP soketi açmak için INTERNET izni şarttır (MyL başka hiçbir yerde ağ kullanmaz) -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.READ_CONTACTS" />
     <uses-permission android:name="android.permission.CALL_PHONE" />
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
@@ -45,6 +52,8 @@
             <intent-filter>
                 <action android:name="android.content.pm.action.CONFIRM_PIN_SHORTCUT" />
             </intent-filter>
+            <!-- Hızlı Paylaş: cihazları Paylaş menüsünde doğrudan hedef yapan share-target tanımı -->
+            <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
         </activity>
         <!-- Notlarım (eski adıyla LinkCepte). LAUNCHER girişi sayesinde ana ekran ızgarasında "Notlarım" simgesi olarak görünür;
              edit simgesine basılı tutunca da açılır. Kendi görevinde çalışır, Home ile launcher'ı etkilemez. -->
@@ -93,6 +102,21 @@
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.ATTACH_DATA" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+            </intent-filter>
+        </activity>
+        <!-- Paylaş menüsünde "Resmi Editle": resmi Galerim'deki sihirli değneğin açtığı düzenleyicide açar (arayüzsüz) -->
+        <activity
+            android:name=".EditShareActivity"
+            android:exported="true"
+            android:label="Resmi Editle"
+            android:icon="@mipmap/ic_gallery"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@style/ShareTheme">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="image/*" />
             </intent-filter>
@@ -182,5 +206,56 @@
             android:authorities="${applicationId}.fp"
             android:exported="false"
             android:grantUriPermissions="true" />
+
+        <!-- ===== Hızlı Paylaş (eski QuickShare) — arayüzsüz: yalnızca Hızlı Ayarlar kutucuğu + Paylaş menüsü ===== -->
+        <!-- Paylaş menüsünde "Hızlı Paylaş": dosyaları aynı ağdaki cihazlara gönderir -->
+        <activity
+            android:name=".qs.QsShareActivity"
+            android:exported="true"
+            android:label="Hızlı Paylaş"
+            android:icon="@mipmap/ic_qs"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@style/QsDialog">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+        </activity>
+        <!-- Kutucuğa ilk dokunuşta izin eksikse açılan arayüzsüz izin etkinliği -->
+        <activity
+            android:name=".qs.QsPermActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@style/QsPerm" />
+        <!-- Hızlı Ayarlar kutucuğu: dokun = alıcıyı aç/kapat -->
+        <service
+            android:name=".qs.QsTile"
+            android:exported="true"
+            android:icon="@drawable/ic_qs_tile"
+            android:label="Hızlı Paylaş"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+            <meta-data android:name="android.service.quicksettings.TOGGLEABLE_TILE" android:value="true" />
+        </service>
+        <service
+            android:name=".qs.ReceiverService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
+        <receiver android:name=".qs.BootReceiver" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>

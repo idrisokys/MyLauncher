@@ -333,7 +333,7 @@ class MainActivity : Activity() {
                 setColor(0x66000000)
             }
         }
-        // Kamera düğmesi (aramanın solunda): dokun = varsayılan kamera, basılı tut = Galerim
+        // Kamera düğmesi (aramanın solunda): dokun = Galerim, basılı tut = varsayılan kamera
         val camBtn = ImageView(this).apply {
             setImageResource(R.drawable.ic_camera)
             contentDescription = "Kamera"
@@ -342,8 +342,8 @@ class MainActivity : Activity() {
                 shape = GradientDrawable.OVAL
                 setColor(0x66000000)
             }
-            setOnClickListener { openCamera() }
-            setOnLongClickListener { openGallery(); true }
+            setOnClickListener { openGallery() }
+            setOnLongClickListener { openCamera(); true }
         }
         bar.addView(camBtn, LinearLayout.LayoutParams(dp(46), dp(46)).apply { marginEnd = dp(8) })
         bar.addView(search, LinearLayout.LayoutParams(0, dp(50), 1f))
@@ -355,9 +355,9 @@ class MainActivity : Activity() {
                 shape = GradientDrawable.OVAL
                 setColor(0x66000000)
             }
-            setOnClickListener { setEditMode(!editMode) }
-            // Basılı tut: Notlarım (eski adıyla LinkCepte) açılır
-            setOnLongClickListener { openNotes(); true }
+            // Dokun: Notlarım açılır (düzenleme modu açıksa önce modu kapatır). Basılı tut: düzenleme modu aç/kapat
+            setOnClickListener { if (editMode) setEditMode(false) else openNotes() }
+            setOnLongClickListener { setEditMode(!editMode); true }
         }
         actionBtn = ImageView(this).apply {
             setImageResource(R.drawable.ic_settings)
@@ -524,8 +524,7 @@ class MainActivity : Activity() {
             }, LinearLayout.LayoutParams(dp(50), dp(40)))
         }
 
-        // En üstte Link klasörü, hemen altında Uygulamalar; sonra bilgi simgesi ve diğerleri
-        row("Link klasörü", R.drawable.ic_menu_folder) { openLinkFolder() }
+        // En üstte Uygulamalar; sonra bilgi simgesi ve diğerleri
         row("Uygulamalar", R.drawable.ic_menu_apps) { openApps() }
 
         // Bilgi simgesi: dokununca ayrı küçük kartta gemi ikonu, e-posta ve Github
@@ -845,21 +844,6 @@ class MainActivity : Activity() {
             )
         } catch (e: Exception) {
             toast("Galerim açılamadı")
-        }
-    }
-
-    /** Ana dizindeki Link klasörünü (Notlarım verileri) kendi Dosyalarım bölümünde açar. */
-    private fun openLinkFolder() {
-        val root = Environment.getExternalStorageDirectory()
-        val real = try { root.list()?.firstOrNull { it.equals("Link", ignoreCase = true) } } catch (e: Exception) { null } ?: "Link"
-        try {
-            startActivity(
-                Intent(this, io.github.idrisokys.myl.files.FilesActivity::class.java)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    .putExtra(io.github.idrisokys.myl.files.FilesActivity.EXTRA_PATH, java.io.File(root, real).absolutePath)
-            )
-        } catch (e: Exception) {
-            toast("Dosyalarım açılamadı")
         }
     }
 

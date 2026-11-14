@@ -1,3 +1,20 @@
+# MyL 1.14 (hareketler, Galerim, Resmi Editle)
+
+- Ana ekran: kalem = dokun Notlarım / basılı tut düzenleme modu (mod açıkken dokunmak modu kapatır); kamera = dokun Galerim / basılı tut kamera; ⚙ menüsünden "Link klasörü" satırı ve `openLinkFolder()` silindi.
+- Dosyalarım: basılı tutmak artık (resim/video silmek yerine) ad değiştirir; `removeMedia` kaldırıldı. Resimler `GalleryActivity.EXTRA_FILE` ile Galerim'in tam ekran gezgininde açılır (aynı klasördeki resim/videolar kaydırılabilir; gezgin kapanınca Galerim kapanır, Dosyalarım'a dönülür).
+- Galerim: basılı tutma (ızgara ve tam ekran) artık `moveToOnemsiz()` ile resmi `<depolama>/.onemsiz` klasörüne taşır (`.nomedia` eklenir, aynı ad varsa `ad_1`…). Seçim modundaki çöp kutusu hâlâ kalıcı siler.
+- Yeni `EditShareActivity` ("Resmi Editle"): Paylaş menüsünden gelen `image/*` (jpg/png/webp) `EditActivity` ile açılır; okuma izni düzenleyiciye aktarılır.
+
+# MyL 1.13 (Hızlı Paylaş entegrasyonu)
+
+- QuickShare, `io.github.idrisokys.myl.qs` paketine taşındı; ana ekranı, bilgi kutusu, "Klasör Aç/Kapat" düğmeleri, TV banner'ı ve harici dosya yöneticisi (`com.alphainventor.filemanager`) bağımlılığı kaldırıldı. Geriye yalnızca Hızlı Ayarlar kutucuğu (`QsTile`), Paylaş menüsü girişi (`QsShareActivity`), alıcı servisi (`ReceiverService`), açılışta yeniden başlatma (`BootReceiver`) ve kutucuk için arayüzsüz izin etkinliği (`QsPermActivity`) kaldı.
+- **`INTERNET` izni geri eklendi** (önceki `tools:node="remove"` satırı silindi): yerel ağ TCP soketleri bu izin olmadan açılamaz. MyL'nin başka hiçbir bölümü ağ kullanmaz.
+- Alıcı varsayılan olarak **kapalı** (`qs_cfg/on = false`); yalnızca kutucuk açıkken dinler. Önceki QuickShare'de varsayılan açıktı.
+- Bildirim izni artık zorunlu değil (reddedilirse servis yine çalışır, bildirim görünmez); gerekli olan tek izin "Tüm dosyalara erişim" (Notlarım/Dosyalarım ile ortak).
+- Alınan dosyalar `<depolama>/Link` klasörüne yazılır; bildirime dokunmak Dosyalarım'da bu klasörü açar.
+- Paylaş menüsündeki cihaz kısayolları için `MainActivity`'ye `shortcuts.xml` (share-target) bağlandı.
+- Not: alıcı, aynı ağdaki herhangi bir cihazdan onaysız dosya kabul eder (özgün QuickShare tasarımı); kutucuğu yalnızca güvendiğiniz ağlarda açın.
+
 # MyL 1.11 (internet erişimi kaldırıldı)
 
 - `Store.fetchTitle` (Notlarım'a link kaydederken sayfa başlığını çeken tek ağ kodu) ve ilgili `HttpURLConnection` kodu silindi. Başlık artık paylaşılan konudan, metinden ya da sitenin adresinden alınır.

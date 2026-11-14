@@ -23,8 +23,8 @@ android {
         applicationId = "io.github.idrisokys.myl"
         minSdk = 29
         targetSdk = 34
-        versionCode = 15
-        versionName = "1.12"
+        versionCode = 17
+        versionName = "1.14"
     }
 
     androidResources { localeFilters += listOf("tr", "en") }

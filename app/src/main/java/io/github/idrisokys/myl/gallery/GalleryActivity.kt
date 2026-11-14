@@ -68,6 +68,11 @@ class GalleryActivity : Activity() {
     private val REQ_EDIT = 4711
     private var editing: File? = null
 
+    companion object {
+        /** Dosyalarım'dan bir resme dokunulunca: bu dosya doğrudan tam ekran gezginde açılır. */
+        const val EXTRA_FILE = "io.github.idrisokys.myl.gallery.FILE"
+    }
+
     private fun dp(x: Int) = (x * resources.displayMetrics.density).toInt()
     private fun tv(t: String, s: Float, c: Int) = TextView(this).apply { text = t; textSize = s; setTextColor(c) }
     private fun toast(m: String) = Notice.show(this, m, false)
@@ -129,7 +134,7 @@ class GalleryActivity : Activity() {
             else Viewer(media.toMutableList(), p) { gridAd?.notifyDataSetChanged(); updateChrome(); updateEmpty() }
         }
         gv.setOnItemLongClickListener { _, _, p, _ ->
-            // Kalem (seçim) modu açıkken basılı tutup silme duraklatılır; kapalıyken eskisi gibi anında siler.
+            // Kalem (seçim) modu açıkken duraklatılır; kapalıyken basılı tutulan resim .onemsiz klasörüne taşınır.
             if (!selMode && p in media.indices) removeMedia(media[p])
             true
         }
@@ -138,6 +143,33 @@ class GalleryActivity : Activity() {
         col.addView(tb, -1, dp(54)); col.addView(body, LinearLayout.LayoutParams(-1, 0, 1f))
         setContentView(col)
         updateChrome(); updateEmpty()
+        openRequested(intent)
+    }
+
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        openRequested(intent)
+    }
+
+    /**
+     * Dosyalarım'dan gelen resmi hemen tam ekranda açar (tüm depolamanın taranmasını beklemez):
+     * aynı klasördeki resim/videolar kaydırılabilir. Gezgin kapanınca Galerim de kapanır ve Dosyalarım'a dönülür.
+     */
+    private fun openRequested(i: Intent?) {
+        val p = i?.getStringExtra(EXTRA_FILE) ?: return
+        i.removeExtra(EXTRA_FILE)
+        val f = File(p)
+        if (!f.isFile) { toast("Dosya bulunamadı"); return }
+        val sibs = (f.parentFile?.listFiles() ?: emptyArray<File>())
+            .filter { it.isFile && !it.name.startsWith(".") && it.extension.lowercase().let { e -> e in IMG || e in VID } }
+            .sortedByDescending { it.lastModified() }.toMutableList()
+        if (sibs.none { it.path == f.path }) sibs.add(0, f)
+        viewer?.dlg?.dismiss()
+        Viewer(sibs, sibs.indexOfFirst { it.path == f.path }) {
+            gridAd?.notifyDataSetChanged(); updateChrome(); updateEmpty()
+            if (!isFinishing) finish()
+        }
     }
 
     private fun hasPerm() = StoragePerm.has(this)
@@ -394,15 +426,15 @@ class GalleryActivity : Activity() {
         return b
     }
 
-    /** Dosyayı diskten ve listeden siler. Onay sormaz (tek resim/video için basılı tutma ve tam ekran). */
+    /** Basılı tutulan resim/videoyu silmez: ana dizindeki gizli ".onemsiz" klasörüne taşır ve listeden kaldırır. Onay sormaz. */
     private fun removeMedia(f: File): Boolean {
-        val ok = try { f.delete() } catch (e: Exception) { false }
+        val ok = moveToOnemsiz(f)
         if (ok) {
             media = media.filter { it.path != f.path }
             sel.remove(f); thumbs.remove(f.path)
             try { MediaScannerConnection.scanFile(this, arrayOf(f.path), null, null) } catch (e: Exception) {}
             gridAd?.notifyDataSetChanged(); updateChrome(); updateEmpty()
-        } else toast("Silinemedi: ${f.name}")
+        } else toast("Taşınamadı: ${f.name}")
         return ok
     }
 

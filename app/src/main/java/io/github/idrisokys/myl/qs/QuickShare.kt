@@ -50,9 +50,14 @@ import kotlin.concurrent.thread
 
 private const val TYPE = "_qshare._tcp."
 private const val BUF = 1 shl 20
-/** Alıcıda ağ okuma ile disk yazmayı ayıran tampon havuzu: SLOTS × CH = 4 MB. */
+/**
+ * TCP soket tamponu (SO_RCVBUF/SO_SNDBUF). 5 GHz Wi-Fi (802.11ac/ax) gecikme x bant genişliği çarpımını karşılayacak
+ * kadar büyük pencere için 4 MB istenir; sistem kendi üst sınırına kırpar (büyük istek, küçük istekten kötü olamaz).
+ */
+private const val SOCK_BUF = 4 shl 20
+/** Alıcıda ağ okuma ile disk yazmayı ayıran tampon havuzu: en çok SLOTS × CH = 8 MB (gerektikçe ayrılır). */
 private const val CH = 512 * 1024
-private const val SLOTS = 8
+private const val SLOTS = 16
 private class Chunk(val b: ByteArray, val n: Int)   // n < 0: bitti işareti
 
 const val QS_TARGET_CATEGORY = "io.github.idrisokys.myl.qs.TARGET"
@@ -257,7 +262,7 @@ class Receiver(private val ctx: Context) {
         // Tampon, bind'dan ÖNCE ayarlanmalı; yoksa büyük TCP penceresi (hız) devreye girmez.
         val s = ServerSocket().apply {
             reuseAddress = true
-            receiveBufferSize = BUF
+            receiveBufferSize = SOCK_BUF
             bind(InetSocketAddress(0))
         }
         ss = s
@@ -324,7 +329,8 @@ class Receiver(private val ctx: Context) {
                     FileOutputStream(file).use { out ->
                         // Okuyucu (bu iş parçacığı) ağdan okur, yazıcı iş parçacığı diske yazar; yavaş depolama
                         // ağı bekletmez. Havuz boşalınca okuyucu doğal olarak yavaşlar (taşma yok).
-                        val free = ArrayBlockingQueue<ByteArray>(SLOTS).also { q -> repeat(SLOTS) { q.add(ByteArray(CH)) } }
+                        val free = ArrayBlockingQueue<ByteArray>(SLOTS)
+                        var made = 0   // tamponlar gerektikçe ayrılır: küçük dosyada 8 MB boşuna ayrılmaz
                         val full = ArrayBlockingQueue<Chunk>(SLOTS + 1)
                         val werr = AtomicBoolean(false)
                         val wr = thread(isDaemon = true, name = "qs-write") {
@@ -340,7 +346,7 @@ class Receiver(private val ctx: Context) {
                         var last = -1
                         try {
                             while (left > 0 && !werr.get()) {
-                                val b = free.poll(30, TimeUnit.SECONDS) ?: break
+                                val b = free.poll() ?: if (made < SLOTS) { made++; ByteArray(CH) } else (free.poll(30, TimeUnit.SECONDS) ?: break)
                                 val want = minOf(CH.toLong(), left).toInt()
                                 var fill = 0
                                 while (fill < want) {
@@ -475,7 +481,7 @@ object Sender {
 
     private fun transfer(p: Peer, name: String, len: Long, ins: InputStream, errOpen: String) {
         // Tampon, connect'ten ÖNCE ayarlanmalı (TCP pencere ölçekleme)
-        val s = Socket().apply { sendBufferSize = BUF; tcpNoDelay = true; soTimeout = 30000 }
+        val s = Socket().apply { sendBufferSize = SOCK_BUF; tcpNoDelay = true; soTimeout = 30000 }
         s.use {
             s.connect(InetSocketAddress(p.host, p.port), 10000)
             val out = s.outputStream

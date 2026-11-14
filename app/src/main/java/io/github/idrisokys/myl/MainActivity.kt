@@ -847,11 +847,19 @@ class MainActivity : Activity() {
         }
     }
 
+    /** Ayarlar simgesine basılı tutunca: Download klasörünü kendi Dosyalarım bölümünde açar. */
     private fun openDownloads() {
+        val dir = try { Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS) } catch (e: Exception) { null }
+            ?: java.io.File(Environment.getExternalStorageDirectory(), "Download")
         try {
-            startActivity(Intent(android.app.DownloadManager.ACTION_VIEW_DOWNLOADS)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        } catch (e: Exception) { openStorageFolder("Download") }
+            startActivity(
+                Intent(this, io.github.idrisokys.myl.files.FilesActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    .putExtra(io.github.idrisokys.myl.files.FilesActivity.EXTRA_PATH, dir.absolutePath)
+            )
+        } catch (e: Exception) {
+            toast("Dosyalarım açılamadı")
+        }
     }
 
     private fun safeStart(i: Intent) {

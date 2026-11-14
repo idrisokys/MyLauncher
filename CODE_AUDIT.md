@@ -1,3 +1,7 @@
+# MyL 1.11
+
+- Ana ekrandaki ayarlar (dişli) simgesine basılı tutunca Download klasörü artık sistemin İndirilenler ekranı yerine kendi **Dosyalarım** bölümünde açılır (`openDownloads()` → `FilesActivity.EXTRA_PATH`). Sürüm `1.11 (versionCode 14)`.
+
 # MyL 1.10 — Kod denetimi ve değişiklikler
 
 ## 1.10 (Galerim'e sihirli değnek / temel düzenleyici — Gradle derlemesi denenmedi)

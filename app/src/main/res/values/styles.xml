@@ -5,4 +5,6 @@
     <style name="NotesTheme" parent="android:Theme.Material.NoActionBar" />
     <!-- Paylaş menüsünden açılan arayüzsüz kaydetme etkinliği -->
     <style name="ShareTheme" parent="android:Theme.Translucent.NoTitleBar" />
+    <!-- Galerim > sihirli değnek: Fossify temel düzenleyicisi commons temasından türeyen bir tema ister -->
+    <style name="EditorTheme" parent="AppTheme.Base" />
 </resources>

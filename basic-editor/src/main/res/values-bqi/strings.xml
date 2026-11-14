@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="width">پئنا</string>
+    <string name="editor">آلشتگر</string>
+    <string name="basic_editor">آلشتگر پایه</string>
+    <string name="image_editing_failed">آلشتکاری شؽوات شکست خرد</string>
+    <string name="unknown_file_location">جاگه فایل ن دیاری</string>
+    <string name="overwrite_original">ری نویسی نوسخه ٱسلی</string>
+    <string name="transform">آلشت هندا</string>
+    <string name="crop">بۊریڌن</string>
+    <string name="draw">کشیڌن</string>
+    <string name="flip_horizontally">آینه ای کردن اوفوقی</string>
+    <string name="flip_vertically">آینه ای کردن عمۊدی</string>
+    <string name="free_aspect_ratio">آزاڌ</string>
+    <string name="other_aspect_ratio">غیره</string>
+</resources>

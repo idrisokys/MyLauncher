@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="width">چوڑائی</string>
+    <string name="height">اُچائی</string>
+    <string name="editor">ایڈیٹر</string>
+    <string name="rotate">گھُنماؤ</string>
+    <string name="other_aspect_ratio">ہور</string>
+</resources>

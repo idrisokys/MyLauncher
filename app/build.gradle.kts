@@ -23,8 +23,8 @@ android {
         applicationId = "io.github.idrisokys.myl"
         minSdk = 29
         targetSdk = 34
-        versionCode = 12
-        versionName = "1.9"
+        versionCode = 13
+        versionName = "1.10"
     }
 
     androidResources { localeFilters += listOf("tr", "en") }
@@ -66,6 +66,8 @@ kotlin {
 }
 
 dependencies {
+    // Galerim'deki sihirli değnek: Fossify temel resim düzenleyicisi (filtre, kırpma, döndürme, çizim)
+    implementation(project(":basic-editor"))
     implementation("androidx.recyclerview:recyclerview:1.4.0")
     implementation("androidx.core:core:1.16.0")
     // Galerim: tam ekran resim/video gezgini (ViewPager)

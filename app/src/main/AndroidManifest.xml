@@ -141,6 +141,22 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <!-- Galerim'deki sihirli değnekle açılan temel resim düzenleyicisi (basic-editor modülü).
+             Aynı görevde (Galerim'in üstünde) açılır; geri okuyla Galerim'e dönülür. -->
+        <activity
+            android:name="org.fossify.editor.activities.EditActivity"
+            android:exported="false"
+            android:theme="@style/EditorTheme" />
+        <!-- Düzenleyicinin Paylaş düğmesi için (commons: <applicationId>.provider) -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.provider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/provider_paths" />
+        </provider>
         <!-- Dosyalarım ve Galerim'in ortak dosya sağlayıcısı (paylaşma / açma için) -->
         <provider
             android:name=".common.KFileProvider"

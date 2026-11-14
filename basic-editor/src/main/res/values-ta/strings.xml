@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="resize_and_save">தெரிவை மறுஅளவிட்டுச் சேமி</string>
+    <string name="width">அகலம்</string>
+    <string name="height">உயரம்</string>
+    <string name="keep_aspect_ratio">கூறுவிகிதத்தை வைத்திரு</string>
+    <string name="invalid_values">செல்லத்தக்க தீர்மானத்தை உள்ளிடவும்</string>
+    <string name="editor">திருத்தி</string>
+    <string name="rotate">சுழற்று</string>
+    <string name="invalid_image_path">செல்லாத பட பாதை</string>
+    <string name="image_editing_failed">படத்திருத்தம் தோல்வி</string>
+    <string name="unknown_file_location">அறியப்படாத கோப்பிடம்</string>
+    <string name="flip_horizontally">கிடைமட்டமாக புரட்டு</string>
+    <string name="flip_vertically">செங்குத்தாக புரட்டு</string>
+    <string name="free_aspect_ratio">கட்டுப்பாடற்ற</string>
+    <string name="other_aspect_ratio">மற்ற</string>
+    <string name="basic_editor">அடிப்படைத் திருத்தி</string>
+    <string name="overwrite_original">அசல் மேலெழுதவும்</string>
+    <string name="transform">உருமாற்று</string>
+    <string name="crop">செதுக்கு</string>
+    <string name="draw">வரையவும்</string>
+</resources>

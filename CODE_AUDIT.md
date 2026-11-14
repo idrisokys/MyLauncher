@@ -1,3 +1,17 @@
+# MyL 1.10 — Kod denetimi ve değişiklikler
+
+## 1.10 (Galerim'e sihirli değnek / temel düzenleyici — Gradle derlemesi denenmedi)
+
+- Fossify **basic-editor** modülü projeye `basic-editor/` olarak eklendi (`settings.gradle.kts` → `include(":basic-editor")`, JitPack deposu eklendi, `app` ona bağlandı). Modülde AGP 8.x için `org.jetbrains.kotlin.android` eklentisi etkinleştirildi.
+- Galerim tam ekran gezgininin üst barında **Paylaş'ın soluna sihirli değnek** düğmesi var (`Icons.magic()`). Basınca resim düzenleyicide açılır: filtre, kırpma/döndürme/aynalama, yeniden boyutlandırma, çizim, farklı kaydet / üzerine yaz.
+- Düzenleyiciden **geri oku** (üst çubuk) veya sistem geri tuşu Galerim'in tam ekran gezginine döndürür. Kaydedilince gezgindeki resim yenilenir, küçük resim önbelleği temizlenir ve liste yeniden taranır ("farklı kaydet" ile oluşan yeni dosya listede görünür).
+- Düğme yalnızca jpg / jpeg / png / webp için görünür (video, gif, svg düzenlenmez).
+- Manifest: `org.fossify.editor.activities.EditActivity` (tema `EditorTheme`, parent `AppTheme.Base`) ve düzenleyicinin Paylaş düğmesi için `<applicationId>.provider` FileProvider'ı (`res/xml/provider_paths.xml`) eklendi.
+- `EditActivity`'den commons'ın `checkAppSideloading()` denetimi kaldırıldı (elle kurulan uygulamada uyarı çıkmasın).
+- Android 13+ cihazlarda düzenleyici ilk açılışta commons üzerinden "fotoğraflara erişim" iznini isteyebilir (Galerim'in kullandığı tüm dosyalara erişimden ayrı bir izindir).
+- Sürüm `1.10 (versionCode 13)`.
+- Lisans notu: `basic-editor/` GPL-3.0'dır (bkz. `basic-editor/LICENSE`); bu modülü içeren uygulama da GPL-3.0 uyumlu olmalıdır.
+
 # MyL 1.9 — Kod denetimi ve değişiklikler
 
 ## 1.9 (Dosyalarım ve Galerim birleştirildi — Gradle derlemesi denenmedi)

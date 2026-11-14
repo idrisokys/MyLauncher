@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="resize_and_save">নির্বাচিতগুলোর আকার পরিবর্তন ও সংরক্ষণ করুন।</string>
+    <string name="width">প্রস্থ</string>
+    <string name="height">দৈর্ঘ্য</string>
+    <string name="keep_aspect_ratio">অনুপাত রাখুন</string>
+    <string name="invalid_values">দয়া করে একটি বৈধ রেজোলিউশন দিন।</string>
+    <string name="editor">সম্পাদক</string>
+    <string name="rotate">ঘোরান</string>
+    <string name="invalid_image_path">ভুল ছবির পথ</string>
+    <string name="image_editing_failed">ছবি সম্পাদনা ব্যর্থ</string>
+    <string name="unknown_file_location">ফাইলের অবস্থান অজানা</string>
+    <string name="flip_horizontally">অবতলভাবে ঘোরান</string>
+    <string name="flip_vertically">খাড়াখাড়িভাবে ঘোরান</string>
+    <string name="free_aspect_ratio">মুক্ত</string>
+    <string name="other_aspect_ratio">অন্যান্য</string>
+</resources>

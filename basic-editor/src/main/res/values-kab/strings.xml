@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="resize_and_save">Ales tisekta n ufran syin sekles</string>
+    <string name="width">Tehri</string>
+    <string name="height">Tibeddi</string>
+    <string name="keep_aspect_ratio">Eǧǧ aktassaɣ n tmeẓri</string>
+    <string name="invalid_values">Ma ulac aɣilif, sekcem tabadut tameɣtut</string>
+    <string name="unknown_file_location">Adig n ufaylu arussin</string>
+    <string name="overwrite_original">Semselsi aneṣli</string>
+    <string name="transform">Selket</string>
+    <string name="crop">Gzem</string>
+    <string name="draw">Suneɣ</string>
+    <string name="flip_horizontally">Tuzzya taglawant</string>
+    <string name="flip_vertically">Tuzzya s ibeddi</string>
+    <string name="free_aspect_ratio">D ilelli</string>
+    <string name="other_aspect_ratio">nniḍen</string>
+    <string name="editor">Amaẓrag</string>
+    <string name="basic_editor">Amaẓrag azadur</string>
+    <string name="rotate">Zzi</string>
+    <string name="invalid_image_path">Abrid n tugna mačči d ameɣtu</string>
+    <string name="image_editing_failed">Asiẓreg n tugna ur yeddi ara</string>
+</resources>

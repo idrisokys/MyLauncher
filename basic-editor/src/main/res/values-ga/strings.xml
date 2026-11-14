@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="height">Airde</string>
+    <string name="keep_aspect_ratio">Coinnigh cóimheas treoíochta</string>
+    <string name="basic_editor">Eagarthóir Bunúsach</string>
+    <string name="rotate">Rothlaigh</string>
+    <string name="invalid_image_path">Conair neamhbhailí íomhá</string>
+    <string name="resize_and_save">Athraigh méid an roghnaithe agus sábháil</string>
+    <string name="width">Leithead</string>
+    <string name="invalid_values">Iontráil taifeach bailí le do thoil</string>
+    <string name="editor">Eagarthóir</string>
+    <string name="image_editing_failed">Theip ar eagarthóireacht íomhánna</string>
+    <string name="unknown_file_location">Suíomh anaithnid an chomhaid</string>
+    <string name="transform">Trasfhoirmigh</string>
+    <string name="crop">Bearr</string>
+    <string name="draw">Tarraing</string>
+    <string name="flip_horizontally">Smeach go cothrománach</string>
+    <string name="flip_vertically">Smeach go hingearach</string>
+    <string name="free_aspect_ratio">Saor in aisce</string>
+    <string name="other_aspect_ratio">Eile</string>
+    <string name="overwrite_original">Forscríobh an bhunleagan</string>
+</resources>

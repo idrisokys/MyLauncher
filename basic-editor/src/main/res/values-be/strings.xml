@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="resize_and_save">Зменіце памер выбару і захавайце</string>
+    <string name="width">Шырыня</string>
+    <string name="height">Вышыня</string>
+    <string name="keep_aspect_ratio">Захоўвайце суадносіны бакоў</string>
+    <string name="invalid_values">Увядзіце дапушчальнае разрозненне</string>
+    <string name="rotate">Павярнуць</string>
+    <string name="invalid_image_path">Няправільны шлях выявы</string>
+    <string name="editor">Рэдактар</string>
+    <string name="basic_editor">Базавы рэдактар</string>
+    <string name="image_editing_failed">Збой рэдагавання выявы</string>
+    <string name="unknown_file_location">Невядомае месцазнаходжанне файла</string>
+    <string name="transform">Трансфармаваць</string>
+    <string name="crop">Абрэзаць</string>
+    <string name="draw">Маляваць</string>
+    <string name="flip_horizontally">Адлюстраваць гарызантальна</string>
+    <string name="flip_vertically">Адлюстраваць вертыкальна</string>
+    <string name="free_aspect_ratio">Бясплатна</string>
+    <string name="other_aspect_ratio">Іншае</string>
+    <string name="overwrite_original">Перазапісаць арыгінал</string>
+</resources>

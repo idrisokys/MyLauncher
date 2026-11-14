@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="width">پهنا</string>
+    <string name="height">ارتفاع</string>
+    <string name="keep_aspect_ratio">نسبت ابعاد را حفظ کنید</string>
+    <string name="transform">تغییر شکل</string>
+    <string name="crop">برش</string>
+    <string name="resize_and_save">تغییر اندازه‌ٔ بخش انتخاب‌شده و ذخیره‌سازی</string>
+    <string name="invalid_values">لطفاً وضوح‌تصویر معتبری وارد کنید</string>
+    <string name="editor">ویرایشگر</string>
+    <string name="basic_editor">ویرایشگر پایه</string>
+    <string name="invalid_image_path">مسیر ذخیره‌سازی تصویر نامعتبر است</string>
+    <string name="flip_horizontally">آینه‌ای کردن افقی</string>
+    <string name="flip_vertically">آینه‌ای کردن عمودی</string>
+    <string name="rotate">چرخاندن</string>
+    <string name="draw">ترسیم</string>
+    <string name="free_aspect_ratio">آزاد</string>
+    <string name="other_aspect_ratio">غیره</string>
+    <string name="image_editing_failed">ویرایش تصویر انجام نشد</string>
+    <string name="unknown_file_location">مکان فایل ناشناخته است</string>
+    <string name="overwrite_original">بازنویسی فایل اصلی</string>
+</resources>

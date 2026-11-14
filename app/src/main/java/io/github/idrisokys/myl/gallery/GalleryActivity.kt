@@ -41,6 +41,7 @@ import androidx.viewpager.widget.PagerAdapter
 import androidx.viewpager.widget.ViewPager
 import java.io.File
 import java.util.concurrent.Executors
+import org.fossify.editor.activities.EditActivity
 
 /**
  * Galerim: telefondaki tüm resim ve videoları tek ızgarada gösterir.
@@ -63,6 +64,9 @@ class GalleryActivity : Activity() {
     private val sel = linkedSetOf<File>()
     private var asked = false
     private var viewer: Viewer? = null
+    private val EDITABLE = setOf("jpg", "jpeg", "png", "webp")   // sihirli değnekle düzenlenebilen türler
+    private val REQ_EDIT = 4711
+    private var editing: File? = null
 
     private fun dp(x: Int) = (x * resources.displayMetrics.density).toInt()
     private fun tv(t: String, s: Float, c: Int) = TextView(this).apply { text = t; textSize = s; setTextColor(c) }
@@ -402,6 +406,28 @@ class GalleryActivity : Activity() {
         return ok
     }
 
+    /** Sihirli değnek: resmi temel düzenleyicide açar. Düzenleyicinin geri okuyla Galerim'e (tam ekran gezgine) dönülür. */
+    private fun editFile(f: File) {
+        if (!f.exists()) { toast("Dosya bulunamadı"); return }
+        try {
+            editing = f
+            startActivityForResult(EditActivity.newIntent(this, Uri.fromFile(f), realFilePath = f.path), REQ_EDIT)
+        } catch (e: Throwable) { editing = null; toast("Düzenleyici açılamadı") }
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(req: Int, res: Int, data: Intent?) {
+        super.onActivityResult(req, res, data)
+        if (req != REQ_EDIT) return
+        val f = editing; editing = null
+        if (res == RESULT_OK && f != null) {
+            thumbs.remove(f.path)                 // üzerine yazıldıysa eski küçük resmi at
+            viewer?.reload(f)                     // tam ekran gezginde yeni hâlini göster
+            gridAd?.notifyDataSetChanged()
+            lastScan = 0L                         // onResume'da yeniden tara: "farklı kaydet" ile oluşan yeni dosya listede görünsün
+        }
+    }
+
     private fun shareOne(f: File) {
         val mime = MimeTypeMap.getSingleton().getMimeTypeFromExtension(f.extension.lowercase()) ?: if (isVid(f)) "video/*" else "image/*"
         try {
@@ -497,6 +523,15 @@ class GalleryActivity : Activity() {
 
         fun dispose() { dead = true; deactivate() }
 
+        /** Düzenleyiciden dönünce resmi diskten yeniden yükler. */
+        fun reload() {
+            if (vid || dead) return
+            fullPool.execute {
+                val b = decodeImg(f, 2400, true)
+                runOnUiThread { if (!dead && b != null) { img.setPadding(0, 0, 0, 0); img.setImageBitmap(b) } }
+            }
+        }
+
         fun pause() {
             val v = vv ?: return
             if (active && v.isPlaying) { v.pause(); play.visibility = View.VISIBLE }
@@ -545,6 +580,7 @@ class GalleryActivity : Activity() {
         val countV = tv("", 12f, 0xFFAAAAAA.toInt())
         val prevB = iconBtn(Icons.chevron(), "Önceki", 180f) { go(-1) }
         val nextB = iconBtn(Icons.chevron(), "Sonraki", 0f) { go(1) }
+        val editB = iconBtn(Icons.magic(), "Düzenle", 0f) { if (data.isNotEmpty()) editFile(data[cur]) }
 
         val adapter = object : PagerAdapter() {
             override fun getCount() = data.size
@@ -572,7 +608,10 @@ class GalleryActivity : Activity() {
             countV.text = "${cur + 1} / ${data.size}"
             prevB.alpha = if (cur > 0) 1f else 0.3f
             nextB.alpha = if (cur < data.size - 1) 1f else 0.3f
+            editB.visibility = if (data[cur].extension.lowercase() in EDITABLE) View.VISIBLE else View.GONE   // video / gif / svg düzenlenmez
         }
+
+        fun reload(f: File) { holders.values.firstOrNull { it.f.path == f.path }?.reload() }
 
         fun go(d: Int) { val n = cur + d; if (n in data.indices) pager.setCurrentItem(n, true) }
 
@@ -597,6 +636,7 @@ class GalleryActivity : Activity() {
             top.addView(col, LinearLayout.LayoutParams(0, -2, 1f))
             top.addView(prevB, LinearLayout.LayoutParams(dp(44), dp(44)))
             top.addView(nextB, LinearLayout.LayoutParams(dp(44), dp(44)))
+            top.addView(editB, LinearLayout.LayoutParams(dp(44), dp(44)))   // Paylaş'ın hemen solunda
             top.addView(iconBtn(Icons.share(), "Paylaş", 0f) { if (data.isNotEmpty()) shareOne(data[cur]) }, LinearLayout.LayoutParams(dp(44), dp(44)))
             val rootV = LinearLayout(this@GalleryActivity).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.BLACK) }
             rootV.addView(top, LinearLayout.LayoutParams(-1, dp(54)))

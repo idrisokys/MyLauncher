@@ -420,9 +420,11 @@ class GalleryActivity : Activity() {
         super.onActivityResult(req, res, data)
         if (req != REQ_EDIT) return
         val f = editing; editing = null
-        if (res == RESULT_OK && f != null) {
-            thumbs.remove(f.path)                 // üzerine yazıldıysa eski küçük resmi at
-            viewer?.reload(f)                     // tam ekran gezginde yeni hâlini göster
+        if (res == RESULT_OK) {
+            if (f != null) {
+                thumbs.remove(f.path)             // üzerine yazıldıysa eski küçük resmi at
+                viewer?.reload(f)                 // tam ekran gezginde yeni hâlini göster
+            }
             gridAd?.notifyDataSetChanged()
             lastScan = 0L                         // onResume'da yeniden tara: "farklı kaydet" ile oluşan yeni dosya listede görünsün
         }

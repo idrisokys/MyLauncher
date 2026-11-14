@@ -89,7 +89,8 @@ import kotlin.math.max
 open class EditActivity : BaseCropActivity() {
     companion object {
         init {
-            System.loadLibrary("NativeImageProcessor")
+            // Yüklenemezse editör yine açılır (yalnızca filtreler çalışmaz); uygulama çökmez.
+            try { System.loadLibrary("NativeImageProcessor") } catch (_: Throwable) {}
         }
 
         private const val ASPECT_X = EXTRA_ASPECT_X
@@ -164,14 +165,25 @@ open class EditActivity : BaseCropActivity() {
         )
 
         setupOptionsMenu()
-        handlePermission(getPermissionToRequest()) {
-            if (!it) {
-                toast(org.fossify.commons.R.string.no_storage_permissions)
-                finish()
-            }
+        // MyL: Android 11+ "tüm dosyalara erişim", Android 10'da yazma izni varsa ayrı bir medya izni istemeden doğrudan başla.
+        if (hasDirectStorageAccess()) {
             initEditActivity()
+        } else {
+            handlePermission(getPermissionToRequest()) {
+                if (!it) {
+                    toast(org.fossify.commons.R.string.no_storage_permissions)
+                    finish()
+                    return@handlePermission
+                }
+                initEditActivity()
+            }
         }
     }
+
+    private fun hasDirectStorageAccess(): Boolean = try {
+        if (android.os.Build.VERSION.SDK_INT >= 30) android.os.Environment.isExternalStorageManager()
+        else checkSelfPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE) == android.content.pm.PackageManager.PERMISSION_GRANTED
+    } catch (e: Throwable) { false }
 
     override fun onResume() {
         super.onResume()

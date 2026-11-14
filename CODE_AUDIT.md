@@ -1,3 +1,14 @@
+# MyL 1.11 (Android 10+ sağlamlaştırma)
+
+- Düzenleyici izni: Android 11+ "tüm dosyalara erişim", Android 10'da `WRITE_EXTERNAL_STORAGE` varsa ek izin istemeden açılır; yoksa commons izin akışı çalışır.
+- Filtre kütüphanesinin (`NativeImageProcessor`) yüklenememesi artık çökme yapmaz; editör açılır.
+- Düzenleyiciden OK dönünce liste her durumda yeniden taranır.
+- R8: editör, filtre ve kırpma kütüphaneleri için `proguard-rules.pro` kuralları eklendi.
+
+# MyL 1.11 (düzenleyici izni)
+
+- Galerim'de sihirli değnek "depolama izni gerekiyor" diyordu: düzenleyici (commons) Android 13+'ta ayrıca `READ_MEDIA_IMAGES` istiyordu. `EditActivity` artık "tüm dosyalara erişim" izni (`isExternalStorageManager`) varsa ek izin istemeden açılıyor; yoksa eski istek akışı çalışır. İzin reddedilince `initEditActivity()` artık çağrılmıyor.
+
 # MyL 1.11 (derleme düzeltmesi)
 
 - Manifest birleştirme hatası: `androidphotofilters` kendi `<application>` öğesinde `allowBackup=true` ve `label=@string/app_name` tanımlıyordu. Uygulamanın `<application>` öğesine `tools:replace` eklendi; uygulamanın değerleri (allowBackup=false, label=MyL) geçerli.

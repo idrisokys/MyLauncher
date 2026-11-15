@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="AppTheme" parent="@android:style/Theme.DeviceDefault.Wallpaper.NoTitleBar" />
+    <!-- Notlarım (Compose ekranı): duvar kağıdı değil, düz koyu zemin -->
+    <style name="NotesTheme" parent="android:Theme.Material.NoActionBar" />
+    <!-- Paylaş menüsünden açılan arayüzsüz kaydetme etkinliği -->
+    <style name="ShareTheme" parent="android:Theme.Translucent.NoTitleBar" />
+    <!-- Hızlı Paylaş: paylaşırken cihazlar aranırken görünen küçük pencere -->
+    <style name="QsDialog" parent="android:Theme.Material.Dialog" />
+    <!-- Hızlı Paylaş: izin istenirken arayüzsüz (şeffaf) etkinlik -->
+    <style name="QsPerm" parent="android:Theme.Translucent.NoTitleBar" />
+    <!-- Galerim > sihirli değnek: Fossify temel düzenleyicisi commons temasından türeyen bir tema ister -->
+    <style name="EditorTheme" parent="AppTheme.Base" />
+</resources>

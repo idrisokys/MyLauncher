@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp"
+    android:viewportWidth="24" android:viewportHeight="24">
+    <!-- Android robotu (çizgi stili, diğer menü ikonlarıyla uyumlu) -->
+    <path android:strokeColor="#FFFFFFFF" android:strokeWidth="2" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M6,10.5 A6,6 0 0 1 18,10.5 Z M8.5,5 L7,3 M15.5,5 L17,3 M6,13.5 H18 V18 A2,2 0 0 1 16,20 H8 A2,2 0 0 1 6,18 Z M9.5,8 H9.51 M14.5,8 H14.51" />
+</vector>

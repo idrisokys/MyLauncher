@@ -63,7 +63,7 @@ private class Chunk(val b: ByteArray, val n: Int)   // n < 0: bitti işareti
 const val QS_TARGET_CATEGORY = "io.github.idrisokys.myl.qs.TARGET"
 const val QS_SHORTCUT_ACTION = "io.github.idrisokys.myl.qs.SHORT"
 
-class Peer(val id: String, val name: String, val host: InetAddress, val port: Int)
+class Peer(val id: String, val name: String, val host: InetAddress, val port: Int, val svc: String = "")
 
 /** Aktarım ilerlemesini bildirime iletir. */
 object Bus {
@@ -117,6 +117,7 @@ object Peers {
     private val m = LinkedHashMap<String, Peer>()
     @Synchronized fun put(svc: String, p: Peer) { m[svc] = p }
     @Synchronized fun del(svc: String) { m.remove(svc) }
+    @Synchronized fun find(svc: String): Peer? = m[svc]
     @Synchronized fun list(): List<Peer> = m.values.distinctBy { it.id }
 }
 
@@ -230,7 +231,7 @@ class Discovery(c: Context) {
                 val n = i.attributes["n"]?.toString(Charsets.UTF_8)
                 val addr = pickAddress(i)
                 if (f != null && f != Identity.id && addr != null)
-                    { Peers.put(i.serviceName, Peer(f, n ?: "?", addr, i.port)); Shortcuts.update(app) }
+                    { Peers.put(i.serviceName, Peer(f, n ?: "?", addr, i.port, i.serviceName)); Shortcuts.update(app) }
                 synchronized(this@Discovery) { tries.remove(s.serviceName) }
                 done()
             }
@@ -386,6 +387,48 @@ class Receiver(private val ctx: Context) {
     }
 }
 
+/** Bağlantı kurma aşamasında oluşan hata (veri henüz gönderilmedi; yeniden denemek güvenli). */
+private class ConnectFail(cause: Exception) : Exception(cause.message, cause)
+
+/** Çözümlenen adresler arasında IPv4'ü tercih eder (Discovery.pickAddress ile aynı mantık). */
+@Suppress("DEPRECATION")
+private fun pickAddr(i: NsdServiceInfo): InetAddress? {
+    if (Build.VERSION.SDK_INT >= 34) {
+        val all = i.hostAddresses
+        return all.firstOrNull { it is Inet4Address } ?: all.firstOrNull { !it.isLinkLocalAddress } ?: all.firstOrNull()
+    }
+    return i.host
+}
+
+/**
+ * Cihazın adresini/portunu mDNS'ten yeniden çözer. Karşı cihaz servisi yeniden başlatınca port değişir;
+ * önbellekteki eski port "connection refused" verir. En çok ~5 sn bekler, bulamazsa null döner.
+ */
+@Suppress("DEPRECATION")
+private fun reresolve(c: Context, old: Peer): Peer? {
+    if (old.svc.isEmpty()) return null
+    val nsd = c.getSystemService(Context.NSD_SERVICE) as NsdManager
+    repeat(3) {
+        val latch = java.util.concurrent.CountDownLatch(1)
+        var res: Peer? = null
+        val info = NsdServiceInfo().apply { serviceName = old.svc; serviceType = TYPE }
+        try {
+            nsd.resolveService(info, object : NsdManager.ResolveListener {
+                override fun onResolveFailed(i: NsdServiceInfo?, e: Int) { latch.countDown() }
+                override fun onServiceResolved(i: NsdServiceInfo) {
+                    val addr = pickAddr(i)
+                    if (addr != null && i.port > 0) res = Peer(old.id, old.name, addr, i.port, old.svc)
+                    latch.countDown()
+                }
+            })
+        } catch (e: Exception) { latch.countDown() }
+        latch.await(2, TimeUnit.SECONDS)
+        res?.let { return it }
+        Thread.sleep(300)   // FAILURE_ALREADY_ACTIVE vb. geçici hatalar için kısa bekleme
+    }
+    return null
+}
+
 object Sender {
     /**
      * Gönderimi arka plan servisine devreder; böylece paylaş ekranı hemen kapanır, aktarım
@@ -471,7 +514,23 @@ object Sender {
             src = t.inputStream()
         } else src = afd.createInputStream()
         try {
-            transfer(p, name, len, src, errOpen)
+            try {
+                transfer(p, name, len, src, errOpen)
+            } catch (e: ConnectFail) {
+                // Bağlanılamadı: büyük olasılıkla bayat adres/port. Yeniden çözüp bir kez daha dene.
+                val np = reresolve(c, p)
+                if (np != null && (np.port != p.port || np.host != p.host)) {
+                    Peers.put(np.svc, np)
+                    try { transfer(np, name, len, src, errOpen) }
+                    catch (e2: ConnectFail) {
+                        Peers.del(np.svc)
+                        throw Exception("${np.host.hostAddress}:${np.port} → ${e2.message}")
+                    }
+                } else {
+                    Peers.del(p.svc)   // gerçekten ulaşılamıyor: listede bayat kayıt kalmasın
+                    throw Exception("${p.host.hostAddress}:${p.port} → ${e.message}")
+                }
+            }
         } finally {
             try { src.close() } catch (e: Exception) { }
             try { afd.close() } catch (e: Exception) { }
@@ -483,7 +542,7 @@ object Sender {
         // Tampon, connect'ten ÖNCE ayarlanmalı (TCP pencere ölçekleme)
         val s = Socket().apply { sendBufferSize = SOCK_BUF; tcpNoDelay = true; soTimeout = 30000 }
         s.use {
-            s.connect(InetSocketAddress(p.host, p.port), 10000)
+            try { s.connect(InetSocketAddress(p.host, p.port), 10000) } catch (e: java.io.IOException) { throw ConnectFail(e) }
             val out = s.outputStream
             out.write(
                 ("POST /u HTTP/1.1\r\nX-Name: ${URLEncoder.encode(name, "UTF-8")}\r\n" +

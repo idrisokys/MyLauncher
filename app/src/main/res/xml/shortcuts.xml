@@ -1,7 +1,0 @@
-<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Hızlı Paylaş: ağdaki cihazlar Paylaş menüsünde doğrudan hedef olarak görünür (kısayollar qs/Shortcuts ile eklenir) -->
-    <share-target android:targetClass="io.github.idrisokys.myl.qs.QsShareActivity">
-        <data android:mimeType="*/*" />
-        <category android:name="io.github.idrisokys.myl.qs.TARGET" />
-    </share-target>
-</shortcuts>

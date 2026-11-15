@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<paths>
-    <!-- Editör, paylaşırken düzenlenmiş resmi önbellekte images/ altına yazar -->
-    <cache-path name="images" path="images/" />
-    <external-path name="external" path="." />
-</paths>

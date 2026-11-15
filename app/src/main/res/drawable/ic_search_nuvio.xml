@@ -1,7 +1,0 @@
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="24dp" android:height="24dp"
-    android:viewportWidth="24" android:viewportHeight="24">
-    <!-- Nuvio: kalın N harfi -->
-    <path android:fillColor="#FFFFFFFF"
-        android:pathData="M5,3 L8.6,3 L15.4,14.2 L15.4,3 L19,3 L19,21 L15.4,21 L8.6,9.8 L8.6,21 L5,21 Z" />
-</vector>

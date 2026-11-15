@@ -1,7 +1,6 @@
 package io.github.idrisokys.myl
 
 import io.github.idrisokys.myl.common.Notice
-import io.github.idrisokys.myl.common.moveToOnemsiz
 
 import android.content.Intent
 import android.net.Uri
@@ -69,16 +68,26 @@ import kotlinx.coroutines.withContext
 private val DarkScheme = darkColorScheme()
 private val blockedSchemes = setOf("file", "content", "intent", "javascript", "android-app")
 
+/** Launcher arama kutusundan "Notlarımda ara" ile gelen sorgu (Intent extra'sı). */
+const val EXTRA_QUERY = "query"
+
 /** Eski adıyla LinkCepte: linkleri ve notları <ana dizin>/Link klasöründe .url / .txt olarak tutar. */
 class NotesActivity : ComponentActivity() {
     private val resumes = mutableIntStateOf(0)
+    // Launcher'dan gelen arama sorgusu; NotesApp tüketince null yapılır
+    private val externalQuery = mutableStateOf<String?>(null)
+
+    private fun readQuery(i: Intent?) {
+        i?.getStringExtra(EXTRA_QUERY)?.trim()?.takeIf { it.isNotEmpty() }?.let { externalQuery.value = it }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (savedInstanceState == null) readQuery(intent)
         setContent {
             MaterialTheme(colorScheme = DarkScheme) {
                 Surface(Modifier.fillMaxSize()) {
-                    NotesApp(resumes.intValue)
+                    NotesApp(resumes.intValue, externalQuery.value) { externalQuery.value = null }
                 }
             }
         }
@@ -86,6 +95,7 @@ class NotesActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        readQuery(intent)
     }
     override fun onResume() {
         super.onResume()
@@ -95,7 +105,7 @@ class NotesActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-fun NotesApp(resume: Int = 0) {
+fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -> Unit = {}) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     val lock = remember { Mutex() }
@@ -112,6 +122,9 @@ fun NotesApp(resume: Int = 0) {
     var renameText by remember { mutableStateOf("") }
     var txtDoc by remember { mutableStateOf<Pair<Entry, String>?>(null) }   // tam ekranda açık .txt (öğe, içerik)
     var linkText by remember { mutableStateOf("") }
+    var searchQuery by remember { mutableStateOf<String?>(null) }   // null = normal liste
+    var hits by remember { mutableStateOf<List<Hit>?>(null) }       // null = aranıyor
+    var searchJob by remember { mutableStateOf<Job?>(null) }
     val clipboard = LocalClipboardManager.current
     val focus = LocalFocusManager.current
 
@@ -157,8 +170,9 @@ fun NotesApp(resume: Int = 0) {
     val editCap = if (rn != null && !rn.isDir && !rn.isTxt) 20_000 else 220
     LaunchedEffect(rn?.key) { renameText = rn?.title ?: "" }
     LaunchedEffect(current) { selected = emptySet() }   // klasör değişince işaretler temizlenir
-    BackHandler(editMode || stack.isNotEmpty()) {
+    BackHandler(searchQuery != null || editMode || stack.isNotEmpty()) {
         when {
+            searchQuery != null -> { searchJob?.cancel(); searchQuery = null; hits = null }
             editMode -> { editMode = false; selected = emptySet() }
             else -> stack = stack.dropLast(1)
         }
@@ -235,6 +249,17 @@ fun NotesApp(resume: Int = 0) {
             else toast(L("Kopyalanamadı", "Could not copy"))
         }
     }
+    fun addTxt() {
+        val text = linkText.trim()
+        if (text.isEmpty()) return
+        linkText = ""
+        focus.clearFocus()
+        scope.launch {
+            val ok = withContext(Dispatchers.IO) { Store.addTextFile(ctx, current, text) }
+            tick++
+            toast(if (ok) L("Metin dosyası eklendi", "Text file added") else L("Eklenemedi", "Could not add"))
+        }
+    }
     // Gönder / Enter: Store.submit ile aynı kural (link → .url, kısa metin → not, uzun metin → .txt)
     fun submit() {
         val text = linkText.trim()
@@ -247,27 +272,30 @@ fun NotesApp(resume: Int = 0) {
             toast(if (ok) L("Eklendi", "Added") else L("Eklenemedi", "Could not add"))
         }
     }
-    // Bilgi simgesine basılı tutunca: <ana dizin>/Link içindeki her şeyi <ana dizin>/.onemsiz klasörüne taşır (silmez, sormaz)
-    fun moveLinkToOnemsiz() {
-        if (!Store.hasAccess(ctx)) {
-            toast(L("Tüm dosyalara erişim izni ver, sonra tekrar dene", "Grant all-files access, then try again"))
-            return
+    fun startSearch(query: String = linkText) {
+        val q = query.trim()
+        if (q.isEmpty()) return
+        linkText = q
+        focus.clearFocus()
+        editMode = false; selected = emptySet()
+        searchJob?.cancel()
+        searchQuery = q; hits = null
+        searchJob = scope.launch {
+            val r = withContext(Dispatchers.IO) { Store.search(ctx, rootUri, q) { isActive } }
+            hits = r
         }
-        stack = emptyList(); selected = emptySet(); editMode = false
-        scope.launch {
-            val (total, moved) = lock.withLock {
-                withContext(Dispatchers.IO) {
-                    val items = try { Store.dataDir().listFiles()?.toList() } catch (e: Exception) { null }
-                    (items?.size ?: 0) to (items?.count { moveToOnemsiz(it) } ?: 0)
-                }
-            }
-            tick++
-            toast(when {
-                total == 0 -> L("Link klasöründe dosya yok", "No files in the Link folder")
-                moved == total -> L("$moved öğe .onemsiz klasörüne taşındı", "$moved items moved to .onemsiz")
-                else -> L("$moved/$total öğe .onemsiz klasörüne taşındı", "$moved/$total items moved to .onemsiz")
-            })
-        }
+    }
+    // Dışarıdan gelen sorgu: klasör yığınını sıfırla ve aramayı doğrudan göster
+    LaunchedEffect(extQuery, rootUri) {
+        val q = extQuery ?: return@LaunchedEffect
+        stack = emptyList(); dialog = null; txtDoc = null
+        startSearch(q)
+        onExtQueryConsumed()
+    }
+    fun exitSearch(clearText: Boolean) {
+        searchJob?.cancel()
+        if (clearText && linkText.trim() == searchQuery) linkText = ""
+        searchQuery = null; hits = null
     }
     // Eşitle tuşu: aynı ağdaki açık cihazlarla (Hızlı Paylaş) notları eşitler: eksikler eklenir, aynı dosyanın yeni olanı eskisinin üzerine yazılır
     fun syncNow() {
@@ -286,12 +314,22 @@ fun NotesApp(resume: Int = 0) {
             Notice.show(ctx, r.message(), true)
         }
     }
-    // Yenile tuşu: Link klasörünü tekrar kontrol eder (silinmişse yeniden oluşturur), artık var olmayan klasörlerden çıkar, listeyi yeniden yükler
+    // Yenile tuşu: Link klasörünü tekrar kontrol eder (silinmişse yeniden oluşturur), artık var olmayan klasörlerden çıkar, listeyi (arama açıksa aramayı) yeniden yükler
     fun refreshAll() {
         selected = emptySet()
         val refreshedRoot = Store.root(ctx)
         root = refreshedRoot
         stack = stack.takeWhile { java.io.File(it.uri.path ?: "").isDirectory }
+        val q = searchQuery
+        if (q != null) {
+            searchJob?.cancel(); hits = null
+            val searchRoot = refreshedRoot
+            if (searchRoot != null) {
+                searchJob = scope.launch {
+                    hits = withContext(Dispatchers.IO) { Store.search(ctx, searchRoot, q) { isActive } }
+                }
+            }
+        }
         tick++
         toast(L("Yenilendi", "Refreshed"))
     }
@@ -388,15 +426,27 @@ fun NotesApp(resume: Int = 0) {
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                     keyboardActions = KeyboardActions(onSend = { submit() }))
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    val canAdd = linkText.isNotBlank()
                     Text("${linkText.length}/$addMax", style = MaterialTheme.typography.labelSmall, color = if (linkText.length > addMax) MaterialTheme.colorScheme.error else Color.Unspecified, modifier = Modifier.padding(start = 8.dp))
                     Spacer(Modifier.weight(1f))
+                    Box(
+                        Modifier.size(48.dp).clip(CircleShape)
+                            .combinedClickable(enabled = canAdd, onClick = { submit() }, onLongClick = { addTxt() }),
+                        contentAlignment = Alignment.Center
+                    ) { Icon(Icons.Default.Add, L("Ekle (uzun bas: .txt)", "Add (long-press: .txt)"), tint = LocalContentColor.current.copy(alpha = if (canAdd) 1f else 0.38f)) }
+                    IconButton({ startSearch() }, enabled = linkText.isNotBlank()) { Icon(Icons.Default.Search, L("Ara", "Search")) }
                     IconButton({ linkText = "" }, enabled = linkText.isNotEmpty()) { Icon(Icons.Default.Clear, L("Temizle", "Clear")) }
                     IconButton({ clipboard.getText()?.text?.let { linkText = it } }) { Icon(Icons.Default.ContentPaste, L("Yapıştır", "Paste")) }
                 }
             }
         }
     }, topBar = {
-        TopAppBar(
+        if (searchQuery != null) TopAppBar(
+            title = {
+                Text("“$searchQuery”" + (hits?.let { " · ${it.size} " + L("sonuç", "results") } ?: ""), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            },
+            navigationIcon = { IconButton({ exitSearch(true) }) { Icon(Icons.Default.ArrowBack, L("Aramadan çık", "Exit search")) } })
+        else TopAppBar(
             title = {
                 Text(
                     if (editMode && selected.isNotEmpty()) L("${selected.size} seçili", "${selected.size} selected") else if (stack.isEmpty()) L("Notlarım", "My Notes") else stack.last().name,
@@ -412,12 +462,7 @@ fun NotesApp(resume: Int = 0) {
                 IconButton({ refreshAll() }) { Icon(Icons.Default.Refresh, L("Yenile", "Refresh")) }
                 // En sağdaki bilgi (i) ikonu: küçük menü açar (gemi resmi, e-posta, GitHub adresi)
                 Box {
-                    // Dokun: bilgi menüsü. Basılı tut: Link klasöründeki her şey .onemsiz klasörüne taşınır.
-                    Box(
-                        Modifier.size(48.dp).clip(CircleShape)
-                            .combinedClickable(onClick = { infoMenu = true }, onLongClick = { moveLinkToOnemsiz() }),
-                        contentAlignment = Alignment.Center
-                    ) { Icon(Icons.Default.Info, L("Bilgi", "Info")) }
+                    IconButton({ infoMenu = true }) { Icon(Icons.Default.Info, L("Bilgi", "Info")) }
                     DropdownMenu(infoMenu, { infoMenu = false }) {
                         Column(Modifier.padding(horizontal = 12.dp, vertical = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                             Image(
@@ -440,6 +485,9 @@ fun NotesApp(resume: Int = 0) {
                 }
             })
     }) { pad ->
+        if (searchQuery != null) SearchResults(pad, hits, { open(it) }) { path ->
+            exitSearch(true); stack = path
+        } else {
         if (loaded != null && list.isEmpty()) Box(Modifier.padding(pad).fillMaxSize().padding(32.dp), Alignment.Center) {
             Text(L("Burada henüz bir şey yok. Alttaki alana link veya metin yapıştırın ya da tarayıcıda Paylaş → Notlarım'ı seçin.", "Nothing here yet. Paste a link or text in the field below, or choose Share → My Notes in your browser."))
         }
@@ -488,6 +536,7 @@ fun NotesApp(resume: Int = 0) {
                     HorizontalDivider()
                 }
             }
+        }
         }
     }
 
@@ -736,3 +785,23 @@ fun MoveDialog(ctx: android.content.Context, root: Uri, current: Uri, exclude: S
 }
 
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SearchResults(pad: PaddingValues, hits: List<Hit>?, onOpen: (Entry) -> Unit, onGoto: (List<Entry>) -> Unit) {
+    when {
+        hits == null -> Box(Modifier.padding(pad).fillMaxSize(), Alignment.Center) { CircularProgressIndicator() }
+        hits.isEmpty() -> Box(Modifier.padding(pad).fillMaxSize().padding(32.dp), Alignment.Center) { Text(L("Sonuç bulunamadı.", "No results found.")) }
+        else -> LazyColumn(Modifier.padding(pad).fillMaxSize()) {
+            items(hits, key = { it.entry.key }) { h ->
+                ListItem(
+                    modifier = Modifier.clickable { onOpen(h.entry) },
+                    overlineContent = { Text(if (h.path.isEmpty()) L("Ana liste", "Main list") else h.path.joinToString(" › ") { it.name }, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    leadingContent = { Icon(if (h.isNote || h.entry.isTxt) Icons.Default.Description else Icons.Default.Link, null) },
+                    headlineContent = { Text(h.entry.title, maxLines = 4, overflow = TextOverflow.Ellipsis) },
+                    supportingContent = { if (!h.isNote && h.detail.isNotBlank()) Text(h.detail, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+                    trailingContent = { IconButton({ onGoto(h.path) }) { Icon(Icons.Default.FolderOpen, L("Klasöre git", "Go to folder")) } })
+                HorizontalDivider()
+            }
+        }
+    }
+}

@@ -1,6 +1,7 @@
 package io.github.idrisokys.myl
 
 import io.github.idrisokys.myl.common.Notice
+import io.github.idrisokys.myl.common.moveToOnemsiz
 import io.github.idrisokys.myl.qs.QsPermActivity
 import io.github.idrisokys.myl.qs.ReceiverService
 
@@ -98,12 +99,12 @@ class MainActivity : Activity() {
         val onLong: (() -> Unit)? = null,   // basılı tutma (kişilerde: WhatsApp sohbeti)
         val spacer: Boolean = false,        // sonuçlar arasındaki dokunulmaz boş satır
         val key: String? = null,            // uygulama sonuçlarında "app:<component>" (basılı tutunca menü açar)
-        val web: WebActions? = null,        // Google / Yandex / Play Store / Nuvio / Notlarım düğmeleri olan arama satırı
+        val web: WebActions? = null,        // Yandex / Play Store / Notlarım düğmeleri olan arama satırı
         val action: () -> Unit
     )
 
     /** Arama satırının sağındaki üç düğmenin eylemleri. */
-    class WebActions(val google: () -> Unit, val yandex: () -> Unit, val play: () -> Unit, val nuvio: () -> Unit, val notes: () -> Unit)
+    class WebActions(val yandex: () -> Unit, val play: () -> Unit, val notes: () -> Unit)
 
     /** Arka planda hazırlanan, ana thread'e hazır halde teslim edilen uygulama listesi. */
     private class Snapshot(
@@ -164,7 +165,7 @@ class MainActivity : Activity() {
     private var askedContacts = false
     private var pendingCallNumber: String? = null   // CALL_PHONE izni beklenirken
     private lateinit var moveBtn: ImageView
-    private lateinit var qsBtn: ImageView       // Hızlı Paylaş: dokun = aç/kapat, basılı tut = Link klasörü; kapalıyken koyu kırmızı
+    private lateinit var qsBtn: ImageView       // Hızlı Paylaş: dokun = aç, basılı tut = kapat; açıkken koyu kırmızı
     private lateinit var actionBtn: ImageView   // normalde ayarlar, düzenleme modunda klasör simgesi
     private var editMode = false
 
@@ -361,7 +362,7 @@ class MainActivity : Activity() {
             setOnLongClickListener { openCamera(); true }
         }
         bar.addView(camBtn, LinearLayout.LayoutParams(dp(46), dp(46)).apply { marginEnd = dp(8) })
-        // Hızlı Paylaş düğmesi (kameranın yanında): dokun = aç/kapat. Kapalıyken koyu kırmızı, açıkken normal.
+        // Hızlı Paylaş düğmesi (kameranın yanında): dokun = aç, basılı tut = kapat. Açıkken koyu kırmızı.
         qsBtn = ImageView(this).apply {
             setImageResource(R.drawable.ic_qs_tile)
             contentDescription = "Hızlı Paylaş"
@@ -370,7 +371,7 @@ class MainActivity : Activity() {
                 shape = GradientDrawable.OVAL
                 setColor(0x66000000)
             }
-            setOnClickListener { toggleQuickShare() }   // ilk basış aç, ikinci basış kapat
+            setOnClickListener { if (ReceiverService.running) quickShareOff() else quickShareOn() }   // ilk basış aç, ikinci basış kapat
             setOnLongClickListener { openLinkFolder(); true }                                         // basılı tut: Dosyalarım'da Link klasörü
         }
         bar.addView(qsBtn, LinearLayout.LayoutParams(dp(46), dp(46)).apply { marginEnd = dp(8) })
@@ -523,17 +524,12 @@ class MainActivity : Activity() {
     // ---------- Hızlı Paylaş ----------
     private fun updateQsBtn() {
         if (!::qsBtn.isInitialized) return
-        (qsBtn.background as GradientDrawable).setColor(if (ReceiverService.isOn(this)) IDLE_BG else ACTIVE_RED)
-    }
-
-    /** Dokunma: durum servisin asenkron açılış/kapanışına değil, kullanıcının son tercihine ([ReceiverService.isOn]) göre belirlenir; düğme anında güncellenir. */
-    private fun toggleQuickShare() {
-        if (ReceiverService.isOn(this)) quickShareOff() else quickShareOn()
+        (qsBtn.background as GradientDrawable).setColor(if (ReceiverService.running) ACTIVE_RED else IDLE_BG)
     }
 
     /** Tek dokunuş: alıcıyı açar (izin eksikse önce izin ekranı açılır, izin verilince alıcı kendiliğinden başlar). */
     private fun quickShareOn() {
-        if (!ReceiverService.ready(this)) {
+                if (!ReceiverService.ready(this)) {
             try { startActivity(Intent(this, QsPermActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
             catch (e: Exception) { toast("Hızlı Paylaş açılamadı") }
             return
@@ -558,6 +554,7 @@ class MainActivity : Activity() {
 
     /** İkinci dokunuşta alıcıyı kapatır. */
     private fun quickShareOff() {
+        if (!ReceiverService.running) { toast("Hızlı Paylaş zaten kapalı"); return }
         ReceiverService.stop(this)
         updateQsBtn()
         toast("Hızlı Paylaş kapalı")
@@ -612,7 +609,8 @@ class MainActivity : Activity() {
         row("Uygulamalar", R.drawable.ic_menu_apps) { openApps() }
 
         // Bilgi simgesi: dokununca ayrı küçük kartta gemi ikonu, e-posta ve Github
-        row("Bilgi", R.drawable.ic_menu_info) { showInfoCard(anchor) }
+        // Dokun: bilgi kartı. Basılı tut: /Link içindeki tüm dosyalar /.onemsiz klasörüne taşınır.
+        row("Bilgi", R.drawable.ic_menu_info, onLong = { moveLinkToOnemsiz() }) { showInfoCard(anchor) }
 
         box.addView(View(this).apply { setBackgroundColor(0x33FFFFFF) },
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)).apply {
@@ -626,6 +624,28 @@ class MainActivity : Activity() {
 
 
         pw.showAsDropDown(anchor, 0, dp(4), Gravity.END)
+    }
+
+    /** Bilgi simgesine basılı tutunca: <ana dizin>/Link içindeki her şeyi <ana dizin>/.onemsiz klasörüne taşır (silmez, sormaz). */
+    private fun moveLinkToOnemsiz() {
+        if (!Store.hasAccess(this)) {
+            toast("Tüm dosyalara erişim izni ver, sonra tekrar dene")
+            if (!Store.openAccessSettings(this)) requestPermissions(arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE), 5)
+            return
+        }
+        Thread {
+            val items = try { Store.dataDir().listFiles()?.toList() } catch (e: Exception) { null }
+            val total = items?.size ?: 0
+            val moved = items?.count { moveToOnemsiz(it) } ?: 0
+            main.post {
+                if (isDestroyed) return@post
+                toast(when {
+                    total == 0 -> "Link klasöründe dosya yok"
+                    moved == total -> "$moved öğe .onemsiz klasörüne taşındı"
+                    else -> "$moved/$total öğe .onemsiz klasörüne taşındı"
+                })
+            }
+        }.start()
     }
 
     /** Küçük bilgi kartı: gemi ikonu, altında e-posta, altında Github (dokununca açılır). */
@@ -820,22 +840,6 @@ class MainActivity : Activity() {
         }
     }
 
-    /** Nuvio'yu açar; Nuvio'da dışarıdan arama komutu olmadığı için aranan metin panoya kopyalanır (arama kutusuna yapıştırılır). */
-    private fun openNuvio(q: String) {
-        val launch = listOf("com.nuvio.app", "com.nuviodebug.com")
-            .firstNotNullOfOrNull { packageManager.getLaunchIntentForPackage(it) }
-        if (launch == null) { toast("Nuvio yüklü değil"); return }
-        try {
-            (getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager)
-                .setPrimaryClip(android.content.ClipData.newPlainText("Nuvio", q))
-            startActivity(launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-            toast("Aranan metin kopyalandı")
-            closeSearch()
-        } catch (e: Exception) {
-            toast("Nuvio açılamadı")
-        }
-    }
-
     /** Ana depolamadaki (iç depolama kökü) bir klasörü dosya yöneticisinde açar. */
     private fun openStorageFolder(name: String) {
         // Klasör adı büyük/küçük harfe duyarlı: diskte gerçekten var olan yazımı bul (link / Link / LINK)
@@ -900,9 +904,10 @@ class MainActivity : Activity() {
     }
 
     // ---------- Notlarım (eski adıyla LinkCepte): artık aynı uygulamanın içinde ----------
-    /** Notlarım'ı açar. */
-    private fun openNotes() {
+    /** Notlarım'ı açar; [query] verilirse sonuçları doğrudan gösterir. */
+    private fun openNotes(query: String? = null) {
         val i = Intent(this, NotesActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        if (query != null) i.putExtra(EXTRA_QUERY, query)
         try {
             startActivity(i)
             closeSearch()
@@ -1027,13 +1032,11 @@ class MainActivity : Activity() {
             })
         }
         val enc = Uri.encode(q)
-        // Tek satır: solda aranan metin, sağda Google · Yandex · Play Store · Nuvio · Notlarım düğmeleri
+        // Tek satır: solda aranan metin, sağda Yandex · Play Store · Notlarım düğmeleri
         rows.add(Row(q, null, null, web = WebActions(
-            google = { openUrl("https://www.google.com/search?q=$enc") },
             yandex = { openUrl("https://yandex.com/search/?text=$enc") },
             play = { openPlayStore(q) },
-            nuvio = { openNuvio(q) },
-            notes = { openNotes() }
+            notes = { openNotes(q) }
         )) {})
         // Yanlış dokunmayı önlemek için her sonucun altına dokunulmaz boş satır
         val withGaps = ArrayList<Row>(rows.size * 2)
@@ -1156,7 +1159,7 @@ class MainActivity : Activity() {
         const val MAX_CONTACTS = 2  // her kaynaktan (kişi / uygulama / ayar) en fazla 2 sonuç
         const val MAX_APPS = 2
         const val MAX_SETTINGS = 2
-        const val ACTIVE_RED = 0xCC8B0000.toInt()   // koyu kırmızı: düzenleme modu açıkken ve Hızlı Paylaş kapalıyken
+        const val ACTIVE_RED = 0xCC8B0000.toInt()   // koyu kırmızı: düzenleme modu ve Hızlı Paylaş açıkken
         const val IDLE_BG = 0x66000000
         const val WA_PKG = "com.whatsapp"
         const val WA_BIZ_PKG = "com.whatsapp.w4b"
@@ -1192,12 +1195,10 @@ class MainActivity : Activity() {
             }
         }
         for ((res, desc) in listOf(
-            R.drawable.ic_search_google to "Google'da ara",
             R.drawable.ic_search_yandex to "Yandex'te ara",
             R.drawable.ic_search_play to "Play Store'da ara",
-            R.drawable.ic_search_nuvio to "Nuvio'da ara",
-            R.drawable.ic_search_notes to "Notlarım'ı aç"
-        )) line.addView(btn(res, desc), LinearLayout.LayoutParams(dp(46), dp(46)).apply { marginStart = dp(12) })
+            R.drawable.ic_search_notes to "Notlarımda ara"
+        )) line.addView(btn(res, desc), LinearLayout.LayoutParams(dp(46), dp(46)).apply { marginStart = dp(22) })
         return line
     }
 
@@ -1219,11 +1220,9 @@ class MainActivity : Activity() {
             if (web != null) {
                 val line = (cv as? LinearLayout) ?: webRow()
                 (line.getChildAt(0) as TextView).text = rows[p].title
-                line.getChildAt(1).setOnClickListener { web.google() }
-                line.getChildAt(2).setOnClickListener { web.yandex() }
-                line.getChildAt(3).setOnClickListener { web.play() }
-                line.getChildAt(4).setOnClickListener { web.nuvio() }
-                line.getChildAt(5).setOnClickListener { web.notes() }
+                line.getChildAt(1).setOnClickListener { web.yandex() }
+                line.getChildAt(2).setOnClickListener { web.play() }
+                line.getChildAt(3).setOnClickListener { web.notes() }
                 return line
             }
             val h: RowHolder

@@ -58,20 +58,9 @@ private class Chunk(val b: ByteArray, val n: Int)   // n < 0: bitti işareti
 
 class Peer(val id: String, val name: String, val host: InetAddress, val port: Int, val svc: String = "")
 
-/** Aktarım ilerlemesini bildirime iletir. */
+/** Kısa durum mesajlarını (Dosya alındı / Dosya gönderildi / hata) ana ekrana iletir. Bildirim ve ilerleme çubuğu yoktur. */
 object Bus {
-    /** Arka plan servisi: bildirimi güncellemek için. */
-    @Volatile var sink: ((String, Int) -> Unit)? = null
-    fun set(s: String, p: Int = -1) { sink?.invoke(s, p) }
-
-    private var lastT = 0L
-    /** İlerleme güncellemesi: en fazla ~4/sn (bildirim boğulmasın), %100 her zaman geçer. */
-    fun progress(s: String, p: Int) {
-        val now = SystemClock.elapsedRealtime()
-        if (p < 100 && now - lastT < 250) return
-        lastT = now
-        set(s, p)
-    }
+    fun set(s: String) { ReceiverService.eventListener?.invoke(s) }
 }
 
 /** Aktarım sürerken Wi-Fi ve CPU'yu uyanık tutar; aktarım bitince bırakır (boşta pil harcamaz). */
@@ -356,7 +345,7 @@ class Receiver(private val ctx: Context) {
                                 if (fill > 0) full.put(Chunk(b, fill)) else free.add(b)
                                 left -= fill
                                 val p = ((len - left) * 100 / len).toInt()
-                                if (p != last) { last = p; Bus.progress(L("Alınıyor: $clean", "Receiving: $clean"), p) }
+                                if (p != last) last = p
                                 if (fill < want) break
                             }
                         } finally {
@@ -375,8 +364,8 @@ class Receiver(private val ctx: Context) {
                     } else file.delete()
                 }
                 reply(s, if (ok) "200 OK" else "500 Error")
-                Bus.set(if (ok) L("Kaydedildi: $clean", "Saved: $clean") else L("Alma yarım kaldı", "Transfer incomplete"))
-                if (ok && !sync) ReceiverService.notifyReceived(ctx, clean)
+                if (!ok) Bus.set(L("Alma yarım kaldı", "Transfer incomplete"))
+                else if (!sync) Bus.set(L("Dosya alındı", "File received"))
             }
         } catch (e: Exception) {
             Bus.set(recvError)
@@ -448,15 +437,12 @@ object Sender {
         c.startForegroundService(i)
     }
 
-    private fun toast(c: Context, m: String) =
-        Handler(Looper.getMainLooper()).post { Toast.makeText(c, m, Toast.LENGTH_LONG).show() }
-
     /** Servisin arka plan iş parçacığında çalışır. */
     fun run(c: Context, only: String?, uris: List<Uri>) {
         val ps = Peers.list().filter { only == null || it.id == only }
         if (ps.isEmpty()) {
             val m = L("Cihaz bulunamadı", "No device found")
-            Bus.set(m); toast(c, m)
+            Bus.set(m)
             return
         }
         Hold.acquire(c)
@@ -477,8 +463,7 @@ object Sender {
                 }.forEach { it.get() }
             } finally { pool.shutdown() }
             val err: String? = errs.peek()
-            val msg = err ?: L("Gönderildi", "Sent")
-            Bus.set(msg); toast(c, msg)
+            Bus.set(err ?: L("Dosya gönderildi", "File sent"))
         } finally { Hold.release() }
     }
 
@@ -557,7 +542,7 @@ object Sender {
                 out.write(b, 0, n)
                 sent += n
                 val pc = if (len > 0) (sent * 100 / len).toInt() else 0
-                if (pc != last) { last = pc; Bus.progress(L("Gönderiliyor: $name", "Sending: $name"), pc) }
+                if (pc != last) last = pc
             }
             // Dosya kısaldıysa alıcıyı 30 sn bekletmek yerine hemen hata ver.
             require(sent == len) { errOpen }

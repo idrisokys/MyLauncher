@@ -11,17 +11,14 @@ import android.provider.Settings
 
 /**
  * Arayüzsüz izin ekranı (yalnızca Hızlı Paylaş düğmesine ilk dokunuşta, izin eksikse açılır):
- * bildirim izni (isteğe bağlı) → "Tüm dosyalara erişim" → alıcıyı başlatır ve kapanır.
+ * "Tüm dosyalara erişim" → alıcıyı başlatır ve kapanır.
  */
 class QsPermActivity : Activity() {
     private var settingsOpened = false
 
     override fun onCreate(b: Bundle?) {
         super.onCreate(b)
-        if (Build.VERSION.SDK_INT >= 33 &&
-            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
-            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)   // sonuç ne olursa olsun devam edilir
-        else storageStep()
+        storageStep()
     }
 
     override fun onRequestPermissionsResult(rc: Int, p: Array<out String>, r: IntArray) {

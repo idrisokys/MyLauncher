@@ -190,6 +190,7 @@ class MainActivity : Activity() {
         buildUi()
         loadPrefs()
         ReceiverService.stateListener = { main.post { if (!isDestroyed) updateQsBtn() } }
+        ReceiverService.eventListener = { msg -> main.post { if (!isDestroyed) toast(msg) } }   // Dosya alındı / gönderildi: şeffaf mesaj
         updateQsBtn()
         cleanOldShareTargets()
         startReload()
@@ -236,6 +237,7 @@ class MainActivity : Activity() {
 
     override fun onDestroy() {
         ReceiverService.stateListener = null
+        ReceiverService.eventListener = null
         launcherApps.unregisterCallback(callback)
         main.removeCallbacksAndMessages(null)
         worker.shutdown()
@@ -369,8 +371,8 @@ class MainActivity : Activity() {
                 shape = GradientDrawable.OVAL
                 setColor(0x66000000)
             }
-            setOnClickListener { quickShareOn() }
-            setOnLongClickListener { quickShareOff(); true }
+            setOnClickListener { if (ReceiverService.running) quickShareOff() else quickShareOn() }   // ilk basış aç, ikinci basış kapat
+            setOnLongClickListener { openLinkFolder(); true }                                         // basılı tut: Dosyalarım'da Link klasörü
         }
         bar.addView(qsBtn, LinearLayout.LayoutParams(dp(46), dp(46)).apply { marginEnd = dp(8) })
         bar.addView(search, LinearLayout.LayoutParams(0, dp(50), 1f))
@@ -425,6 +427,8 @@ class MainActivity : Activity() {
             divider = null
             visibility = View.GONE
             setBackgroundColor(0xDD000000.toInt())
+            clipToPadding = false
+            setPadding(0, dp(56), 0, 0)   // sonuçlar arama kutusundan iki satır aşağıda başlar
             adapter = resultsAdapter
             setOnItemClickListener { _, _, p, _ ->
                 if (p in rows.indices) {
@@ -525,8 +529,7 @@ class MainActivity : Activity() {
 
     /** Tek dokunuş: alıcıyı açar (izin eksikse önce izin ekranı açılır, izin verilince alıcı kendiliğinden başlar). */
     private fun quickShareOn() {
-        if (ReceiverService.running) { toast("Hızlı Paylaş açık · kapatmak için basılı tut"); return }
-        if (!ReceiverService.ready(this)) {
+                if (!ReceiverService.ready(this)) {
             try { startActivity(Intent(this, QsPermActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
             catch (e: Exception) { toast("Hızlı Paylaş açılamadı") }
             return
@@ -538,7 +541,18 @@ class MainActivity : Activity() {
         } catch (e: Exception) { toast("Hızlı Paylaş açılamadı") }
     }
 
-    /** Basılı tutunca alıcıyı kapatır. */
+    /** Basılı tutunca: kendi Dosyalarım bölümünde Link klasörünü açar. */
+    private fun openLinkFolder() {
+        try {
+            startActivity(
+                Intent(this, io.github.idrisokys.myl.files.FilesActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    .putExtra(io.github.idrisokys.myl.files.FilesActivity.EXTRA_PATH, Store.dataDir().apply { mkdirs() }.absolutePath)
+            )
+        } catch (e: Exception) { toast("Dosyalarım açılamadı") }
+    }
+
+    /** İkinci dokunuşta alıcıyı kapatır. */
     private fun quickShareOff() {
         if (!ReceiverService.running) { toast("Hızlı Paylaş zaten kapalı"); return }
         ReceiverService.stop(this)
@@ -1169,7 +1183,7 @@ class MainActivity : Activity() {
             setPadding(dp(16), dp(4), dp(16), dp(4))
         }
         line.addView(TextView(this).apply {
-            textSize = 18f; setTextColor(Color.WHITE)
+            textSize = 21f; setTextColor(Color.WHITE)
             maxLines = 1; ellipsize = TextUtils.TruncateAt.END
         }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         fun btn(res: Int, desc: String) = ImageView(this).apply {
@@ -1200,7 +1214,7 @@ class MainActivity : Activity() {
         override fun getView(p: Int, cv: View?, parent: ViewGroup?): View {
             if (rows[p].spacer) {
                 return cv ?: View(this@MainActivity).apply {
-                    layoutParams = AbsListView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(6))
+                    layoutParams = AbsListView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(12))
                 }
             }
             val web = rows[p].web
@@ -1224,11 +1238,11 @@ class MainActivity : Activity() {
                 line.addView(iv, LinearLayout.LayoutParams(dp(40), dp(40)))
                 val col = LinearLayout(this@MainActivity).apply { orientation = LinearLayout.VERTICAL }
                 val title = TextView(this@MainActivity).apply {
-                    textSize = 18f; setTextColor(Color.WHITE)   // ana ekran arama kutusuyla aynı yazı boyutu
+                    textSize = 21f; setTextColor(Color.WHITE)
                     maxLines = 1; ellipsize = TextUtils.TruncateAt.END
                 }
                 val sub = TextView(this@MainActivity).apply {
-                    textSize = 12f; setTextColor(0xAAFFFFFF.toInt())
+                    textSize = 13f; setTextColor(0xAAFFFFFF.toInt())
                 }
                 col.addView(title)
                 col.addView(sub)

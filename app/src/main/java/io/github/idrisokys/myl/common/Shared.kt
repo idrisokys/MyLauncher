@@ -54,13 +54,20 @@ fun moveToOnemsiz(f: File): Boolean = try {
     try { File(d, ".nomedia").createNewFile() } catch (e: Exception) { }
     val t = uniqueFile(d, f.name)
     if (f.renameTo(t)) true
-    else {
+    else if (f.isDirectory) {
+        // Aynı bölümde değilse klasör içeriğiyle kopyalanır, başarılıysa kaynak silinir
+        if (f.copyRecursively(t, overwrite = false)) { f.deleteRecursively(); true } else { t.deleteRecursively(); false }
+    } else {
         val lm = f.lastModified()
         f.copyTo(t, overwrite = false)
         t.setLastModified(lm)
         if (f.delete()) true else { t.delete(); false }
     }
 } catch (e: Exception) { false }
+
+/** Dosya zaten ana dizindeki .onemsiz klasörünün içinde mi? (Orada "Sil" kalıcı siler; yoksa sonsuz taşıma olurdu.) */
+fun isInOnemsiz(f: File): Boolean =
+    f.absolutePath.startsWith(File(Environment.getExternalStorageDirectory(), ".onemsiz").absolutePath + File.separator)
 
 /** Tek satırlık metin girişi diyaloğu. */
 fun Activity.promptText(title: String, init: String, ok: (String) -> Unit) {

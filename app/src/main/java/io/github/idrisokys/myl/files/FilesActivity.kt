@@ -45,7 +45,7 @@ class FilesActivity : Activity() {
     private lateinit var titleV: TextView; private lateinit var pinV: ImageView; private lateinit var titleRow: LinearLayout; private lateinit var cancelV: TextView; private lateinit var body: FrameLayout; private lateinit var crumbS: HorizontalScrollView; private lateinit var crumbL: LinearLayout; private lateinit var dock: LinearLayout
     private var cur: File? = null; private var list: List<File>? = null; private var listTitle = ""
     private var editMode = false
-    private lateinit var selAllV: ImageView; private lateinit var penV: ImageView
+    private lateinit var selAllV: ImageView
     private var picking = false; private var slotPick = -1; private val sel = linkedSetOf<File>()
     private var clip = listOf<File>(); private var cut = false
     private var showHidden = true; private var asked = false
@@ -86,11 +86,6 @@ class FilesActivity : Activity() {
                 selectionChanged()
             }
         }
-        penV = ImageView(this).apply {
-            setImageDrawable(Icons.rename()); setColorFilter(Color.WHITE); setPadding(dp(8), dp(8), dp(8), dp(8)); visibility = View.GONE
-            contentDescription = "Seç"; setOnClickListener { editMode = true; refresh(true) }
-            setOnLongClickListener { newFolder(); true }
-        }
         pinV = ImageView(this).apply {
             setImageDrawable(Icons.pin()); setColorFilter(Color.WHITE); setPadding(dp(8), dp(8), dp(8), dp(8)); visibility = View.GONE
             contentDescription = "Ana ekrana sabitle"; setOnClickListener { pinSelected() }
@@ -106,7 +101,6 @@ class FilesActivity : Activity() {
         tb.setPadding(dp(12), 0, dp(12), 0); tb.addView(center, LinearLayout.LayoutParams(0, -1, 1f))
         tb.addView(selAllV, LinearLayout.LayoutParams(dp(40), dp(40)))
         tb.addView(cancelV, LinearLayout.LayoutParams(-2, -1))
-        tb.addView(penV, LinearLayout.LayoutParams(dp(40), dp(40)))
         body = FrameLayout(this)
         dock = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setBackgroundColor(dockBg) }
         col.addView(tb, -1, dp(54)); col.addView(body, LinearLayout.LayoutParams(-1, 0, 1f))
@@ -152,8 +146,6 @@ class FilesActivity : Activity() {
         if (crumbs) buildCrumbs()
         cancelV.visibility = if (editMode) View.VISIBLE else View.GONE
         selAllV.visibility = if (editMode) View.VISIBLE else View.GONE
-        val canEdit = !editMode && pendingShare == null && !picking && (cur != null || list != null)
-        penV.visibility = if (canEdit) View.VISIBLE else View.GONE
     }
 
     private fun buildCrumbs() {
@@ -315,7 +307,6 @@ class FilesActivity : Activity() {
 
     private var curLv: ListView? = null
     private var curAdapter: BaseAdapter? = null
-    private var curBarHost: android.widget.FrameLayout? = null
 
     private fun updateChrome() {
         chrome(if (editMode) "${sel.size} seçili" else if (list != null) listTitle else if (cur == root) "Ana bellek" else cur?.name ?: "", cur != null && list == null && !editMode)
@@ -323,11 +314,9 @@ class FilesActivity : Activity() {
 
     /** Seçim değişince listeyi yeniden kurmadan yerinde günceller (kaydırma bozulmaz, titreme olmaz). */
     private fun selectionChanged() {
-        val ad = curAdapter; val host = curBarHost
-        if (ad == null || host == null || curLv?.isAttachedToWindow != true) { refresh(true); return }
+        val ad = curAdapter
+        if (ad == null || curLv?.isAttachedToWindow != true) { refresh(true); return }
         updateChrome()
-        host.removeAllViews()
-        if (sel.isNotEmpty()) host.addView(selectionBar(), -1, dp(46))
         ad.notifyDataSetChanged()
     }
 
@@ -339,7 +328,7 @@ class FilesActivity : Activity() {
             sPos = oldLv.firstVisiblePosition
             sTop = oldLv.getChildAt(0)?.top ?: 0
         }
-        curLv = null; curAdapter = null; curBarHost = null
+        curLv = null; curAdapter = null
         val l = items()
         updateChrome()
         val lv = ListView(this).apply { divider = ColorDrawable(0xFF2E2E2E.toInt()); dividerHeight = dp(1); setBackgroundColor(bg) }
@@ -372,6 +361,15 @@ class FilesActivity : Activity() {
                 val sub = if (f.isDirectory) "${f.listFiles()?.size ?: 0} öğe" else sz(f.length())
                 c.addView(tv("$sub • ${df.format(Date(f.lastModified()))}", 14f, 0xFF999999.toInt()))
                 row.addView(c, LinearLayout.LayoutParams(0, -2, 1f))
+                if (pendingShare == null && !picking) {
+                    // Üç nokta: tek dokunuş menü (Taşı / Paylaş / Sil), basılı tutunca düzenleme modu açılır/kapanır
+                    row.addView(ImageView(this@FilesActivity).apply {
+                        setImageDrawable(Icons.more()); setColorFilter(Color.WHITE); setPadding(dp(10), dp(10), dp(10), dp(10))
+                        contentDescription = "Menü"
+                        setOnClickListener { itemMenu(f, it) }
+                        setOnLongClickListener { toggleEditMode(); true }
+                    }, LinearLayout.LayoutParams(dp(48), dp(48)))
+                }
                 return row
             }
         }
@@ -385,10 +383,6 @@ class FilesActivity : Activity() {
             true
         }
         val wrap = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        val barHost = android.widget.FrameLayout(this)
-        if (sel.isNotEmpty()) barHost.addView(selectionBar(), -1, dp(46))
-        wrap.addView(barHost, LinearLayout.LayoutParams(-1, -2))
-        curBarHost = barHost
         wrap.addView(lv, LinearLayout.LayoutParams(-1, 0, 1f))
         if (pendingShare != null) wrap.addView(saveBar(), -1, -2)
         else if (picking) wrap.addView(Button(this).apply { text = "Bu klasörü seç"; setOnClickListener { if (slotPick in 0..3) setSlot(slotPick, cur!!); slotPick = -1; home() } }, -1, -2)
@@ -417,37 +411,52 @@ class FilesActivity : Activity() {
 
     override fun onDestroy() { editor?.dismiss(); super.onDestroy() }
 
-    private fun barBtn(ic: Drawable, label: String, enabled: Boolean, act: () -> Unit): View {
-        val b = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; alpha = if (enabled) 1f else 0.35f }
-        b.addView(ImageView(this).apply { setImageDrawable(ic); setColorFilter(Color.WHITE); contentDescription = label.replace("\n", " ") }, dp(24), dp(24))
-        b.setOnClickListener { act() }
-        return b
+    /** Üç noktaya basılı tutunca düzenleme (seçim) modu açılır, tekrar basılı tutunca kapanır. */
+    private fun toggleEditMode() { editMode = !editMode; sel.clear(); refresh(true) }
+
+    /** Üç nokta menüsü. Öğe, birden çok seçilenin içindeyse işlem tüm seçilenlere uygulanır. */
+    private fun itemMenu(f: File, anchor: View) {
+        val targets = if (f in sel && sel.size > 1) sel.toList() else listOf(f)
+        val pm = PopupMenu(this, anchor)
+        pm.menu.add(0, 1, 0, "Taşı")
+        pm.menu.add(0, 2, 1, "Paylaş")
+        pm.menu.add(0, 3, 2, "Sil")
+        pm.setOnMenuItemClickListener {
+            when (it.itemId) { 1 -> moveItems(targets); 2 -> shareFiles(targets); else -> deleteItems(targets) }
+            true
+        }
+        pm.show()
     }
 
-    private fun selectionBar(): View {
-        val bar = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setBackgroundColor(0xFF2A2A2A.toInt()) }
-        fun add(ic: Drawable, label: String, enabled: Boolean = true, act: () -> Unit) =
-            bar.addView(barBtn(ic, label, enabled, act), LinearLayout.LayoutParams(0, -1, 1f))
-        add(Icons.rename(), "Yeniden\nadlandır", sel.size == 1) {
-            if (sel.size != 1) { Notice.show(this, "Yeniden adlandırmak için tek öğe seçin", false); return@add }
-            val f = sel.first()
-            promptText("Yeni ad", f.name) { n -> if (n.isNotEmpty()) f.renameTo(File(f.parentFile, n)); sel.clear(); if (list != null) list = list!!.filter { it.exists() }; refresh() }
+    private fun moveItems(x: List<File>) {
+        clip = x; cut = true; sel.clear(); editMode = false; refresh()
+        Notice.show(this, "Hedef klasöre gidip Yapıştır'a basın", false)
+    }
+
+    /** "Sil": öğeleri silmez, ana dizindeki gizli .onemsiz klasörüne taşır. .onemsiz içindekiler onayla kalıcı silinir. */
+    private fun deleteItems(x: List<File>) {
+        sel.clear()
+        val purge = x.filter { isInOnemsiz(it) }
+        val soft = x.filter { !isInOnemsiz(it) }
+        fun done(msg: String) {
+            if (list != null) list = list!!.filter { it.exists() }
+            refresh(true)
+            if (msg.isNotEmpty()) Notice.show(this, msg, false)
         }
-        add(Icons.delete(), "Sil") {
-            AlertDialog.Builder(this).setMessage("${sel.size} öğe silinsin mi?").setPositiveButton("Sil") { _, _ ->
-                val x = sel.toList(); sel.clear()
-                Thread { x.forEach { it.deleteRecursively() }; runOnUiThread { if (list != null) list = list!!.filter { it.exists() }; refresh() } }.start()
+        fun purgeAsk() {
+            if (purge.isEmpty()) return
+            AlertDialog.Builder(this).setMessage("${purge.size} öğe kalıcı olarak silinsin mi?").setPositiveButton("Sil") { _, _ ->
+                Thread { purge.forEach { it.deleteRecursively() }; runOnUiThread { done("${purge.size} öğe silindi") } }.start()
             }.setNegativeButton("İptal", null).show()
         }
-        add(Icons.share(), "Paylaş") {
-            if (sel.none { it.isFile }) Notice.show(this, "Klasörleri paylaşmak için önce sıkıştırın", false) else share()
-        }
-        add(Icons.move(), "Taşı") { clip = sel.toList(); cut = true; sel.clear(); editMode = false; refresh(); Notice.show(this, "Hedef klasöre gidip Yapıştır'a basın", false) }
-        add(Icons.copy(), "Kopyala") { clip = sel.toList(); cut = false; sel.clear(); editMode = false; refresh(); Notice.show(this, "Hedef klasöre gidip Yapıştır'a basın", false) }
-        add(Icons.zip(), "Sıkıştır") { zipSelected() }
-        val zips = sel.filter { it.isFile && it.extension.lowercase() == "zip" }
-        if (zips.isNotEmpty()) add(Icons.unzip(), "Zip'i\naç") { val z = zips.toList(); sel.clear(); z.forEach { unzip(it) } }
-        return bar
+        if (soft.isEmpty()) { done(""); purgeAsk(); return }
+        Thread {
+            val n = soft.count { moveToOnemsiz(it) }
+            runOnUiThread {
+                done(if (n == soft.size) "$n öğe .onemsiz klasörüne taşındı" else "$n/${soft.size} öğe .onemsiz klasörüne taşınabildi")
+                purgeAsk()
+            }
+        }.start()
     }
 
     private fun pasteBar(): View {
@@ -581,9 +590,10 @@ class FilesActivity : Activity() {
         catch (e: ActivityNotFoundException) { Notice.show(this, "Açacak uygulama yok", false) }
     }
 
-    private fun share() {
-        val us = ArrayList(sel.filter { it.isFile }.map { uri(it) })
-        if (us.isEmpty()) return
+    private fun shareFiles(x: List<File>) {
+        val us = ArrayList(x.filter { it.isFile }.map { uri(it) })
+        if (us.isEmpty()) { Notice.show(this, "Klasörleri paylaşmak için önce sıkıştırın", false); return }
+        sel.clear(); editMode = false; refresh(true)
         startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND_MULTIPLE).setType("*/*").putParcelableArrayListExtra(Intent.EXTRA_STREAM, us).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION), "Paylaş"))
     }
 

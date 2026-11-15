@@ -166,6 +166,8 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
     val list = loaded ?: emptyList()
     // Düzenleme modunda tam bir öğe seçiliyse adı alttaki geniş alanda değiştirilir
     val rn: Entry? = if (editMode && selected.size == 1) list.firstOrNull { it.key in selected } else null
+    // .url kayıtlarında (link/not) ad alanı sınırsızdır; 220'yi aşarsa kayıt otomatik .txt olur. Klasör ve .txt adları 220 ile sınırlı kalır.
+    val editCap = if (rn != null && !rn.isDir && !rn.isTxt) 20_000 else 220
     LaunchedEffect(rn?.key) { renameText = rn?.title ?: "" }
     LaunchedEffect(current) { selected = emptySet() }   // klasör değişince işaretler temizlenir
     BackHandler(searchQuery != null || editMode || stack.isNotEmpty()) {
@@ -331,9 +333,29 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
         tick++
         toast(L("Yenilendi", "Refreshed"))
     }
+    // "Sil": öğeler silinmez, ana dizindeki gizli .onemsiz klasörüne taşınır
     fun deleteNow(items: List<Entry>) {
         selected = emptySet()
-        run { items.forEach { Store.delete(ctx, it.uri) } }
+        scope.launch {
+            val n = lock.withLock { withContext(Dispatchers.IO) { items.count { Store.trash(ctx, it.uri) } } }
+            tick++
+            toast(if (n == items.size) L(".onemsiz klasörüne taşındı ($n)", "Moved to .onemsiz ($n)") else L("$n/${items.size} öğe .onemsiz'e taşınabildi", "$n/${items.size} items moved to .onemsiz"))
+        }
+    }
+    // "Paylaş": notlar metin olarak paylaşılır (.txt: içerik, link: adres, not: metin); klasörler paylaşılamaz
+    fun shareEntries(items: List<Entry>) {
+        scope.launch {
+            val texts = withContext(Dispatchers.IO) {
+                items.filter { !it.isDir }.mapNotNull { e ->
+                    if (e.isTxt) Store.readPlain(ctx, e.uri)
+                    else { val (u, t) = Store.readLink(ctx, e.uri); u ?: t ?: e.title }
+                }
+            }
+            if (texts.isEmpty()) { toast(L("Klasörler paylaşılamaz", "Folders cannot be shared")); return@launch }
+            selected = emptySet(); editMode = false
+            val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, texts.joinToString("\n\n"))
+            try { ctx.startActivity(Intent.createChooser(send, L("Paylaş", "Share"))) } catch (ex: Exception) { toast(L("Paylaşılamadı", "Could not share")) }
+        }
     }
     fun saveRename() {
         val r = rn ?: return
@@ -343,9 +365,19 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
         editMode = false          // kayıt yapılınca düzenleme modu otomatik kapanır
         focus.clearFocus()
         scope.launch {
-            val ok = lock.withLock { withContext(Dispatchers.IO) { Store.rename(ctx, current, r, n) } }
+            val toTxt = !r.isDir && !r.isTxt && n.trim().length > maxChars
+            val ok = lock.withLock {
+                withContext(Dispatchers.IO) {
+                    if (toTxt) {
+                        // Link ise adres kaybolmasın diye metnin altına eklenir
+                        val (u, _) = Store.readLink(ctx, r.uri)
+                        Store.convertToTxt(ctx, current, r, if (u != null) n.trim() + "\n" + u else n.trim())
+                    } else Store.rename(ctx, current, r, n)
+                }
+            }
             tick++
             if (!ok) toast(L("Ad değiştirilemedi (aynı adda öğe olabilir)", "Could not rename (an item with that name may exist)"))
+            else if (toTxt) toast(L("Uzun olduğu için .txt olarak kaydedildi", "Too long, saved as .txt"))
         }
     }
 
@@ -353,7 +385,7 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
         if (rn != null) Surface(tonalElevation = 3.dp) {
             Column(Modifier.fillMaxWidth().navigationBarsPadding().imePadding().padding(horizontal = 8.dp, vertical = 6.dp)) {
                 OutlinedTextField(
-                    renameText, { renameText = it.take(maxChars) },
+                    renameText, { renameText = it.take(editCap) },
                     modifier = Modifier.fillMaxWidth().onPreviewKeyEvent { ev ->
                         // Donanım klavyesi: Enter kaydeder, Shift+Enter yeni satır
                         if (ev.key == Key.Enter && !ev.isShiftPressed) { if (ev.type == KeyEventType.KeyDown) saveRename(); true } else false
@@ -363,9 +395,11 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                     keyboardActions = KeyboardActions(onSend = { saveRename() }))
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text("${renameText.length}/$maxChars", style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(start = 8.dp))
+                    val over = renameText.length > maxChars
+                    Text(if (over) "${renameText.length}/$maxChars → .txt" else "${renameText.length}/$maxChars", style = MaterialTheme.typography.labelSmall,
+                        color = if (over) MaterialTheme.colorScheme.error else Color.Unspecified, modifier = Modifier.padding(start = 8.dp))
                     Spacer(Modifier.weight(1f))
-                    IconButton({ clipboard.getText()?.text?.let { renameText = it.take(maxChars) } }) { Icon(Icons.Default.ContentPaste, L("Yapıştır", "Paste")) }
+                    IconButton({ clipboard.getText()?.text?.let { renameText = it.take(editCap) } }) { Icon(Icons.Default.ContentPaste, L("Yapıştır", "Paste")) }
                     IconButton({ saveRename() }, enabled = renameText.isNotBlank()) {
                         Icon(Icons.Default.Save, L("Kaydet", "Save"),
                             tint = if (renameText.isNotBlank()) MaterialTheme.colorScheme.primary else LocalContentColor.current.copy(alpha = 0.38f))
@@ -420,15 +454,7 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
             },
             navigationIcon = { if (stack.isNotEmpty()) IconButton({ stack = stack.dropLast(1) }) { Icon(Icons.Default.ArrowBack, L("Geri", "Back")) } },
             actions = {
-                if (editMode && selected.isNotEmpty()) {
-                    IconButton({ moving = list.filter { it.key in selected }; dialog = "move" }) { Icon(Icons.Default.DriveFileMove, L("Taşı", "Move")) }
-                    IconButton({ deleteNow(list.filter { it.key in selected }) }) { Icon(Icons.Default.Delete, L("Sil", "Delete")) }
-                }
                 IconButton({ dialog = "folder" }) { Icon(Icons.Default.CreateNewFolder, L("Klasör", "Folder")) }
-                // Düzenle tuşu: satırlarda seçim kutusunu açar/kapatır; tek öğe seçilince adı altta değiştirilir, ok tuşlarıyla sırası değiştirilir
-                IconButton({ editMode = !editMode; selected = emptySet() }) {
-                    Icon(if (editMode) Icons.Default.Done else Icons.Default.Edit, if (editMode) L("Düzenlemeyi bitir", "Done editing") else L("Düzenle", "Edit"))
-                }
                 IconButton({ syncNow() }, enabled = !syncing) {
                     if (syncing) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
                     else Icon(Icons.Default.Sync, L("Cihazlarla eşitle", "Sync with devices"))
@@ -487,7 +513,26 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
                             if (editMode) Checkbox(sel, { selected = if (sel) selected - e.key else selected + e.key })
                             else Icon(if (e.isDir) Icons.Default.Folder else if (e.isTxt) Icons.Default.Description else Icons.Default.Link, null)
                         },
-                        headlineContent = { Text(e.title, maxLines = 4, overflow = TextOverflow.Ellipsis) })
+                        headlineContent = { Text(e.title, maxLines = 4, overflow = TextOverflow.Ellipsis) },
+                        trailingContent = {
+                            // Üç nokta: tek dokunuş menü (Taşı / Paylaş / Sil), basılı tutunca düzenleme modu açılır/kapanır
+                            Box {
+                                var menu by remember { mutableStateOf(false) }
+                                Box(
+                                    Modifier.size(40.dp).clip(CircleShape).combinedClickable(
+                                        onClick = { menu = true },
+                                        onLongClick = { editMode = !editMode; selected = emptySet() }),
+                                    Alignment.Center
+                                ) { Icon(Icons.Default.MoreVert, L("Menü", "Menu")) }
+                                DropdownMenu(menu, { menu = false }) {
+                                    // Öğe birden çok seçilenin içindeyse işlem tüm seçilenlere uygulanır
+                                    val targets = if (sel && selected.size > 1) list.filter { it.key in selected } else listOf(e)
+                                    DropdownMenuItem(text = { Text(L("Taşı", "Move")) }, onClick = { menu = false; moving = targets; dialog = "move" })
+                                    DropdownMenuItem(text = { Text(L("Paylaş", "Share")) }, onClick = { menu = false; shareEntries(targets) })
+                                    DropdownMenuItem(text = { Text(L("Sil", "Delete")) }, onClick = { menu = false; deleteNow(targets) })
+                                }
+                            }
+                        })
                     HorizontalDivider()
                 }
             }

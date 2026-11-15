@@ -5,6 +5,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
+import io.github.idrisokys.myl.common.moveToOnemsiz
 import java.io.File
 import java.util.concurrent.Callable
 import java.util.concurrent.ExecutorCompletionService
@@ -314,6 +315,28 @@ object Store {
 
     fun delete(ctx: Context, uri: Uri) = synchronized(mutex) {
         try { file(uri).deleteRecursively(); Unit } catch (e: Exception) { }
+    }
+
+    /** "Sil": öğeyi silmez, ana dizindeki gizli .onemsiz klasörüne taşır (klasörse içeriğiyle birlikte). */
+    fun trash(ctx: Context, uri: Uri): Boolean = synchronized(mutex) { moveToOnemsiz(file(uri)) }
+
+    /**
+     * Düzenlenen .url kaydı ad sınırını ([ADD_MAX] / 220) aşınca çağrılır: kayıt, aynı yerde .txt dosyasına dönüşür
+     * (içerik = [text]; sıralamadaki yeri korunur, eski .url silinir). Dosya adı metnin ilk 100 karakteridir.
+     */
+    fun convertToTxt(ctx: Context, dir: Uri, e: Entry, text: String): Boolean = synchronized(mutex) {
+        try {
+            val all = childrenOrNull(dir) ?: return false
+            val order = ordered(all).map { it.name }
+            val taken = all.filter { it.uri != e.uri }.mapTo(HashSet()) { it.name.lowercase() }
+            val b = clean(text.replace(WS, " ").trim().ifBlank { "not" }, 100)
+            var name = "$b.txt"; var i = 2
+            while (name.lowercase() in taken) { name = "$b ($i).txt"; i++ }
+            File(file(dir), name).writeText(text, Charsets.UTF_8)
+            file(e.uri).delete()
+            saveOrderIn(dir, order.map { if (it == e.name) name else it })
+            true
+        } catch (ex: Exception) { false }
     }
 
     private fun lines(uri: Uri): List<String> = try {

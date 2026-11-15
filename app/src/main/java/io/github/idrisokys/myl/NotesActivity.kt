@@ -118,6 +118,7 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
     var moving by remember { mutableStateOf<List<Entry>>(emptyList()) }   // taşınacak öğeler
     var dialog by remember { mutableStateOf<String?>(null) }
     var infoMenu by remember { mutableStateOf(false) }          // sağ üstteki bilgi (i) menüsü
+    var syncing by remember { mutableStateOf(false) }           // üstteki eşitle tuşu: devam eden eşitleme
     var renameText by remember { mutableStateOf("") }
     var txtDoc by remember { mutableStateOf<Pair<Entry, String>?>(null) }   // tam ekranda açık .txt (öğe, içerik)
     var linkText by remember { mutableStateOf("") }
@@ -294,6 +295,23 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
         if (clearText && linkText.trim() == searchQuery) linkText = ""
         searchQuery = null; hits = null
     }
+    // Eşitle tuşu: aynı ağdaki açık cihazlarla (Hızlı Paylaş) notları eşitler: eksikler eklenir, aynı dosyanın yeni olanı eskisinin üzerine yazılır
+    fun syncNow() {
+        if (syncing) return
+        syncing = true
+        toast(L("Eşitleniyor…", "Syncing…"))
+        scope.launch {
+            val r = lock.withLock {
+                withContext(Dispatchers.IO) {
+                    try { io.github.idrisokys.myl.qs.NoteSync.run(ctx) }
+                    catch (e: Exception) { io.github.idrisokys.myl.qs.NoteSync.Result(error = e.message ?: "?") }
+                }
+            }
+            syncing = false
+            tick++
+            Notice.show(ctx, r.message(), true)
+        }
+    }
     // Yenile tuşu: Link klasörünü tekrar kontrol eder (silinmişse yeniden oluşturur), artık var olmayan klasörlerden çıkar, listeyi (arama açıksa aramayı) yeniden yükler
     fun refreshAll() {
         selected = emptySet()
@@ -410,6 +428,10 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
                 // Düzenle tuşu: satırlarda seçim kutusunu açar/kapatır; tek öğe seçilince adı altta değiştirilir, ok tuşlarıyla sırası değiştirilir
                 IconButton({ editMode = !editMode; selected = emptySet() }) {
                     Icon(if (editMode) Icons.Default.Done else Icons.Default.Edit, if (editMode) L("Düzenlemeyi bitir", "Done editing") else L("Düzenle", "Edit"))
+                }
+                IconButton({ syncNow() }, enabled = !syncing) {
+                    if (syncing) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                    else Icon(Icons.Default.Sync, L("Cihazlarla eşitle", "Sync with devices"))
                 }
                 IconButton({ refreshAll() }) { Icon(Icons.Default.Refresh, L("Yenile", "Refresh")) }
                 // En sağdaki bilgi (i) ikonu: küçük menü açar (gemi resmi, e-posta, GitHub adresi)

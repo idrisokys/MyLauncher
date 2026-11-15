@@ -302,9 +302,13 @@ class Receiver(private val ctx: Context) {
                 s.tcpNoDelay = true
                 // Başlıklar bayt bayt okunduğu için tamponlu akış (sistem çağrısı sayısını düşürür)
                 val ins = BufferedInputStream(s.inputStream, 64 * 1024)
-                line(ins)
+                val req = line(ins)
+                val method = req.substringBefore(' ')
+                val target = req.substringAfter(' ').substringBefore(' ')
                 var len = -1L
                 var name = "file"
+                var sync = false          // Notlarım eşitlemesi: X-Name göreli yoldur (alt klasörlü)
+                var mtime = -1L
                 while (true) {
                     val l = line(ins)
                     if (l.isEmpty()) break
@@ -312,14 +316,33 @@ class Receiver(private val ctx: Context) {
                     val v = l.substringAfter(':').trim()
                     if (k == "content-length") len = v.toLongOrNull() ?: -1L
                     else if (k == "x-name") name = URLDecoder.decode(v, "UTF-8")
+                    else if (k == "x-sync") sync = v == "1"
+                    else if (k == "x-mtime") mtime = v.toLongOrNull() ?: -1L
                 }
+
+                // Notlarım eşitleme uç noktaları (düz dosya gönderiminden bağımsız)
+                if (method == "GET" && target == "/m") {
+                    if (!SaveDir.direct(ctx)) { reply(s, "500 Error"); return }
+                    NoteSync.serveManifest(s); return
+                }
+                if (method == "GET" && target == "/f") {
+                    if (!SaveDir.direct(ctx)) { reply(s, "500 Error"); return }
+                    NoteSync.serveFile(s, name); return
+                }
+                if (method == "POST" && target == "/d") {
+                    if (!SaveDir.direct(ctx)) { reply(s, "500 Error"); return }
+                    NoteSync.serveMkdir(s, name); return
+                }
+
                 if (len < 0) { reply(s, "400 Bad Request"); return }
-                val clean = name.substringAfterLast('/').substringAfterLast('\\')
+                val syncDest: File? = if (sync) NoteSync.resolve(name) else null
+                if (sync && syncDest == null) { reply(s, "400 Bad Request"); return }
+                val clean = syncDest?.name ?: name.substringAfterLast('/').substringAfterLast('\\')
                     .replace(Regex("[\\u0000-\\u001f:*?\"<>|]"), "_").trimStart('.').take(120).ifBlank { "file" }
 
                 // Kayıt yeri yalnızca <ana dizin>/Link; izin yoksa ya da yazılamazsa alma reddedilir.
                 if (!SaveDir.direct(ctx)) { reply(s, "500 Error"); Bus.set(recvError); return }
-                val d = SaveDir.dir().also { it.mkdirs() }
+                val d = (syncDest?.parentFile ?: SaveDir.dir()).also { it.mkdirs() }
                 if (!d.isDirectory || d.usableSpace < len) { reply(s, "507 Insufficient Storage"); Bus.set(recvError); return }
 
                 // Önce .part dosyasına yazılır, başarılı olunca asıl ada çevrilir (aynı adlı dosyanın üzerine yazar).
@@ -369,15 +392,16 @@ class Receiver(private val ctx: Context) {
                     }
                 } finally {
                     if (ok) {
-                        val dest = File(d, clean)
+                        val dest = syncDest ?: File(d, clean)
+                        if (sync && mtime > 0) file.setLastModified(mtime)   // zaman korunur: eşitlemede "yeni olan kazanır" bunu kullanır
                         dest.delete()
-                        if (file.renameTo(dest)) MediaScannerConnection.scanFile(ctx, arrayOf(dest.absolutePath), null, null)
+                        if (file.renameTo(dest)) { if (!sync) MediaScannerConnection.scanFile(ctx, arrayOf(dest.absolutePath), null, null) }
                         else { file.delete(); ok = false }
                     } else file.delete()
                 }
                 reply(s, if (ok) "200 OK" else "500 Error")
                 Bus.set(if (ok) L("Kaydedildi: $clean", "Saved: $clean") else L("Alma yarım kaldı", "Transfer incomplete"))
-                if (ok) ReceiverService.notifyReceived(ctx, clean)
+                if (ok && !sync) ReceiverService.notifyReceived(ctx, clean)
             }
         } catch (e: Exception) {
             Bus.set(recvError)
@@ -405,7 +429,7 @@ private fun pickAddr(i: NsdServiceInfo): InetAddress? {
  * önbellekteki eski port "connection refused" verir. En çok ~5 sn bekler, bulamazsa null döner.
  */
 @Suppress("DEPRECATION")
-private fun reresolve(c: Context, old: Peer): Peer? {
+internal fun reresolve(c: Context, old: Peer): Peer? {
     if (old.svc.isEmpty()) return null
     val nsd = c.getSystemService(Context.NSD_SERVICE) as NsdManager
     repeat(3) {

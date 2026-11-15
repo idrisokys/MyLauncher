@@ -103,8 +103,8 @@ class MainActivity : Activity() {
         val action: () -> Unit
     )
 
-    /** Arama satırının sağındaki düğmelerin eylemleri (Google · Yandex · Play Store · Notlarım · Nuvio). */
-    class WebActions(val google: () -> Unit, val yandex: () -> Unit, val play: () -> Unit, val notes: () -> Unit, val nuvio: () -> Unit)
+    /** Arama satırının sağındaki düğmelerin eylemleri (Google · Yandex · Play Store · Notlarım). */
+    class WebActions(val google: () -> Unit, val yandex: () -> Unit, val play: () -> Unit, val notes: () -> Unit)
 
     /** Arka planda hazırlanan, ana thread'e hazır halde teslim edilen uygulama listesi. */
     private class Snapshot(
@@ -822,31 +822,6 @@ class MainActivity : Activity() {
         closeSearch()
     }
 
-    /** Yazılan metni doğrudan Nuvio uygulamasının içinde arar (nuvio://search?query=...). Yüklü değilse uyarır. */
-    private fun openNuvioSearch(q: String) {
-        val enc = Uri.encode(q)
-        for (pkg in listOf("com.nuvio.app", "com.nuviodebug.com")) {
-            if (try { packageManager.getLaunchIntentForPackage(pkg) == null } catch (e: Exception) { true }) continue
-            try {
-                startActivity(
-                    Intent(Intent.ACTION_VIEW, Uri.parse("nuvio://search?query=$enc&q=$enc"))
-                        .setPackage(pkg)
-                        .putExtra("query", q)
-                        .putExtra(android.app.SearchManager.QUERY, q)
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                )
-                closeSearch()
-                return
-            } catch (e: Exception) {
-                // Bu paket bağlantıyı kabul etmedi: uygulamayı normal aç
-                try {
-                    packageManager.getLaunchIntentForPackage(pkg)?.let { startActivity(it); closeSearch(); return }
-                } catch (e2: Exception) { }
-            }
-        }
-        toast("Nuvio yüklü değil")
-    }
-
     /** Play Store uygulamasında arar; yüklü değilse tarayıcıda Play Store web aramasını açar. */
     private fun openPlayStore(q: String) {
         val enc = Uri.encode(q)
@@ -1053,13 +1028,12 @@ class MainActivity : Activity() {
             })
         }
         val enc = Uri.encode(q)
-        // Tek satır: solda aranan metin, sağda Google · Yandex · Play Store · Notlarım · Nuvio düğmeleri
+        // Tek satır: solda aranan metin, sağda Google · Yandex · Play Store · Notlarım düğmeleri
         rows.add(Row(q, null, null, web = WebActions(
             google = { openUrl("https://www.google.com/search?q=$enc") },
             yandex = { openUrl("https://yandex.com/search/?text=$enc") },
             play = { openPlayStore(q) },
-            notes = { openNotes(q) },
-            nuvio = { openNuvioSearch(q) }
+            notes = { openNotes(q) }
         )) {})
         // Yanlış dokunmayı önlemek için her sonucun altına dokunulmaz boş satır
         val withGaps = ArrayList<Row>(rows.size * 2)
@@ -1198,7 +1172,7 @@ class MainActivity : Activity() {
         }
     }
 
-    /** Aranan metin solda; sağda Google · Yandex · Play Store · Notlarım · Nuvio düğmeleri (üstteki ikonlarla aynı boyut ve yuvarlak biçim). */
+    /** Aranan metin solda; sağda Google · Yandex · Play Store · Notlarım düğmeleri (üstteki ikonlarla aynı boyut ve yuvarlak biçim). */
     private fun webRow(): LinearLayout {
         val line = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -1222,8 +1196,7 @@ class MainActivity : Activity() {
             R.drawable.ic_search_google to "Google'da ara",
             R.drawable.ic_search_yandex to "Yandex'te ara",
             R.drawable.ic_search_play to "Play Store'da ara",
-            R.drawable.ic_search_notes to "Notlarımda ara",
-            R.drawable.ic_search_app to "Nuvio'da ara"
+            R.drawable.ic_search_notes to "Notlarımda ara"
         )) line.addView(btn(res, desc), LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(8) })
         return line
     }
@@ -1250,7 +1223,6 @@ class MainActivity : Activity() {
                 line.getChildAt(2).setOnClickListener { web.yandex() }
                 line.getChildAt(3).setOnClickListener { web.play() }
                 line.getChildAt(4).setOnClickListener { web.notes() }
-                line.getChildAt(5).setOnClickListener { web.nuvio() }
                 return line
             }
             val h: RowHolder

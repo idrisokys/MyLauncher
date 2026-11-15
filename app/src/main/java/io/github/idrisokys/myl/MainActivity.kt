@@ -428,7 +428,7 @@ class MainActivity : Activity() {
             visibility = View.GONE
             setBackgroundColor(0xDD000000.toInt())
             clipToPadding = false
-            setPadding(0, dp(56), 0, 0)   // sonuçlar arama kutusundan iki satır aşağıda başlar
+            setPadding(0, dp(140), 0, 0)   // sonuçlar arama kutusundan 5 satır aşağıda başlar
             adapter = resultsAdapter
             setOnItemClickListener { _, _, p, _ ->
                 if (p in rows.indices) {
@@ -576,7 +576,6 @@ class MainActivity : Activity() {
         editMode = on
         (moveBtn.background as GradientDrawable).setColor(if (on) ACTIVE_RED else IDLE_BG)
         actionBtn.setImageResource(if (on) R.drawable.ic_folder_add else R.drawable.ic_settings)
-        toast(if (on) "Düzenleme açık: simgeyi başka bir simgenin ortasına bırakırsan yer değiştirirler, kenarına (arasına) bırakırsan araya girer. Klasör için üstteki klasör düğmesini kullan" else "Düzenleme kapalı")
     }
 
     private fun showSettingsMenu(anchor: View) {
@@ -1199,7 +1198,7 @@ class MainActivity : Activity() {
             R.drawable.ic_search_yandex to "Yandex'te ara",
             R.drawable.ic_search_play to "Play Store'da ara",
             R.drawable.ic_search_notes to "Notlarımda ara"
-        )) line.addView(btn(res, desc), LinearLayout.LayoutParams(dp(46), dp(46)).apply { marginStart = dp(8) })
+        )) line.addView(btn(res, desc), LinearLayout.LayoutParams(dp(46), dp(46)).apply { marginStart = dp(22) })
         return line
     }
 

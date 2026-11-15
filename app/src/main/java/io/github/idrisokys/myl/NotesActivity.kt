@@ -1,6 +1,7 @@
 package io.github.idrisokys.myl
 
 import io.github.idrisokys.myl.common.Notice
+import io.github.idrisokys.myl.common.moveToOnemsiz
 
 import android.content.Intent
 import android.net.Uri
@@ -342,6 +343,25 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
             toast(if (n == items.size) L(".onemsiz klasörüne taşındı ($n)", "Moved to .onemsiz ($n)") else L("$n/${items.size} öğe .onemsiz'e taşınabildi", "$n/${items.size} items moved to .onemsiz"))
         }
     }
+    // Bilgi (i) simgesine basılı tutunca: Link klasöründeki her şey (silinmez) ana dizindeki gizli .onemsiz klasörüne taşınır
+    fun moveAllToOnemsiz() {
+        if (root == null) { toast(L("Önce depolama erişim izni verin", "Grant storage access first")); return }
+        scope.launch {
+            val (n, total) = lock.withLock {
+                withContext(Dispatchers.IO) {
+                    val items = try { Store.dataDir().listFiles()?.toList() } catch (e: Exception) { null } ?: emptyList()
+                    items.count { moveToOnemsiz(it) } to items.size
+                }
+            }
+            selected = emptySet(); editMode = false; stack = emptyList()
+            tick++
+            toast(when {
+                total == 0 -> L("Link klasöründe öğe yok", "The Link folder is empty")
+                n == total -> L(".onemsiz klasörüne taşındı ($n)", "Moved to .onemsiz ($n)")
+                else -> L("$n/$total öğe .onemsiz'e taşınabildi", "$n/$total items moved to .onemsiz")
+            })
+        }
+    }
     // "Paylaş": notlar metin olarak paylaşılır (.txt: içerik, link: adres, not: metin); klasörler paylaşılamaz
     fun shareEntries(items: List<Entry>) {
         scope.launch {
@@ -462,7 +482,11 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
                 IconButton({ refreshAll() }) { Icon(Icons.Default.Refresh, L("Yenile", "Refresh")) }
                 // En sağdaki bilgi (i) ikonu: küçük menü açar (gemi resmi, e-posta, GitHub adresi)
                 Box {
-                    IconButton({ infoMenu = true }) { Icon(Icons.Default.Info, L("Bilgi", "Info")) }
+                    // Dokun: bilgi menüsü. Basılı tut: Link klasöründeki her şey .onemsiz klasörüne taşınır.
+                    Box(
+                        Modifier.size(48.dp).clip(CircleShape).combinedClickable(onClick = { infoMenu = true }, onLongClick = { moveAllToOnemsiz() }),
+                        Alignment.Center
+                    ) { Icon(Icons.Default.Info, L("Bilgi", "Info")) }
                     DropdownMenu(infoMenu, { infoMenu = false }) {
                         Column(Modifier.padding(horizontal = 12.dp, vertical = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                             Image(

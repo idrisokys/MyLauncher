@@ -55,9 +55,7 @@ class ReceiverService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        running = true
-        stateListener?.invoke()
-        Identity.init(this)
+        // Önce ön plan bildirimi: startForegroundService sonrası 5 sn içinde startForeground çağrılmazsa sistem uygulamayı çökertir.
         // Zorunlu minimum: sessiz, en düşük öncelikli, yazısız bildirim
         getSystemService(NotificationManager::class.java).createNotificationChannel(
             NotificationChannel("qs_run", "Hızlı Paylaş", NotificationManager.IMPORTANCE_MIN).apply {
@@ -66,8 +64,17 @@ class ReceiverService : Service() {
         val n = Notification.Builder(this, "qs_run").setSmallIcon(R.drawable.ic_qs_tile).setOngoing(true).build()
         startForeground(1, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
 
-        rx = Receiver(this).also { it.start() }
-        disc = Discovery(this).also { it.register(rx!!.port); it.browse() }
+        running = true
+        stateListener?.invoke()
+        try {
+            Identity.init(this)
+            rx = Receiver(this).also { it.start() }
+            disc = Discovery(this).also { it.register(rx!!.port); it.browse() }
+        } catch (e: Exception) {
+            // Port/ağ hatası: tercih kapatılır, servis düzgünce durur (düğme "kapalı" görünür)
+            prefs(this).edit().putBoolean("on", false).apply()
+            stopSelf()
+        }
     }
 
     override fun onStartCommand(i: Intent?, f: Int, id: Int): Int {
@@ -94,7 +101,8 @@ class ReceiverService : Service() {
         running = false
         stateListener?.invoke()
         io.shutdown()
-        disc?.stop(); rx?.stop()
+        try { disc?.stop() } catch (e: Exception) { }
+        try { rx?.stop() } catch (e: Exception) { }
         super.onDestroy()
     }
 }

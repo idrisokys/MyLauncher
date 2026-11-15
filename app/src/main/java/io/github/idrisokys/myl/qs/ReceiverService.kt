@@ -27,6 +27,7 @@ class ReceiverService : Service() {
 
     companion object {
         @Volatile var running = false
+        private val instances = AtomicInteger(0)
         /** Alıcı açılıp kapanınca (ana ekrandaki düğmenin rengi için) çağrılır; ana thread'e dönmek dinleyenin işi. */
         @Volatile var stateListener: (() -> Unit)? = null
         /** "Dosya alındı", "Dosya gönderildi" ve hata mesajları; ana thread'e dönmek dinleyenin işi. */
@@ -37,17 +38,22 @@ class ReceiverService : Service() {
         /** Hızlı Paylaş açık mı? Varsayılan KAPALI: kullanıcı düğmeye dokunmadan hiçbir şey dinlenmez. */
         fun enabled(c: Context) = prefs(c).getBoolean("on", false)
 
+        /** Düğmenin durumu: kullanıcı açtıysa (tercih) ve izin hâlâ varsa açık sayılır; servisin gecikmeli açılıp kapanmasından etkilenmez. */
+        fun isOn(c: Context): Boolean = enabled(c) && ready(c)
+
         /** Dosya yazma izni verilmiş mi? */
         fun ready(c: Context): Boolean = SaveDir.direct(c)
 
         fun start(c: Context) {
-            prefs(c).edit().putBoolean("on", true).apply()
+            prefs(c).edit().putBoolean("on", true).commit()
             c.startForegroundService(Intent(c, ReceiverService::class.java))
+            stateListener?.invoke()
         }
 
         fun stop(c: Context) {
-            prefs(c).edit().putBoolean("on", false).apply()
+            prefs(c).edit().putBoolean("on", false).commit()
             c.stopService(Intent(c, ReceiverService::class.java))
+            stateListener?.invoke()
         }
     }
 
@@ -55,6 +61,7 @@ class ReceiverService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        instances.incrementAndGet()
         running = true
         stateListener?.invoke()
         Identity.init(this)
@@ -91,7 +98,7 @@ class ReceiverService : Service() {
     }
 
     override fun onDestroy() {
-        running = false
+        if (instances.decrementAndGet() <= 0) running = false
         stateListener?.invoke()
         io.shutdown()
         disc?.stop(); rx?.stop()

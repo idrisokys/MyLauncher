@@ -24,7 +24,6 @@ data class Entry(val name: String, val uri: Uri, val isDir: Boolean) {
 }
 
 /** Arama sonucu: bulunan öğe, bulunduğu klasör zinciri ve gösterilecek özet. */
-data class Hit(val entry: Entry, val path: List<Entry>, val detail: String, val isNote: Boolean, val titleMatch: Boolean)
 
 object Store {
     private const val ORDER = ".order.txt"
@@ -37,12 +36,6 @@ object Store {
 
     /** Tüm yazma/okuma işlemleri (uygulama + paylaşım ekranı) bu kilitle sıralanır. */
     private val mutex = Any()
-
-    // Aramalar arasında thread havuzunu yeniden kullan; her aramada yeni 6 thread açma.
-    // Dört işçi, depolama ağırlıklı aramalarda bellek/IO baskısını sınırlarken arayüzü akıcı tutar.
-    private val searchExecutor = Executors.newFixedThreadPool(4) { task ->
-        Thread(task, "MyL-Search").apply { isDaemon = true }
-    }
 
     private fun file(u: Uri): File = File(u.path ?: "")
     private fun uriOf(f: File): Uri = Uri.fromFile(f)
@@ -381,61 +374,4 @@ object Store {
         return sb.toString()
     }
 
-    /** Tüm klasörlerde; başlık, link adresi ve not metninde arar. Yazılan her kelime bulunmalıdır. Dosyalar paralel okunur. */
-    fun search(ctx: Context, root: Uri, query: String, alive: () -> Boolean = { true }): List<Hit> {
-        val terms = fold(query).split(WS).filter { it.isNotEmpty() }
-        if (terms.isEmpty()) return emptyList()
-        val files = ArrayList<Pair<Entry, List<Entry>>>()
-        fun walk(dir: Uri, path: List<Entry>) {
-            for (e in list(ctx, dir)) {
-                if (!alive()) return
-                if (e.isDir) walk(e.uri, path + e) else files.add(e to path)
-            }
-        }
-        walk(root, emptyList())
-
-        fun match(e: Entry, path: List<Entry>): Hit? {
-            val ls = if (e.isTxt) emptyList() else lines(e.uri)
-            val url = urlOf(ls)
-            val text = if (e.isTxt) readPlain(ctx, e.uri) ?: "" else textOf(ls) ?: ""
-            val ft = fold(e.title)
-            val body = url ?: text
-            val fb = fold(body)
-            val all = ft + "\n" + fb
-            if (!terms.all { all.contains(it) }) return null
-            val detail = if (url != null) url else {
-                val i = terms.map { fb.indexOf(it) }.filter { it >= 0 }.minOrNull() ?: 0
-                val st = maxOf(0, i - 30)
-                (if (st > 0) "…" else "") + text.substring(st, minOf(text.length, st + 120)).replace(WS, " ")
-            }
-            return Hit(e, path, detail, url == null, terms.all { ft.contains(it) })
-        }
-
-        val completion = ExecutorCompletionService<Hit?>(searchExecutor)
-        val pending = HashSet<Future<Hit?>>()
-        val out = ArrayList<Hit>(minOf(files.size, 500))
-        var nextFile = 0
-        try {
-            // Kuyruğu sınırsız büyütme: en fazla 8 dosya aynı anda işlenmek üzere sıraya girsin.
-            while (alive() && out.size < 500 && (nextFile < files.size || pending.isNotEmpty())) {
-                while (alive() && nextFile < files.size && pending.size < 8) {
-                    val (entry, path) = files[nextFile++]
-                    pending.add(completion.submit(Callable {
-                        if (!Thread.currentThread().isInterrupted) match(entry, path) else null
-                    }))
-                }
-
-                // Sonuçları tamamlanma sırasıyla al: yavaş bir dosya diğer sonuçları bloke etmesin.
-                val completed = completion.poll(100, TimeUnit.MILLISECONDS) ?: continue
-                pending.remove(completed)
-                runCatching { completed.get() }.getOrNull()?.let(out::add)
-            }
-        } catch (e: InterruptedException) {
-            Thread.currentThread().interrupt()
-        } finally {
-            // Kullanıcı aramayı değiştirdiyse bekleyen işleri mümkün olduğunca erken durdur.
-            pending.forEach { it.cancel(true) }
-        }
-        return out.sortedBy { !it.titleMatch }   // başlıkta geçenler önce
-    }
 }

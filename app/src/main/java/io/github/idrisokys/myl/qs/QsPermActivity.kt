@@ -10,7 +10,7 @@ import android.os.Bundle
 import android.provider.Settings
 
 /**
- * Arayüzsüz izin ekranı (yalnızca kutucuğa ilk dokunuşta, izin eksikse açılır):
+ * Arayüzsüz izin ekranı (yalnızca Hızlı Paylaş düğmesine ilk dokunuşta, izin eksikse açılır):
  * bildirim izni (isteğe bağlı) → "Tüm dosyalara erişim" → alıcıyı başlatır ve kapanır.
  */
 class QsPermActivity : Activity() {

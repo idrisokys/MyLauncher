@@ -1,6 +1,9 @@
 package io.github.idrisokys.myl
 
 import io.github.idrisokys.myl.common.Notice
+import io.github.idrisokys.myl.common.moveToOnemsiz
+import io.github.idrisokys.myl.qs.QsPermActivity
+import io.github.idrisokys.myl.qs.ReceiverService
 
 import android.Manifest
 import android.app.Activity
@@ -15,6 +18,7 @@ import android.content.pm.LauncherApps
 import android.content.pm.LauncherApps.ShortcutQuery
 import android.content.pm.PackageManager
 import android.content.pm.ShortcutInfo
+import android.content.pm.ShortcutManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
@@ -95,8 +99,12 @@ class MainActivity : Activity() {
         val onLong: (() -> Unit)? = null,   // basılı tutma (kişilerde: WhatsApp sohbeti)
         val spacer: Boolean = false,        // sonuçlar arasındaki dokunulmaz boş satır
         val key: String? = null,            // uygulama sonuçlarında "app:<component>" (basılı tutunca menü açar)
+        val web: WebActions? = null,        // Yandex / Play Store / Notlarım düğmeleri olan arama satırı
         val action: () -> Unit
     )
+
+    /** Arama satırının sağındaki üç düğmenin eylemleri. */
+    class WebActions(val yandex: () -> Unit, val play: () -> Unit, val notes: () -> Unit)
 
     /** Arka planda hazırlanan, ana thread'e hazır halde teslim edilen uygulama listesi. */
     private class Snapshot(
@@ -157,6 +165,7 @@ class MainActivity : Activity() {
     private var askedContacts = false
     private var pendingCallNumber: String? = null   // CALL_PHONE izni beklenirken
     private lateinit var moveBtn: ImageView
+    private lateinit var qsBtn: ImageView       // Hızlı Paylaş: dokun = aç, basılı tut = kapat; açıkken koyu kırmızı
     private lateinit var actionBtn: ImageView   // normalde ayarlar, düzenleme modunda klasör simgesi
     private var editMode = false
 
@@ -180,6 +189,9 @@ class MainActivity : Activity() {
         window.navigationBarColor = Color.TRANSPARENT
         buildUi()
         loadPrefs()
+        ReceiverService.stateListener = { main.post { if (!isDestroyed) updateQsBtn() } }
+        updateQsBtn()
+        cleanOldShareTargets()
         startReload()
         launcherApps.registerCallback(callback)
         handleIntent(intent)
@@ -206,6 +218,7 @@ class MainActivity : Activity() {
         // bir şey değişmediyse ekrana hiç dokunulmaz.
         if (skipNextResumeReload) skipNextResumeReload = false else startReload()
         root.post { refreshWindow() }
+        updateQsBtn()
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -222,6 +235,7 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
+        ReceiverService.stateListener = null
         launcherApps.unregisterCallback(callback)
         main.removeCallbacksAndMessages(null)
         worker.shutdown()
@@ -346,6 +360,19 @@ class MainActivity : Activity() {
             setOnLongClickListener { openCamera(); true }
         }
         bar.addView(camBtn, LinearLayout.LayoutParams(dp(46), dp(46)).apply { marginEnd = dp(8) })
+        // Hızlı Paylaş düğmesi (kameranın yanında): dokun = aç, basılı tut = kapat. Açıkken koyu kırmızı.
+        qsBtn = ImageView(this).apply {
+            setImageResource(R.drawable.ic_qs_tile)
+            contentDescription = "Hızlı Paylaş"
+            setPadding(dp(10), dp(10), dp(10), dp(10))
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(0x66000000)
+            }
+            setOnClickListener { quickShareOn() }
+            setOnLongClickListener { quickShareOff(); true }
+        }
+        bar.addView(qsBtn, LinearLayout.LayoutParams(dp(46), dp(46)).apply { marginEnd = dp(8) })
         bar.addView(search, LinearLayout.LayoutParams(0, dp(50), 1f))
 
         moveBtn = ImageView(this).apply {
@@ -490,10 +517,50 @@ class MainActivity : Activity() {
         return ri?.activityInfo?.packageName == packageName
     }
 
+    // ---------- Hızlı Paylaş ----------
+    private fun updateQsBtn() {
+        if (!::qsBtn.isInitialized) return
+        (qsBtn.background as GradientDrawable).setColor(if (ReceiverService.running) ACTIVE_RED else IDLE_BG)
+    }
+
+    /** Tek dokunuş: alıcıyı açar (izin eksikse önce izin ekranı açılır, izin verilince alıcı kendiliğinden başlar). */
+    private fun quickShareOn() {
+        if (ReceiverService.running) { toast("Hızlı Paylaş açık · kapatmak için basılı tut"); return }
+        if (!ReceiverService.ready(this)) {
+            try { startActivity(Intent(this, QsPermActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+            catch (e: Exception) { toast("Hızlı Paylaş açılamadı") }
+            return
+        }
+        try {
+            ReceiverService.start(this)
+            updateQsBtn()
+            toast("Hızlı Paylaş açık")
+        } catch (e: Exception) { toast("Hızlı Paylaş açılamadı") }
+    }
+
+    /** Basılı tutunca alıcıyı kapatır. */
+    private fun quickShareOff() {
+        if (!ReceiverService.running) { toast("Hızlı Paylaş zaten kapalı"); return }
+        ReceiverService.stop(this)
+        updateQsBtn()
+        toast("Hızlı Paylaş kapalı")
+    }
+
+    /** Eski sürümde Paylaş menüsüne cihaz adlarıyla eklenen dinamik kısayolları bir kereliğine siler. */
+    private fun cleanOldShareTargets() {
+        if (prefs.getBoolean("dyn_cleaned", false)) return
+        worker.execute {
+            try {
+                getSystemService(ShortcutManager::class.java)?.removeAllDynamicShortcuts()
+                prefs.edit().putBoolean("dyn_cleaned", true).apply()
+            } catch (e: Exception) { }
+        }
+    }
+
     private fun setEditMode(on: Boolean) {
         if (editMode == on) return
         editMode = on
-        (moveBtn.background as GradientDrawable).setColor(if (on) 0xCCEC4899.toInt() else 0x66000000)
+        (moveBtn.background as GradientDrawable).setColor(if (on) ACTIVE_RED else IDLE_BG)
         actionBtn.setImageResource(if (on) R.drawable.ic_folder_add else R.drawable.ic_settings)
         toast(if (on) "Düzenleme açık: simgeyi başka bir simgenin ortasına bırakırsan yer değiştirirler, kenarına (arasına) bırakırsan araya girer. Klasör için üstteki klasör düğmesini kullan" else "Düzenleme kapalı")
     }
@@ -513,7 +580,7 @@ class MainActivity : Activity() {
         val sel = TypedValue()
         theme.resolveAttribute(android.R.attr.selectableItemBackground, sel, true)
         // Sadece ikon: yazı yok, erişilebilirlik için contentDescription var
-        fun row(label: String, icon: Int, color: Int = Color.WHITE, onClick: () -> Unit) {
+        fun row(label: String, icon: Int, color: Int = Color.WHITE, onLong: (() -> Unit)? = null, onClick: () -> Unit) {
             box.addView(ImageView(this).apply {
                 setImageDrawable(getDrawable(icon)!!.mutate().apply { setTint(color) })
                 contentDescription = label
@@ -521,6 +588,7 @@ class MainActivity : Activity() {
                 setPadding(dp(13), dp(9), dp(13), dp(9))
                 if (sel.resourceId != 0) setBackgroundResource(sel.resourceId)
                 setOnClickListener { pw.dismiss(); onClick() }
+                if (onLong != null) setOnLongClickListener { pw.dismiss(); onLong(); true }
             }, LinearLayout.LayoutParams(dp(50), dp(40)))
         }
 
@@ -528,7 +596,8 @@ class MainActivity : Activity() {
         row("Uygulamalar", R.drawable.ic_menu_apps) { openApps() }
 
         // Bilgi simgesi: dokununca ayrı küçük kartta gemi ikonu, e-posta ve Github
-        row("Bilgi", R.drawable.ic_menu_info) { showInfoCard(anchor) }
+        // Dokun: bilgi kartı. Basılı tut: /Link içindeki tüm dosyalar /.onemsiz klasörüne taşınır.
+        row("Bilgi", R.drawable.ic_menu_info, onLong = { moveLinkToOnemsiz() }) { showInfoCard(anchor) }
 
         box.addView(View(this).apply { setBackgroundColor(0x33FFFFFF) },
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)).apply {
@@ -542,6 +611,28 @@ class MainActivity : Activity() {
 
 
         pw.showAsDropDown(anchor, 0, dp(4), Gravity.END)
+    }
+
+    /** Bilgi simgesine basılı tutunca: <ana dizin>/Link içindeki her şeyi <ana dizin>/.onemsiz klasörüne taşır (silmez, sormaz). */
+    private fun moveLinkToOnemsiz() {
+        if (!Store.hasAccess(this)) {
+            toast("Tüm dosyalara erişim izni ver, sonra tekrar dene")
+            if (!Store.openAccessSettings(this)) requestPermissions(arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE), 5)
+            return
+        }
+        Thread {
+            val items = try { Store.dataDir().listFiles()?.toList() } catch (e: Exception) { null }
+            val total = items?.size ?: 0
+            val moved = items?.count { moveToOnemsiz(it) } ?: 0
+            main.post {
+                if (isDestroyed) return@post
+                toast(when {
+                    total == 0 -> "Link klasöründe dosya yok"
+                    moved == total -> "$moved öğe .onemsiz klasörüne taşındı"
+                    else -> "$moved/$total öğe .onemsiz klasörüne taşındı"
+                })
+            }
+        }.start()
     }
 
     /** Küçük bilgi kartı: gemi ikonu, altında e-posta, altında Github (dokununca açılır). */
@@ -917,7 +1008,7 @@ class MainActivity : Activity() {
             if (n.contains(fq)) matches.add(k)
         }
         matches.sortWith(compareBy<String>({ normLabels[it]?.startsWith(fq) != true }, { normLabels[it] ?: "" }))
-        for (k in matches.take((MAX_RESULTS - rows.size).coerceAtLeast(0))) {
+        for (k in matches.take(MAX_APPS)) {
             val label = labels[k] ?: continue
             rows.add(Row(label, "Uygulama", iconCache[k], key = k) { launch(k) })
         }
@@ -928,9 +1019,12 @@ class MainActivity : Activity() {
             })
         }
         val enc = Uri.encode(q)
-        rows.add(Row("Notlarımda ara: $q", null, null) { openNotes(q) })
-        rows.add(Row("Yandex'te ara: $q", null, null) { openUrl("https://yandex.com/search/?text=$enc") })
-        rows.add(Row("Play Store'da ara: $q", null, null) { openPlayStore(q) })
+        // Tek satır: solda aranan metin, sağda Yandex · Play Store · Notlarım düğmeleri
+        rows.add(Row(q, null, null, web = WebActions(
+            yandex = { openUrl("https://yandex.com/search/?text=$enc") },
+            play = { openPlayStore(q) },
+            notes = { openNotes(q) }
+        )) {})
         // Yanlış dokunmayı önlemek için her sonucun altına dokunulmaz boş satır
         val withGaps = ArrayList<Row>(rows.size * 2)
         for (r in rows) { withGaps.add(r); withGaps.add(Row("", null, null, spacer = true) {}) }
@@ -1049,9 +1143,11 @@ class MainActivity : Activity() {
         const val REQ_CALL = 2
         const val REQ_RESTORE = 3
         const val REQ_WALLPAPER = 4
-        const val MAX_RESULTS = 5   // kişi + uygulama sonuçları toplamı
-        const val MAX_CONTACTS = 3  // en fazla kişi sayısı
-        const val MAX_SETTINGS = 5  // en fazla ayar sonucu
+        const val MAX_CONTACTS = 2  // her kaynaktan (kişi / uygulama / ayar) en fazla 2 sonuç
+        const val MAX_APPS = 2
+        const val MAX_SETTINGS = 2
+        const val ACTIVE_RED = 0xCC8B0000.toInt()   // koyu kırmızı: düzenleme modu ve Hızlı Paylaş açıkken
+        const val IDLE_BG = 0x66000000
         const val WA_PKG = "com.whatsapp"
         const val WA_BIZ_PKG = "com.whatsapp.w4b"
         const val WA_CHAT = "vnd.android.cursor.item/vnd.com.whatsapp.profile"
@@ -1065,19 +1161,56 @@ class MainActivity : Activity() {
         }
     }
 
+    /** Aranan metin solda; sağda Yandex · Play Store · Notlarım düğmeleri (üstteki ikonlarla aynı boyut ve yuvarlak biçim). */
+    private fun webRow(): LinearLayout {
+        val line = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(16), dp(4), dp(16), dp(4))
+        }
+        line.addView(TextView(this).apply {
+            textSize = 18f; setTextColor(Color.WHITE)
+            maxLines = 1; ellipsize = TextUtils.TruncateAt.END
+        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        fun btn(res: Int, desc: String) = ImageView(this).apply {
+            setImageResource(res)
+            contentDescription = desc
+            setPadding(dp(10), dp(10), dp(10), dp(10))
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(0x33FFFFFF)   // koyu sonuç listesinde görünsün diye üstteki ikonlardan biraz açık zemin
+            }
+        }
+        for ((res, desc) in listOf(
+            R.drawable.ic_search_yandex to "Yandex'te ara",
+            R.drawable.ic_search_play to "Play Store'da ara",
+            R.drawable.ic_search_notes to "Notlarımda ara"
+        )) line.addView(btn(res, desc), LinearLayout.LayoutParams(dp(46), dp(46)).apply { marginStart = dp(8) })
+        return line
+    }
+
     private val resultsAdapter = object : BaseAdapter() {
         override fun getCount() = rows.size
         override fun getItem(p: Int) = rows[p]
         override fun getItemId(p: Int) = p.toLong()
-        override fun getViewTypeCount() = 2
-        override fun getItemViewType(p: Int) = if (rows[p].spacer) 1 else 0
+        override fun getViewTypeCount() = 3
+        override fun getItemViewType(p: Int) = if (rows[p].spacer) 1 else if (rows[p].web != null) 2 else 0
         override fun areAllItemsEnabled() = false
-        override fun isEnabled(p: Int) = !rows[p].spacer
+        override fun isEnabled(p: Int) = !rows[p].spacer && rows[p].web == null   // web satırında yalnızca düğmeler tıklanır
         override fun getView(p: Int, cv: View?, parent: ViewGroup?): View {
             if (rows[p].spacer) {
                 return cv ?: View(this@MainActivity).apply {
-                    layoutParams = AbsListView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(14))
+                    layoutParams = AbsListView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(6))
                 }
+            }
+            val web = rows[p].web
+            if (web != null) {
+                val line = (cv as? LinearLayout) ?: webRow()
+                (line.getChildAt(0) as TextView).text = rows[p].title
+                line.getChildAt(1).setOnClickListener { web.yandex() }
+                line.getChildAt(2).setOnClickListener { web.play() }
+                line.getChildAt(3).setOnClickListener { web.notes() }
+                return line
             }
             val h: RowHolder
             val v: View
@@ -1085,21 +1218,21 @@ class MainActivity : Activity() {
                 val line = LinearLayout(this@MainActivity).apply {
                     orientation = LinearLayout.HORIZONTAL
                     gravity = Gravity.CENTER_VERTICAL
-                    setPadding(dp(16), dp(10), dp(16), dp(10))
+                    setPadding(dp(16), dp(4), dp(16), dp(4))
                 }
                 val iv = ImageView(this@MainActivity)
-                line.addView(iv, LinearLayout.LayoutParams(dp(48), dp(48)))
+                line.addView(iv, LinearLayout.LayoutParams(dp(40), dp(40)))
                 val col = LinearLayout(this@MainActivity).apply { orientation = LinearLayout.VERTICAL }
                 val title = TextView(this@MainActivity).apply {
-                    textSize = 22f; setTextColor(Color.WHITE)
+                    textSize = 18f; setTextColor(Color.WHITE)   // ana ekran arama kutusuyla aynı yazı boyutu
                     maxLines = 1; ellipsize = TextUtils.TruncateAt.END
                 }
                 val sub = TextView(this@MainActivity).apply {
-                    textSize = 14f; setTextColor(0xAAFFFFFF.toInt())
+                    textSize = 12f; setTextColor(0xAAFFFFFF.toInt())
                 }
                 col.addView(title)
                 col.addView(sub)
-                line.addView(col, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(14) })
+                line.addView(col, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = dp(12) })
                 h = RowHolder(iv, title, sub)
                 line.tag = h
                 v = line
@@ -1685,7 +1818,7 @@ class MainActivity : Activity() {
         try {
             val d = launcherApps.getShortcutIconDrawable(si, 0)
                 ?: launcherApps.getActivityList(pkg, me).firstOrNull()?.getBadgedIcon(0)
-            if (d != null) iconCache[key] = renderIcon(d, iconPx)
+            if (d != null) iconCache[key] = renderScIcon(pkg, d, iconPx)
         } catch (e: Exception) { }
         if (pin) {
             try {
@@ -1814,7 +1947,7 @@ class MainActivity : Activity() {
                     for (s in scs) {
                         val k = "sc:${s.pkg}/${s.id}"
                         if (k !in known) {
-                            try { scIcon(s)?.let { icons[k] = renderIcon(it, size) } } catch (e: Exception) { }
+                            try { scIcon(s)?.let { icons[k] = renderScIcon(s.pkg, it, size) } } catch (e: Exception) { }
                         }
                     }
                     // Hiçbir şey değişmediyse (en sık durum: ana ekrana dönüş) ana thread'e hiç iş yükleme.
@@ -1919,6 +2052,21 @@ class MainActivity : Activity() {
             }
         } catch (e: Exception) { }
         return launcherApps.getActivityList(s.pkg, me).firstOrNull()?.getBadgedIcon(0)
+    }
+
+    /**
+     * Kısayol simgesi. MyL'nin kendi kısayolları (Uygulamalar, Galerim, Dosyalarım, Notlarım) beyaz çizgi simgedir;
+     * duvar kağıdında kaybolmasın diye koyu yarı saydam yuvarlak zemin üzerine çizilir.
+     */
+    private fun renderScIcon(pkg: String, d: Drawable, size: Int): Bitmap {
+        if (pkg != packageName) return renderIcon(d, size)
+        val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val c = Canvas(bmp)
+        c.drawCircle(size / 2f, size / 2f, size / 2f, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x99000000.toInt() })
+        val pad = (size * 0.26f).toInt()
+        d.setBounds(pad, pad, size - pad, size - pad)
+        d.draw(c)
+        return bmp
     }
 
     /** Simgeyi bir kez hedef boyutta bitmap'e çizer; sonrasında kaydırma sırasında hiç vektör/adaptive çizimi yapılmaz. */

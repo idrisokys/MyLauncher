@@ -50,7 +50,6 @@ class FilesActivity : Activity() {
     private var clip = listOf<File>(); private var cut = false
     private var showHidden = true; private var asked = false
     private var pendingShare: List<Uri>? = null   // dışarıdan paylaşılan, kaydedilmeyi bekleyen dosyalar
-    private var editor: TextEditor? = null
     private val root: File = Environment.getExternalStorageDirectory()
     private val prefs by lazy { getSharedPreferences("files", 0) }
     private val IMG = setOf("jpg", "jpeg", "png", "gif", "webp", "bmp", "heic", "svg")
@@ -260,7 +259,6 @@ class FilesActivity : Activity() {
         }
         tile("", "Ana bellek", "", { browse(root) }, null, Icons.homeColor())
         tile("📥", "İndirilenler", "", { browse(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)) }, null, Icons.folder())
-        tile("", "Metin düzenleyici", "", { openEditor(null) }, null, Icons.textEditor())
         pinList().filter { it.exists() }.forEach { f ->
             tile("", f.name, "", {
                 if (f.isDirectory) browse(f) else openAny(f)
@@ -409,7 +407,6 @@ class FilesActivity : Activity() {
         }
     }
 
-    override fun onDestroy() { editor?.dismiss(); super.onDestroy() }
 
     /** Üç noktaya basılı tutunca düzenleme (seçim) modu açılır, tekrar basılı tutunca kapanır. */
     private fun toggleEditMode() { editMode = !editMode; sel.clear(); refresh(true) }
@@ -548,11 +545,9 @@ class FilesActivity : Activity() {
 
     private fun uri(f: File) = KFileProvider.uriFor(this, f)
 
-    private fun isText(f: File) = f.extension.lowercase() in TXT && f.length() <= 1_000_000
-
     private fun openAny(f: File) {
         if (f.extension.lowercase() == "zip") zipDialog(f) else if (f.extension.lowercase() == "apk") installApk(f)
-        else if (f.extension.lowercase() in IMG) openInGallery(f) else if (isText(f)) openEditor(f) else open(f)
+        else if (f.extension.lowercase() in IMG) openInGallery(f) else open(f)
     }
 
     /** Resimler varsayılan olarak Galerim'in tam ekran gezgininde açılır. */
@@ -574,14 +569,6 @@ class FilesActivity : Activity() {
         try {
             startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri(f), "application/vnd.android.package-archive").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
         } catch (e: ActivityNotFoundException) { Notice.show(this, "Yükleyici bulunamadı", false) }
-    }
-
-    private fun openEditor(f: File?) {
-        editor?.dismiss()
-        val dir = f?.parentFile ?: cur ?: File(root, "Documents")
-        editor = TextEditor(this, f, dir) {
-            if (cur != null || list != null) refresh(true)
-        }.also { it.show() }
     }
 
     private fun open(f: File) {

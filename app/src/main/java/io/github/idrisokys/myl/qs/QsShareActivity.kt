@@ -13,7 +13,7 @@ import io.github.idrisokys.myl.L
 
 /**
  * Paylaş menüsündeki "Hızlı Paylaş": dosyaları aynı ağdaki cihazlara gönderir ve hemen kapanır.
- * Menüde cihaz adıyla görünen doğrudan hedefe (share-target kısayolu) basıldıysa yalnızca o cihaza gider.
+ * Açık olan (bulunan) tüm cihazlara gider; Paylaş menüsünde tek tek cihaz adı gösterilmez.
  */
 class QsShareActivity : Activity() {
     private var d: Discovery? = null
@@ -21,9 +21,8 @@ class QsShareActivity : Activity() {
     private val t0 = SystemClock.uptimeMillis()
     private var found = -1L
     private var uris: List<Uri> = emptyList()
-    private var only: String? = null
 
-    private fun peers() = Peers.list().filter { only == null || it.id == only }
+    private fun peers() = Peers.list()
 
     @Suppress("DEPRECATION")
     override fun onCreate(b: Bundle?) {
@@ -34,7 +33,6 @@ class QsShareActivity : Activity() {
                 intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM) ?: emptyList()
             else listOfNotNull(intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM))
         if (uris.isEmpty()) { finish(); return }
-        only = intent.getStringExtra(Intent.EXTRA_SHORTCUT_ID)
 
         // Servis zaten çalışıp cihazları bulduysa beklemeden gönder.
         if (peers().isNotEmpty()) { send(); return }
@@ -60,7 +58,7 @@ class QsShareActivity : Activity() {
 
     private fun send() {
         if (peers().isEmpty()) Toast.makeText(this, L("Cihaz bulunamadı", "No device found"), Toast.LENGTH_LONG).show()
-        else Sender.submit(this, uris, only)
+        else Sender.submit(this, uris, null)
         finish()
     }
 

@@ -510,7 +510,7 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
                             else -> MaterialTheme.colorScheme.surface
                         }),
                         leadingContent = {
-                            if (editMode) Checkbox(sel, { selected = if (sel) selected - e.key else selected + e.key })
+                            if (editMode) Spacer(Modifier.size(24.dp))   // düzenleme modunda kutucuk yok: yalnızca boşluk (seçim satıra dokunarak yapılır)
                             else Icon(if (e.isDir) Icons.Default.Folder else if (e.isTxt) Icons.Default.Description else Icons.Default.Link, null)
                         },
                         headlineContent = { Text(e.title, maxLines = 4, overflow = TextOverflow.Ellipsis) },

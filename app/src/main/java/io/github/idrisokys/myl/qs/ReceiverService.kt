@@ -18,7 +18,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * Arka planda dinler (yalnızca Hızlı Ayarlar kutucuğu açıkken). Kalıcı bildirim: bekleme / "Gönderiliyor" / "Alınıyor" + ilerleme.
+ * Arka planda dinler (yalnızca ana ekrandaki Hızlı Paylaş düğmesi açıkken). Kalıcı bildirim: bekleme / "Gönderiliyor" / "Alınıyor" + ilerleme.
  * Gönderimler de burada (tek iş parçacığında, sırayla) yapılır; paylaş ekranı hemen kapanabilir.
  */
 class ReceiverService : Service() {
@@ -46,11 +46,13 @@ class ReceiverService : Service() {
 
     companion object {
         @Volatile var running = false
+        /** Alıcı açılıp kapanınca (ana ekrandaki düğmenin rengi için) çağrılır; ana thread'e dönmek dinleyenin işi. */
+        @Volatile var stateListener: (() -> Unit)? = null
         const val ACTION_STOP = "io.github.idrisokys.myl.qs.STOP"
         const val ACTION_SEND = "io.github.idrisokys.myl.qs.SEND"
 
         private fun prefs(c: Context) = c.applicationContext.getSharedPreferences("qs_cfg", 0)
-        /** Kutucuk açık mı? Varsayılan KAPALI: kullanıcı kutucuğa dokunmadan hiçbir şey dinlenmez. */
+        /** Hızlı Paylaş açık mı? Varsayılan KAPALI: kullanıcı düğmeye dokunmadan hiçbir şey dinlenmez. */
         fun enabled(c: Context) = prefs(c).getBoolean("on", false)
 
         /** Dosya yazma izni verilmiş mi? (Bildirim izni isteğe bağlıdır; yoksa servis yine çalışır, bildirim görünmez.) */
@@ -108,6 +110,7 @@ class ReceiverService : Service() {
     override fun onCreate() {
         super.onCreate()
         running = true
+        stateListener?.invoke()
         Identity.init(this)
         channels(this)
         startForeground(1, nb.setContentText(L("Gönderi bekleniyor", "Waiting for files")).build(), ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
@@ -142,7 +145,7 @@ class ReceiverService : Service() {
                     io.execute {
                         try { Sender.run(this, only, uris) }
                         finally {
-                            // Kutucuk kapalıysa (yalnızca gönderim için açılmış servis), gönderim bitince servis de kapanır.
+                            // Hızlı Paylaş kapalıysa (yalnızca gönderim için açılmış servis), gönderim bitince servis de kapanır.
                             if (pending.decrementAndGet() == 0 && !enabled(this)) stopSelf()
                         }
                     }
@@ -154,6 +157,7 @@ class ReceiverService : Service() {
 
     override fun onDestroy() {
         running = false
+        stateListener?.invoke()
         Bus.sink = null
         h.removeCallbacksAndMessages(null)
         io.shutdown()

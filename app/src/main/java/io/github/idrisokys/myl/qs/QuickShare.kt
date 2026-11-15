@@ -3,9 +3,6 @@ package io.github.idrisokys.myl.qs
 import android.content.ClipData
 import android.content.Context
 import android.content.Intent
-import android.content.pm.ShortcutInfo
-import android.content.pm.ShortcutManager
-import android.graphics.drawable.Icon
 import android.media.MediaScannerConnection
 import android.net.Uri
 import android.net.nsd.NsdManager
@@ -20,7 +17,6 @@ import android.provider.OpenableColumns
 import android.provider.Settings
 import android.widget.Toast
 import io.github.idrisokys.myl.L
-import io.github.idrisokys.myl.R
 import java.io.BufferedInputStream
 import java.io.BufferedReader
 import java.io.File
@@ -44,7 +40,7 @@ import kotlin.concurrent.thread
 
 /*
  * Hızlı Paylaş (eski QuickShare uygulaması) — MyL'ye gömülü.
- * Arayüzü yoktur: yalnızca Hızlı Ayarlar kutucuğu (QsTile) ve Paylaş menüsü girişi (QsShareActivity) vardır.
+ * Arayüzü yoktur: ana ekrandaki Hızlı Paylaş düğmesi (dokun = aç, basılı tut = kapat) ve Paylaş menüsü girişi (QsShareActivity) vardır.
  * Aynı Wi-Fi'deki cihazlar mDNS ile bulunur, dosyalar düz TCP ile gönderilir/alınır.
  */
 
@@ -59,9 +55,6 @@ private const val SOCK_BUF = 4 shl 20
 private const val CH = 512 * 1024
 private const val SLOTS = 16
 private class Chunk(val b: ByteArray, val n: Int)   // n < 0: bitti işareti
-
-const val QS_TARGET_CATEGORY = "io.github.idrisokys.myl.qs.TARGET"
-const val QS_SHORTCUT_ACTION = "io.github.idrisokys.myl.qs.SHORT"
 
 class Peer(val id: String, val name: String, val host: InetAddress, val port: Int, val svc: String = "")
 
@@ -139,24 +132,6 @@ object Identity {
     }
 }
 
-/** Ağdaki cihazları Paylaş menüsünde doğrudan hedef olarak gösterir (MainActivity'deki share-target ile eşleşir). */
-object Shortcuts {
-    fun update(c: Context) {
-        try {
-            val sm = c.getSystemService(ShortcutManager::class.java)
-            sm.dynamicShortcuts = Peers.list().take(4).map {
-                ShortcutInfo.Builder(c, it.id)
-                    .setShortLabel(it.name.ifBlank { L("Cihaz", "Device") }.take(25))
-                    .setIcon(Icon.createWithResource(c, R.drawable.ic_qs_peer))
-                    .setCategories(setOf(QS_TARGET_CATEGORY))
-                    .setLongLived(true)
-                    .setIntent(Intent(c, QsShareActivity::class.java).setAction(QS_SHORTCUT_ACTION))
-                    .build()
-            }
-        } catch (e: Exception) { }
-    }
-}
-
 /** Alınan dosyaların konumu: <ana dizin>/Link (Notlarım ile aynı klasör). */
 object SaveDir {
     fun dir() = File(android.os.Environment.getExternalStorageDirectory(), "Link")
@@ -201,7 +176,7 @@ class Discovery(c: Context) {
             override fun onDiscoveryStarted(t: String?) {}
             override fun onDiscoveryStopped(t: String?) {}
             override fun onServiceFound(s: NsdServiceInfo) { if (s.serviceName != myName) enqueue(s) }
-            override fun onServiceLost(s: NsdServiceInfo) { Peers.del(s.serviceName); Shortcuts.update(app) }
+            override fun onServiceLost(s: NsdServiceInfo) { Peers.del(s.serviceName) }
         }
         nsd.discoverServices(TYPE, NsdManager.PROTOCOL_DNS_SD, dl)
     }
@@ -231,7 +206,7 @@ class Discovery(c: Context) {
                 val n = i.attributes["n"]?.toString(Charsets.UTF_8)
                 val addr = pickAddress(i)
                 if (f != null && f != Identity.id && addr != null)
-                    { Peers.put(i.serviceName, Peer(f, n ?: "?", addr, i.port, i.serviceName)); Shortcuts.update(app) }
+                    { Peers.put(i.serviceName, Peer(f, n ?: "?", addr, i.port, i.serviceName)) }
                 synchronized(this@Discovery) { tries.remove(s.serviceName) }
                 done()
             }

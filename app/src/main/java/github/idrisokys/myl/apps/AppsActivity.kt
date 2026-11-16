@@ -1,7 +1,7 @@
-package io.github.idrisokys.myl.apps
+package github.idrisokys.myl.apps
 
 import android.app.Activity
-import io.github.idrisokys.myl.common.Notice
+import github.idrisokys.myl.common.Notice
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.graphics.Color

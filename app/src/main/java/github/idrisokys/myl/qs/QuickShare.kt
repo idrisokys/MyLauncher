@@ -1,4 +1,4 @@
-package io.github.idrisokys.myl.qs
+package github.idrisokys.myl.qs
 
 import android.content.ClipData
 import android.content.Context
@@ -16,7 +16,7 @@ import android.os.SystemClock
 import android.provider.OpenableColumns
 import android.provider.Settings
 import android.widget.Toast
-import io.github.idrisokys.myl.L
+import github.idrisokys.myl.L
 import java.io.BufferedInputStream
 import java.io.BufferedReader
 import java.io.File

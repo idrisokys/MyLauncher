@@ -1,4 +1,4 @@
-package io.github.idrisokys.myl.qs
+package github.idrisokys.myl.qs
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -7,7 +7,7 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
-import io.github.idrisokys.myl.R
+import github.idrisokys.myl.R
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -31,7 +31,7 @@ class ReceiverService : Service() {
         @Volatile var stateListener: (() -> Unit)? = null
         /** "Dosya alındı", "Dosya gönderildi" ve hata mesajları; ana thread'e dönmek dinleyenin işi. */
         @Volatile var eventListener: ((String) -> Unit)? = null
-        const val ACTION_SEND = "io.github.idrisokys.myl.qs.SEND"
+        const val ACTION_SEND = "github.idrisokys.myl.qs.SEND"
 
         private fun prefs(c: Context) = c.applicationContext.getSharedPreferences("qs_cfg", 0)
         /** Hızlı Paylaş açık mı? Varsayılan KAPALI: kullanıcı düğmeye dokunmadan hiçbir şey dinlenmez. */

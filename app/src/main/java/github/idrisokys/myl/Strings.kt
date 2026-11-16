@@ -1,4 +1,4 @@
-package io.github.idrisokys.myl
+package github.idrisokys.myl
 
 import java.util.Locale
 

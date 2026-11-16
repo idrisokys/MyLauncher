@@ -1,4 +1,4 @@
-package io.github.idrisokys.myl.qs
+package github.idrisokys.myl.qs
 
 import android.app.Activity
 import android.content.Intent
@@ -9,7 +9,7 @@ import android.os.Looper
 import android.os.SystemClock
 import android.widget.TextView
 import android.widget.Toast
-import io.github.idrisokys.myl.L
+import github.idrisokys.myl.L
 
 /**
  * Paylaş menüsündeki "Hızlı Paylaş": dosyaları aynı ağdaki cihazlara gönderir ve hemen kapanır.

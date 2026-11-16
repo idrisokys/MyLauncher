@@ -1,6 +1,6 @@
-package io.github.idrisokys.myl.files
+package github.idrisokys.myl.files
 
-import io.github.idrisokys.myl.common.*
+import github.idrisokys.myl.common.*
 
 import android.Manifest
 import android.app.Activity
@@ -39,7 +39,7 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 class FilesActivity : Activity() {
-    companion object { const val EXTRA_PATH = "io.github.idrisokys.myl.files.PATH" }
+    companion object { const val EXTRA_PATH = "github.idrisokys.myl.files.PATH" }
 
     private val dockBg = 0xFF1A1A1A.toInt(); private val bg = 0xFF121212.toInt(); private val bar = 0xFF212121.toInt(); private val card = 0xFF1E1E1E.toInt()
     private lateinit var titleV: TextView; private lateinit var pinV: ImageView; private lateinit var titleRow: LinearLayout; private lateinit var cancelV: TextView; private lateinit var body: FrameLayout; private lateinit var crumbS: HorizontalScrollView; private lateinit var crumbL: LinearLayout; private lateinit var dock: LinearLayout
@@ -553,9 +553,9 @@ class FilesActivity : Activity() {
     /** Resimler varsayılan olarak Galerim'in tam ekran gezgininde açılır. */
     private fun openInGallery(f: File) {
         try {
-            startActivity(Intent(this, io.github.idrisokys.myl.gallery.GalleryActivity::class.java)
+            startActivity(Intent(this, github.idrisokys.myl.gallery.GalleryActivity::class.java)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                .putExtra(io.github.idrisokys.myl.gallery.GalleryActivity.EXTRA_FILE, f.absolutePath))
+                .putExtra(github.idrisokys.myl.gallery.GalleryActivity.EXTRA_FILE, f.absolutePath))
         } catch (e: Exception) { open(f) }
     }
 

@@ -1,11 +1,11 @@
-package io.github.idrisokys.myl
+package github.idrisokys.myl
 
 import android.content.Context
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
-import io.github.idrisokys.myl.common.moveToOnemsiz
+import github.idrisokys.myl.common.moveToOnemsiz
 import java.io.File
 import java.util.concurrent.Callable
 import java.util.concurrent.ExecutorCompletionService
@@ -178,8 +178,8 @@ object Store {
             var name = "$b$ext"; var i = 2
             while (name.lowercase() in taken) { name = "$b ($i)$ext"; i++ }
             File(file(dir), name).writeBytes(bytes)
-            // Yeni öğe listenin sonuna eklenir; mevcut sıra korunur.
-            saveOrderIn(dir, ordered(all).map { it.name } + name)
+            // Yeni öğe listenin EN ÜSTÜNE eklenir; mevcut sıra altında aynen devam eder.
+            saveOrderIn(dir, listOf(name) + ordered(all).map { it.name })
             true
         } catch (e: Exception) { false }
     }
@@ -275,7 +275,7 @@ object Store {
                 if (!src.copyRecursively(dst, overwrite = false)) return false
                 src.deleteRecursively()
             }
-            saveOrderIn(target, ordered(all).map { it.name } + name)
+            saveOrderIn(target, listOf(name) + ordered(all).map { it.name })
             true
         } catch (ex: Exception) { false }
     }
@@ -287,6 +287,7 @@ object Store {
             var n = base; var i = 2
             while (all.any { it.name.equals(n, true) }) { n = "$base ($i)"; i++ }
             File(file(dir), n).mkdir()
+            saveOrderIn(dir, listOf(n) + ordered(all).map { it.name })   // yeni klasör de en üste
             Unit
         } catch (e: Exception) { }
     }

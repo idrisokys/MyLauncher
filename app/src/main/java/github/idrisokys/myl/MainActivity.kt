@@ -1,8 +1,8 @@
-package io.github.idrisokys.myl
+package github.idrisokys.myl
 
-import io.github.idrisokys.myl.common.Notice
-import io.github.idrisokys.myl.qs.QsPermActivity
-import io.github.idrisokys.myl.qs.ReceiverService
+import github.idrisokys.myl.common.Notice
+import github.idrisokys.myl.qs.QsPermActivity
+import github.idrisokys.myl.qs.ReceiverService
 
 import android.Manifest
 import android.app.Activity
@@ -564,9 +564,9 @@ class MainActivity : Activity() {
     private fun openLinkFolder() {
         try {
             startActivity(
-                Intent(this, io.github.idrisokys.myl.files.FilesActivity::class.java)
+                Intent(this, github.idrisokys.myl.files.FilesActivity::class.java)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    .putExtra(io.github.idrisokys.myl.files.FilesActivity.EXTRA_PATH, Store.dataDir().apply { mkdirs() }.absolutePath)
+                    .putExtra(github.idrisokys.myl.files.FilesActivity.EXTRA_PATH, Store.dataDir().apply { mkdirs() }.absolutePath)
             )
         } catch (e: Exception) { toast("Dosyalarım açılamadı") }
     }
@@ -927,7 +927,7 @@ class MainActivity : Activity() {
     private fun openApps() {
         try {
             startActivity(
-                Intent(this, io.github.idrisokys.myl.apps.AppsActivity::class.java)
+                Intent(this, github.idrisokys.myl.apps.AppsActivity::class.java)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             )
         } catch (e: Exception) {
@@ -939,7 +939,7 @@ class MainActivity : Activity() {
     private fun openGallery() {
         try {
             startActivity(
-                Intent(this, io.github.idrisokys.myl.gallery.GalleryActivity::class.java)
+                Intent(this, github.idrisokys.myl.gallery.GalleryActivity::class.java)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             )
         } catch (e: Exception) {
@@ -953,9 +953,9 @@ class MainActivity : Activity() {
             ?: java.io.File(Environment.getExternalStorageDirectory(), "Download")
         try {
             startActivity(
-                Intent(this, io.github.idrisokys.myl.files.FilesActivity::class.java)
+                Intent(this, github.idrisokys.myl.files.FilesActivity::class.java)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    .putExtra(io.github.idrisokys.myl.files.FilesActivity.EXTRA_PATH, dir.absolutePath)
+                    .putExtra(github.idrisokys.myl.files.FilesActivity.EXTRA_PATH, dir.absolutePath)
             )
         } catch (e: Exception) {
             toast("Dosyalarım açılamadı")
@@ -1317,7 +1317,7 @@ class MainActivity : Activity() {
     private fun setIcon(iv: ImageView, k: String) {
         if (k.startsWith("folder:")) {
             val f = folders[k]
-            iv.setImageDrawable(FolderDrawable(f?.children?.take(4)?.map { iconCache[it] }.orEmpty(), iconPx))
+            iv.setImageDrawable(FolderDrawable(f?.let { byLabel(it.children) }?.take(4)?.map { iconCache[it] }.orEmpty(), iconPx))
         } else {
             iv.setImageBitmap(iconCache[k])
         }
@@ -1506,7 +1506,7 @@ class MainActivity : Activity() {
     // ---------- Klasör seçici (düzenleme modundaki klasör düğmesi) ----------
     /** Seçilen uygulamaları yeni bir klasöre ya da var olan bir klasöre ekler. */
     private fun showFolderPicker() {
-        val candidates = order.filter { !it.startsWith("folder:") }
+        val candidates = byLabel(order.filter { !it.startsWith("folder:") })   // alfabetik
         if (candidates.isEmpty()) { toast("Eklenecek uygulama yok"); return }
         val checked = HashSet<String>()
         val folderKeys = folders.keys.toList()
@@ -1640,10 +1640,11 @@ class MainActivity : Activity() {
                     val idx = order.indexOf(sel[0])
                     order.removeAll(sel.toSet())
                     order.add(idx.coerceIn(0, order.size), id)
-                    folders[id] = Folder(nm, sel.toMutableList())
+                    folders[id] = Folder(nm, byLabel(sel).toMutableList())
                 } else {
                     val f = folders[folderKeys[target]] ?: return@setOnClickListener
                     for (k in sel) if (!f.children.contains(k)) f.children.add(k)
+                    val sorted = byLabel(f.children); f.children.clear(); f.children.addAll(sorted)
                     order.removeAll(sel.toSet())
                 }
                 d.dismiss()
@@ -1765,7 +1766,7 @@ class MainActivity : Activity() {
             layoutDirection = View.LAYOUT_DIRECTION_RTL
         }
         val cw = (resources.displayMetrics.widthPixels * 0.84f / 4).toInt()
-        for (ck in f.children.toList()) {
+        for (ck in byLabel(f.children)) {
             val (cell, iv, tv) = newCell()
             iv.setImageBitmap(iconCache[ck])
             tv.text = labelFor(ck)
@@ -2050,6 +2051,10 @@ class MainActivity : Activity() {
         k.startsWith("folder:") -> folders[k]?.name ?: ""
         else -> ""
     }
+
+    /** Anahtarları görünen adlarına göre alfabetik (Türkçe) sıralar. */
+    private fun byLabel(keys: Collection<String>): List<String> =
+        keys.sortedWith { x, y -> collator.compare(labelFor(x), labelFor(y)) }
 
     /** Arka plan thread'inde de çağrılabilir. */
     private fun scIcon(s: Sc): Drawable? {

@@ -1,6 +1,6 @@
-package io.github.idrisokys.myl
+package github.idrisokys.myl
 
-import io.github.idrisokys.myl.common.Notice
+import github.idrisokys.myl.common.Notice
 
 import android.app.Activity
 import android.content.Intent

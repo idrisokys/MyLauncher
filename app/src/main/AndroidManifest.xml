@@ -62,7 +62,7 @@
             android:label="Notlarım"
             android:theme="@style/NotesTheme"
             android:launchMode="singleTask"
-            android:taskAffinity="io.github.idrisokys.myl.notes"
+            android:taskAffinity="github.idrisokys.myl.notes"
             android:windowSoftInputMode="adjustResize">
         </activity>
         <!-- Paylaş menüsünde "Notlarım": link ve metinler Store.submit ile kaydedilir (arayüzsüz) -->
@@ -107,7 +107,7 @@
             android:label="Dosyalarım"
             android:theme="@android:style/Theme.DeviceDefault.NoActionBar"
             android:launchMode="singleTask"
-            android:taskAffinity="io.github.idrisokys.myl.files">
+            android:taskAffinity="github.idrisokys.myl.files">
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -126,7 +126,7 @@
             android:label="Uygulamalar"
             android:theme="@android:style/Theme.DeviceDefault.NoActionBar"
             android:launchMode="singleTask"
-            android:taskAffinity="io.github.idrisokys.myl.apps">
+            android:taskAffinity="github.idrisokys.myl.apps">
         </activity>
         <!-- Galerim: resim/video galerisi bölümü (seçim modu, toplu silme, klasöre taşıma). Kendi görevinde çalışır. -->
         <activity
@@ -135,7 +135,7 @@
             android:label="Galerim"
             android:theme="@android:style/Theme.DeviceDefault.NoActionBar"
             android:launchMode="singleTask"
-            android:taskAffinity="io.github.idrisokys.myl.gallery"
+            android:taskAffinity="github.idrisokys.myl.gallery"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|uiMode">
         </activity>
         <!-- Galerim'deki sihirli değnekle açılan temel resim düzenleyicisi (basic-editor modülü).

@@ -1,4 +1,4 @@
-package io.github.idrisokys.myl.common
+package github.idrisokys.myl.common
 
 import android.graphics.Canvas
 import android.graphics.ColorFilter

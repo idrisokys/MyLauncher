@@ -1,4 +1,4 @@
-package io.github.idrisokys.myl.common
+package github.idrisokys.myl.common
 
 import android.Manifest
 import android.app.Activity

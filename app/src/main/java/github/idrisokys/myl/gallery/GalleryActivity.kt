@@ -1,6 +1,6 @@
-package io.github.idrisokys.myl.gallery
+package github.idrisokys.myl.gallery
 
-import io.github.idrisokys.myl.common.*
+import github.idrisokys.myl.common.*
 
 import android.Manifest
 import android.app.Activity
@@ -70,7 +70,7 @@ class GalleryActivity : Activity() {
 
     companion object {
         /** Dosyalarım'dan bir resme dokunulunca: bu dosya doğrudan tam ekran gezginde açılır. */
-        const val EXTRA_FILE = "io.github.idrisokys.myl.gallery.FILE"
+        const val EXTRA_FILE = "github.idrisokys.myl.gallery.FILE"
     }
 
     private fun dp(x: Int) = (x * resources.displayMetrics.density).toInt()

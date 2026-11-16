@@ -13,8 +13,8 @@
         android:shortcutLongLabel="@string/sc_apps">
         <intent
             android:action="android.intent.action.VIEW"
-            android:targetPackage="io.github.idrisokys.myl"
-            android:targetClass="io.github.idrisokys.myl.apps.AppsActivity" />
+            android:targetPackage="github.idrisokys.myl"
+            android:targetClass="github.idrisokys.myl.apps.AppsActivity" />
     </shortcut>
     <shortcut
         android:shortcutId="myl_gallery"
@@ -24,8 +24,8 @@
         android:shortcutLongLabel="@string/sc_gallery">
         <intent
             android:action="android.intent.action.VIEW"
-            android:targetPackage="io.github.idrisokys.myl"
-            android:targetClass="io.github.idrisokys.myl.gallery.GalleryActivity" />
+            android:targetPackage="github.idrisokys.myl"
+            android:targetClass="github.idrisokys.myl.gallery.GalleryActivity" />
     </shortcut>
     <shortcut
         android:shortcutId="myl_files"
@@ -35,8 +35,8 @@
         android:shortcutLongLabel="@string/sc_files">
         <intent
             android:action="android.intent.action.VIEW"
-            android:targetPackage="io.github.idrisokys.myl"
-            android:targetClass="io.github.idrisokys.myl.files.FilesActivity" />
+            android:targetPackage="github.idrisokys.myl"
+            android:targetClass="github.idrisokys.myl.files.FilesActivity" />
     </shortcut>
     <shortcut
         android:shortcutId="myl_notes"
@@ -46,7 +46,7 @@
         android:shortcutLongLabel="@string/sc_notes">
         <intent
             android:action="android.intent.action.VIEW"
-            android:targetPackage="io.github.idrisokys.myl"
-            android:targetClass="io.github.idrisokys.myl.NotesActivity" />
+            android:targetPackage="github.idrisokys.myl"
+            android:targetClass="github.idrisokys.myl.NotesActivity" />
     </shortcut>
 </shortcuts>

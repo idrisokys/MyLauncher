@@ -1,7 +1,7 @@
-package io.github.idrisokys.myl
+package github.idrisokys.myl
 
-import io.github.idrisokys.myl.common.Notice
-import io.github.idrisokys.myl.common.moveToOnemsiz
+import github.idrisokys.myl.common.Notice
+import github.idrisokys.myl.common.moveToOnemsiz
 
 import android.content.Intent
 import android.net.Uri
@@ -306,8 +306,8 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
         scope.launch {
             val r = lock.withLock {
                 withContext(Dispatchers.IO) {
-                    try { io.github.idrisokys.myl.qs.NoteSync.run(ctx) }
-                    catch (e: Exception) { io.github.idrisokys.myl.qs.NoteSync.Result(error = e.message ?: "?") }
+                    try { github.idrisokys.myl.qs.NoteSync.run(ctx) }
+                    catch (e: Exception) { github.idrisokys.myl.qs.NoteSync.Result(error = e.message ?: "?") }
                 }
             }
             syncing = false

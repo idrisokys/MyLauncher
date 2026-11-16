@@ -1,9 +1,9 @@
-package io.github.idrisokys.myl.qs
+package github.idrisokys.myl.qs
 
 import android.content.Context
 import android.os.SystemClock
-import io.github.idrisokys.myl.L
-import io.github.idrisokys.myl.Store
+import github.idrisokys.myl.L
+import github.idrisokys.myl.Store
 import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream

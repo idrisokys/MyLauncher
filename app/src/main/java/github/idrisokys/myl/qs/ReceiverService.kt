@@ -31,6 +31,8 @@ class ReceiverService : Service() {
         @Volatile var stateListener: (() -> Unit)? = null
         /** "Dosya alındı", "Dosya gönderildi" ve hata mesajları; ana thread'e dönmek dinleyenin işi. */
         @Volatile var eventListener: ((String) -> Unit)? = null
+        /** Gönderim durumu: 0 = sürüyor, 1 = tamamlandı, 2 = hata. Yalnızca Paylaş penceresi açıkken doludur; boşsa [eventListener] kullanılır. */
+        @Volatile var sendListener: ((Int, String) -> Unit)? = null
         const val ACTION_SEND = "github.idrisokys.myl.qs.SEND"
 
         private fun prefs(c: Context) = c.applicationContext.getSharedPreferences("qs_cfg", 0)

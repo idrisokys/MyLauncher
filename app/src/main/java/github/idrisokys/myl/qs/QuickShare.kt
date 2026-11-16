@@ -36,6 +36,7 @@ import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.concurrent.thread
 
 /*
@@ -101,6 +102,7 @@ object Peers {
     @Synchronized fun del(svc: String) { m.remove(svc) }
     @Synchronized fun find(svc: String): Peer? = m[svc]
     @Synchronized fun list(): List<Peer> = m.values.distinctBy { it.id }
+    @Synchronized fun clear() { m.clear() }
 }
 
 /** Cihaz kimliği: ilk kullanımda üretilen rastgele kimlik (şifreleme / sertifika yok). */
@@ -441,8 +443,7 @@ object Sender {
     fun run(c: Context, only: String?, uris: List<Uri>) {
         val ps = Peers.list().filter { only == null || it.id == only }
         if (ps.isEmpty()) {
-            val m = L("Cihaz bulunamadı", "No device found")
-            Bus.set(m)
+            report(2, L("Cihaz bulunamadı", "No device found"))
             return
         }
         Hold.acquire(c)
@@ -451,6 +452,7 @@ object Sender {
             val tasks = ps.flatMap { p -> uris.map { u -> p to u } }
             val errs = ConcurrentLinkedQueue<String>()
             val pool = Executors.newFixedThreadPool(minOf(3, tasks.size))
+            val finished = AtomicInteger(0)
             try {
                 tasks.map { (p, u) ->
                     pool.submit {
@@ -458,13 +460,28 @@ object Sender {
                         catch (e: Exception) {
                             val why = e.message ?: L("bağlantı hatası", "connection error")
                             errs.add(L("Hata: ${p.name}: $why", "Error: ${p.name}: $why"))
+                        } finally {
+                            // Çok dosyada paylaşım penceresine "Gönderiliyor… 2/5" gibi ilerleme bildirilir.
+                            val k = finished.incrementAndGet()
+                            if (tasks.size > 1 && k < tasks.size)
+                                ReceiverService.sendListener?.invoke(0, L("Gönderiliyor… $k/${tasks.size}", "Sending… $k/${tasks.size}"))
                         }
                     }
                 }.forEach { it.get() }
             } finally { pool.shutdown() }
             val err: String? = errs.peek()
-            Bus.set(err ?: L("Dosya gönderildi", "File sent"))
+            if (err != null) report(2, err) else report(1, L("Gönderilme tamamlandı", "Transfer complete"))
         } finally { Hold.release() }
+    }
+
+    /**
+     * Gönderim sonucunu bildirir. Paylaş penceresi açıksa ona (0 = sürüyor, 1 = tamamlandı, 2 = hata),
+     * değilse ana ekrandaki kısa mesaj olarak gösterilir.
+     */
+    private fun report(state: Int, msg: String) {
+        val l = ReceiverService.sendListener
+        if (l != null) l(state, msg)
+        else Bus.set(if (state == 1) L("Dosya gönderildi", "File sent") else msg)
     }
 
     private fun one(c: Context, p: Peer, u: Uri) {

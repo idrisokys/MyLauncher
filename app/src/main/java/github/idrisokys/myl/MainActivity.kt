@@ -3,6 +3,7 @@ package github.idrisokys.myl
 import github.idrisokys.myl.common.Notice
 import github.idrisokys.myl.qs.QsPermActivity
 import github.idrisokys.myl.qs.ReceiverService
+import github.idrisokys.myl.qs.SendPopup
 
 import android.Manifest
 import android.app.Activity
@@ -238,6 +239,7 @@ class MainActivity : Activity() {
     override fun onDestroy() {
         ReceiverService.stateListener = null
         ReceiverService.eventListener = null
+        sendPopup?.dispose()
         launcherApps.unregisterCallback(callback)
         main.removeCallbacksAndMessages(null)
         worker.shutdown()
@@ -372,7 +374,7 @@ class MainActivity : Activity() {
                 setColor(0x66000000)
             }
             setOnClickListener { toggleQuickShare() }   // ilk basış aç, ikinci basış kapat (aralarında bekleme süresi var)
-            setOnLongClickListener { openLinkFolder(); true }                                         // basılı tut: Dosyalarım'da Link klasörü
+            setOnLongClickListener { openSendPopup(); true }                                          // basılı tut: açık cihazlar penceresi (Link klasörü de orada)
         }
         bar.addView(qsBtn, LinearLayout.LayoutParams(dp(46), dp(46)).apply { marginEnd = dp(8) })
         bar.addView(search, LinearLayout.LayoutParams(0, dp(50), 1f))
@@ -560,7 +562,15 @@ class MainActivity : Activity() {
         }
     }
 
-    /** Basılı tutunca: kendi Dosyalarım bölümünde Link klasörünü açar. */
+    private var sendPopup: SendPopup? = null
+
+    /** Basılı tutunca: düğmenin altında açık cihazlar listesi; cihaza dokun → dosya seç → durum satırları. */
+    private fun openSendPopup() {
+        val p = sendPopup ?: SendPopup(this, { qsBtn }, REQ_SEND, ::openLinkFolder).also { sendPopup = it }
+        p.show()
+    }
+
+    /** Dosyalarım bölümünde Link klasörünü açar (Paylaş penceresindeki "Link klasörü" satırı). */
     private fun openLinkFolder() {
         try {
             startActivity(
@@ -748,6 +758,7 @@ class MainActivity : Activity() {
     @Deprecated("Deprecated in Java")
     override fun onActivityResult(req: Int, res: Int, data: Intent?) {
         super.onActivityResult(req, res, data)
+        if (req == REQ_SEND) { sendPopup?.onPicked(if (res == RESULT_OK) data else null); return }
         if (req == REQ_WALLPAPER) {
             if (res != RESULT_OK) return
             val img = data?.data ?: return
@@ -1153,6 +1164,7 @@ class MainActivity : Activity() {
         const val REQ_CALL = 2
         const val REQ_RESTORE = 3
         const val REQ_WALLPAPER = 4
+        const val REQ_SEND = 5
         const val MAX_CONTACTS = 2  // her kaynaktan (kişi / uygulama / ayar) en fazla 2 sonuç
         const val MAX_APPS = 2
         const val MAX_SETTINGS = 2

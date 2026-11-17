@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <!-- MyL simgesine basılı tutunca çıkan kısayolların adları -->
-    <string name="sc_apps">Uygulamalar</string>
-    <string name="sc_gallery">Galerim</string>
-    <string name="sc_files">Dosyalarım</string>
-    <string name="sc_notes">Notlarım</string>
-</resources>

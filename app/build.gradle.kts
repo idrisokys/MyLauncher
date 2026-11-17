@@ -16,11 +16,11 @@ val keystoreProps = Properties().apply {
 val hasReleaseKey = keystoreProps.getProperty("storeFile") != null
 
 android {
-    namespace = "github.idrisokys.myl"
+    namespace = "io.github.idrisokys.myl"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "github.idrisokys.myl"
+        applicationId = "io.github.idrisokys.myl"
         minSdk = 29
         targetSdk = 34
         versionCode = 17

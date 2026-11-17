@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <!-- Android robotu (ana ekrandaki eski Uygulamalar simgesi), güvenli alana ortalanmış -->
+    <group android:scaleX="1.3" android:scaleY="1.3" android:translateX="-11" android:translateY="-9.6">
+        <path android:fillColor="#A4C639" android:pathData="M37,42 A13,13 0 0 1 63,42 Z"/>
+        <path android:fillColor="#A4C639" android:pathData="M39.6,27 L41.2,25.8 L45.2,31.5 L43.6,32.7 Z M60.4,27 L58.8,25.8 L54.8,31.5 L56.4,32.7 Z"/>
+        <path android:fillColor="#A4C639" android:pathData="M37,45 L63,45 L63,60 Q63,63.5 59.5,63.5 L40.5,63.5 Q37,63.5 37,60 Z"/>
+        <path android:fillColor="#A4C639" android:pathData="M42,60 L46.5,60 L46.5,69 Q46.5,72 44.25,72 Q42,72 42,69 Z M53.5,60 L58,60 L58,69 Q58,72 55.75,72 Q53.5,72 53.5,69 Z"/>
+        <path android:fillColor="#A4C639" android:pathData="M32,45 Q34.5,45 34.5,47.5 L34.5,57 Q34.5,60 32,60 Q29.5,60 29.5,57 L29.5,47.5 Q29.5,45 32,45 Z M68,45 Q70.5,45 70.5,47.5 L70.5,57 Q70.5,60 68,60 Q65.5,60 65.5,57 L65.5,47.5 Q65.5,45 68,45 Z"/>
+        <path android:fillColor="#263238" android:pathData="M44.1,37 a1.4,1.4 0 1 0 2.8,0 a1.4,1.4 0 1 0 -2.8,0 Z M53.1,37 a1.4,1.4 0 1 0 2.8,0 a1.4,1.4 0 1 0 -2.8,0 Z"/>
+    </group>
+</vector>

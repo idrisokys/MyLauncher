@@ -7,7 +7,7 @@
 
 # MyL 1.13 (Hızlı Paylaş entegrasyonu)
 
-- QuickShare, `github.idrisokys.myl.qs` paketine taşındı; ana ekranı, bilgi kutusu, "Klasör Aç/Kapat" düğmeleri, TV banner'ı ve harici dosya yöneticisi (`com.alphainventor.filemanager`) bağımlılığı kaldırıldı. Geriye yalnızca ana ekrandaki Hızlı Paylaş düğmesi (`MainActivity.qsBtn`: dokun = aç, basılı tut = kapat), Paylaş menüsü girişi (`QsShareActivity`, açık tüm cihazlara gönderir), alıcı servisi (`ReceiverService`), açılışta yeniden başlatma (`BootReceiver`) ve düğme için arayüzsüz izin etkinliği (`QsPermActivity`) kaldı. Hızlı Ayarlar kutucuğu (`QsTile`) ve Paylaş menüsündeki cihaz adlı doğrudan hedefler (share-target / dinamik kısayollar) kaldırıldı.
+- QuickShare, `io.github.idrisokys.myl.qs` paketine taşındı; ana ekranı, bilgi kutusu, "Klasör Aç/Kapat" düğmeleri, TV banner'ı ve harici dosya yöneticisi (`com.alphainventor.filemanager`) bağımlılığı kaldırıldı. Geriye yalnızca Hızlı Ayarlar kutucuğu (`QsTile`), Paylaş menüsü girişi (`QsShareActivity`), alıcı servisi (`ReceiverService`), açılışta yeniden başlatma (`BootReceiver`) ve kutucuk için arayüzsüz izin etkinliği (`QsPermActivity`) kaldı.
 - **`INTERNET` izni geri eklendi** (önceki `tools:node="remove"` satırı silindi): yerel ağ TCP soketleri bu izin olmadan açılamaz. MyL'nin başka hiçbir bölümü ağ kullanmaz.
 - Alıcı varsayılan olarak **kapalı** (`qs_cfg/on = false`); yalnızca kutucuk açıkken dinler. Önceki QuickShare'de varsayılan açıktı.
 - Bildirim izni artık zorunlu değil (reddedilirse servis yine çalışır, bildirim görünmez); gerekli olan tek izin "Tüm dosyalara erişim" (Notlarım/Dosyalarım ile ortak).

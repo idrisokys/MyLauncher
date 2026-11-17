@@ -9,6 +9,7 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.READ_CONTACTS" />
     <uses-permission android:name="android.permission.CALL_PHONE" />
@@ -51,25 +52,32 @@
             <intent-filter>
                 <action android:name="android.content.pm.action.CONFIRM_PIN_SHORTCUT" />
             </intent-filter>
-            <!-- Uygulamalar / Galerim / Dosyalarım / Notlarım: MyL simgesine basılı tutunca çıkan kısayollar -->
+            <!-- Hızlı Paylaş: cihazları Paylaş menüsünde doğrudan hedef yapan share-target tanımı -->
             <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
         </activity>
-        <!-- Notlarım (eski adıyla LinkCepte). Artık ana ekranda uygulama olarak görünmez (LAUNCHER girişi yok);
-             edit simgesine dokununca ya da MyL menüsündeki kısayoldan açılır. Kendi görevinde çalışır. -->
+        <!-- Notlarım (eski adıyla LinkCepte). LAUNCHER girişi sayesinde ana ekran ızgarasında "Notlarım" simgesi olarak görünür;
+             edit simgesine basılı tutunca da açılır. Kendi görevinde çalışır, Home ile launcher'ı etkilemez. -->
         <activity
             android:name=".NotesActivity"
-            android:exported="false"
+            android:exported="true"
             android:label="Notlarım"
+            android:icon="@mipmap/ic_notes"
+            android:roundIcon="@mipmap/ic_notes"
             android:theme="@style/NotesTheme"
             android:launchMode="singleTask"
-            android:taskAffinity="github.idrisokys.myl.notes"
+            android:taskAffinity="io.github.idrisokys.myl.notes"
             android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
         </activity>
         <!-- Paylaş menüsünde "Notlarım": link ve metinler Store.submit ile kaydedilir (arayüzsüz) -->
         <activity
             android:name=".ShareActivity"
             android:exported="true"
             android:label="Notlarım"
+            android:icon="@mipmap/ic_notes"
             android:excludeFromRecents="true"
             android:taskAffinity=""
             android:theme="@style/ShareTheme">
@@ -79,11 +87,31 @@
                 <data android:mimeType="text/plain" />
             </intent-filter>
         </activity>
+        <!-- Paylaş menüsünde "Duvar kağıdı yap": görseli ana ekran + kilit ekranı yapar (arayüzsüz) -->
+        <activity
+            android:name=".SetWallpaperActivity"
+            android:exported="true"
+            android:label="Duvar kağıdı yap"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.ATTACH_DATA" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+            </intent-filter>
+        </activity>
         <!-- Paylaş menüsünde "Resmi Editle": resmi Galerim'deki sihirli değneğin açtığı düzenleyicide açar (arayüzsüz) -->
         <activity
             android:name=".EditShareActivity"
             android:exported="true"
             android:label="Resmi Editle"
+            android:icon="@mipmap/ic_gallery"
             android:excludeFromRecents="true"
             android:taskAffinity=""
             android:theme="@style/ShareTheme">
@@ -99,15 +127,21 @@
             android:exported="false"
             android:excludeFromRecents="true"
             android:theme="@android:style/Theme.Black.NoTitleBar" />
-        <!-- Dosyalarım: dosya yöneticisi bölümü. Notlarım gibi kendi görevinde çalışır; ana ekranda uygulama olarak görünmez (MyL menüsündeki kısayoldan açılır).
+        <!-- Dosyalarım: dosya yöneticisi bölümü. Notlarım gibi kendi görevinde çalışır ve ana ekran ızgarasında simge olarak görünür.
              Paylaş menüsünde de görünür: gelen dosyaları seçilen klasöre kaydeder. -->
         <activity
             android:name=".files.FilesActivity"
             android:exported="true"
             android:label="Dosyalarım"
+            android:icon="@mipmap/ic_files"
+            android:roundIcon="@mipmap/ic_files"
             android:theme="@android:style/Theme.DeviceDefault.NoActionBar"
             android:launchMode="singleTask"
-            android:taskAffinity="github.idrisokys.myl.files">
+            android:taskAffinity="io.github.idrisokys.myl.files">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -119,24 +153,36 @@
                 <data android:mimeType="*/*" />
             </intent-filter>
         </activity>
-        <!-- Uygulamalar: yüklü uygulamalar listesi. Kendi görevinde çalışır; ana ekranda uygulama olarak görünmez (MyL menüsündeki kısayoldan açılır). -->
+        <!-- Uygulamalar: yüklü uygulamalar listesi (eskiden Dosyalarım'ın içindeydi). Kendi görevinde çalışır ve ana ekran ızgarasında simge olarak görünür. -->
         <activity
             android:name=".apps.AppsActivity"
-            android:exported="false"
+            android:exported="true"
             android:label="Uygulamalar"
+            android:icon="@mipmap/ic_apps"
+            android:roundIcon="@mipmap/ic_apps"
             android:theme="@android:style/Theme.DeviceDefault.NoActionBar"
             android:launchMode="singleTask"
-            android:taskAffinity="github.idrisokys.myl.apps">
+            android:taskAffinity="io.github.idrisokys.myl.apps">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
         </activity>
         <!-- Galerim: resim/video galerisi bölümü (seçim modu, toplu silme, klasöre taşıma). Kendi görevinde çalışır. -->
         <activity
             android:name=".gallery.GalleryActivity"
-            android:exported="false"
+            android:exported="true"
             android:label="Galerim"
+            android:icon="@mipmap/ic_gallery"
+            android:roundIcon="@mipmap/ic_gallery"
             android:theme="@android:style/Theme.DeviceDefault.NoActionBar"
             android:launchMode="singleTask"
-            android:taskAffinity="github.idrisokys.myl.gallery"
+            android:taskAffinity="io.github.idrisokys.myl.gallery"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|uiMode">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
         </activity>
         <!-- Galerim'deki sihirli değnekle açılan temel resim düzenleyicisi (basic-editor modülü).
              Aynı görevde (Galerim'in üstünde) açılır; geri okuyla Galerim'e dönülür. -->
@@ -161,8 +207,8 @@
             android:exported="false"
             android:grantUriPermissions="true" />
 
-        <!-- ===== Hızlı Paylaş (eski QuickShare) — arayüzsüz: ana ekrandaki düğme + Paylaş menüsü ===== -->
-        <!-- Paylaş menüsünde "Hızlı Paylaş": dosyaları aynı ağdaki açık tüm cihazlara gönderir -->
+        <!-- ===== Hızlı Paylaş (eski QuickShare) — arayüzsüz: yalnızca Hızlı Ayarlar kutucuğu + Paylaş menüsü ===== -->
+        <!-- Paylaş menüsünde "Hızlı Paylaş": dosyaları aynı ağdaki cihazlara gönderir -->
         <activity
             android:name=".qs.QsShareActivity"
             android:exported="true"
@@ -182,13 +228,25 @@
                 <data android:mimeType="*/*" />
             </intent-filter>
         </activity>
-        <!-- Hızlı Paylaş düğmesine ilk dokunuşta izin eksikse açılan arayüzsüz izin etkinliği -->
+        <!-- Kutucuğa ilk dokunuşta izin eksikse açılan arayüzsüz izin etkinliği -->
         <activity
             android:name=".qs.QsPermActivity"
             android:exported="false"
             android:excludeFromRecents="true"
             android:taskAffinity=""
             android:theme="@style/QsPerm" />
+        <!-- Hızlı Ayarlar kutucuğu: dokun = alıcıyı aç/kapat -->
+        <service
+            android:name=".qs.QsTile"
+            android:exported="true"
+            android:icon="@drawable/ic_qs_tile"
+            android:label="Hızlı Paylaş"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+            <meta-data android:name="android.service.quicksettings.TOGGLEABLE_TILE" android:value="true" />
+        </service>
         <service
             android:name=".qs.ReceiverService"
             android:exported="false"

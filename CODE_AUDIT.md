@@ -127,3 +127,8 @@ Bu çalışma ortamında Gradle ve Android SDK kurulu olmadığı için APK derl
 4. APK yolu: `app/build/outputs/apk/release/`.
 
 > Not: İmzalama anahtarınız varsa `keystore.properties` dosyasını proje köküne ekleyin. Dosya yoksa mevcut yapılandırma debug anahtarıyla imzalı release APK üretir; bunu Play Store'a yüklemek için kullanmayın.
+
+## Notlarım: eşitleme ve (i) düğmesi
+- Notlarım'da sağ üstteki bilgi (i) simgesine basılı tutunca Link klasörünü `.onemsiz`'e taşıyan eylem ve `moveAllToOnemsiz()` kaldırıldı; simge artık yalnızca dokununca bilgi menüsünü açar.
+- Eşitleme her cihazın ana dizinindeki `Link` klasörü üzerinden yürür: başlamadan önce `Store.root()` ile klasör hazırlanır (yoksa oluşturulur, eski `QuickShare/Link` taşınır). Eşitleme düğmesi Notlarım ekranında kalır.
+- Karşı cihaz (ör. Mac) için sağlamlaştırma: dosya adları NFC'ye çevrilerek karşılaştırılır (macOS NFD adları Türkçe harflerde kopya/eksik üretirdi), saniye cinsinden gelen zamanlar milisaniyeye çevrilir, karşı cihaz `/m` uç noktasını desteklemiyorsa anlaşılır hata gösterilir.

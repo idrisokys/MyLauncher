@@ -30,7 +30,8 @@ object NoteSync {
     private const val TOL = 2000L
     private const val MAX_DEPTH = 24
 
-    class Item(val rel: String, val dir: Boolean, val size: Long, val mtime: Long)
+    /** [rel]: karşılaştırma anahtarı (NFC); [raw]: karşı cihazın bildirdiği özgün yol (macOS adları NFD olabilir, istekte bu kullanılır). */
+    class Item(val rel: String, val dir: Boolean, val size: Long, val mtime: Long, val raw: String = rel)
 
     class Result(
         var peers: Int = 0, var sent: Int = 0, var got: Int = 0, var deleted: Int = 0, val mode: Int = 0,
@@ -59,6 +60,12 @@ object NoteSync {
     private fun root(): File = Store.dataDir()
 
     private fun isNoteName(n: String) = !n.endsWith(".part", true) && (n.endsWith(".url", true) || n.endsWith(".txt", true))
+
+    /** macOS dosya adları ayrışık (NFD: "s"+"̧") olabilir; Android'dekiyle eşleşsin diye birleşik (NFC) biçime çevrilir. */
+    private fun nfc(s: String) = java.text.Normalizer.normalize(s, java.text.Normalizer.Form.NFC)
+
+    /** Karşı taraf zamanı saniye olarak bildirirse (1e11'den küçük) milisaniyeye çevirir. */
+    private fun ms(t: Long) = if (t in 1 until 100_000_000_000L) t * 1000 else t
 
     private fun enc(s: String) = URLEncoder.encode(s, "UTF-8")
     private fun dec(s: String) = URLDecoder.decode(s, "UTF-8")
@@ -171,7 +178,7 @@ object NoteSync {
             if (l.isEmpty()) break
             val k = l.substringBefore(':').lowercase(); val v = l.substringAfter(':').trim()
             if (k == "content-length") len = v.toLongOrNull() ?: 0L
-            else if (k == "x-mtime") mt = v.toLongOrNull() ?: 0L
+            else if (k == "x-mtime") mt = ms(v.toLongOrNull() ?: 0L)
         }
         return Resp(st, len, mt, ins)
     }
@@ -180,7 +187,10 @@ object NoteSync {
         connect(p).use { s ->
             s.outputStream.write("GET /m HTTP/1.1\r\nConnection: close\r\n\r\n".toByteArray()); s.outputStream.flush()
             val r = readResp(s)
-            require(r.status == 200) { "manifest ${r.status}" }
+            require(r.status == 200) {
+                L("Karşı cihaz Link eşitlemesini desteklemiyor ya da izni yok (kod ${r.status}). Karşı cihazda uygulamayı güncelleyin, Hızlı Paylaş'ı açın ve dosya erişim izni verin.",
+                    "The other device does not support Link sync or has no file access (code ${r.status}). Update the app there, turn Quick Share on and grant file access.")
+            }
             val bytes = ByteArray(r.len.toInt().coerceIn(0, 8 shl 20))
             var n = 0
             while (n < bytes.size) { val k = r.ins.read(bytes, n, bytes.size - n); if (k < 0) break; n += k }
@@ -188,8 +198,11 @@ object NoteSync {
             String(bytes, 0, n, Charsets.UTF_8).lineSequence().forEach { ln ->
                 val a = ln.split('\t')
                 if (a.size == 4) {
-                    val rel = dec(a[3])
-                    out[rel] = Item(rel, a[0] == "D", a[1].toLongOrNull() ?: 0, a[2].toLongOrNull() ?: 0)
+                    val raw = dec(a[3]).trim('/')
+                    if (raw.isNotEmpty()) {
+                        val rel = nfc(raw)
+                        out[rel] = Item(rel, a[0].trim() == "D", a[1].trim().toLongOrNull() ?: 0, ms(a[2].trim().toLongOrNull() ?: 0), raw)
+                    }
                 }
             }
             return out
@@ -200,7 +213,7 @@ object NoteSync {
         val dest = resolve(it.rel) ?: return
         dest.parentFile?.mkdirs()
         connect(p).use { s ->
-            s.outputStream.write("GET /f HTTP/1.1\r\nX-Name: ${enc(it.rel)}\r\nConnection: close\r\n\r\n".toByteArray()); s.outputStream.flush()
+            s.outputStream.write("GET /f HTTP/1.1\r\nX-Name: ${enc(it.raw)}\r\nConnection: close\r\n\r\n".toByteArray()); s.outputStream.flush()
             val r = readResp(s)
             require(r.status == 200) { "${it.rel}: ${r.status}" }
             val tmp = File(dest.parentFile, "${dest.name}.${UUID.randomUUID().toString().take(8)}.part")
@@ -277,7 +290,7 @@ object NoteSync {
         for (k in stale.sortedWith(compareBy(depth, { it }))) {
             if (gone.any { k.startsWith("$it/") }) continue
             val r = remote[k]!!
-            try { deleteRemote(p, k, r.dir); deleted++; if (r.dir) gone.add(k) }
+            try { deleteRemote(p, r.raw, r.dir); deleted++; if (r.dir) gone.add(k) }
             catch (e: Exception) { errs.add("${p.name}: ${e.message ?: k}") }
         }
         // 2) Bizdekileri karşıya yaz: klasörler önce; dosyalar eksik ya da farklıysa (boyut/zaman) zorla üzerine yazılır
@@ -381,6 +394,8 @@ object NoteSync {
         if (!Store.hasAccess(c)) { res.error = L("depolama izni yok", "no storage permission"); return res }
         if (targets.isEmpty()) { res.error = L("cihaz seçilmedi", "no device selected"); return res }
         Identity.init(c)
+        // Eşitleme her cihazın ana dizinindeki Link klasörü üzerinden yürür; klasör yoksa (eski QuickShare/Link dahil) hazırlanır.
+        if (Store.root(c) == null) { res.error = L("Link klasörü hazırlanamadı", "Could not prepare the Link folder"); return res }
         Hold.acquire(c)
         try {
             for (p0 in if (mode == 2) targets.take(1) else targets) {

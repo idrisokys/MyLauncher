@@ -301,14 +301,14 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
     }
     // Eşitle tuşu: aynı ağdaki açık cihazlarla (Hızlı Paylaş) notları eşitler: eksikler eklenir, aynı dosyanın yeni olanı eskisinin üzerine yazılır
     // mirror = true (yıldız tuşu): bu cihaz esas alınır; diğer açık cihazlarda bizde olmayanlar silinir, farklılar bizimkiyle değiştirilir
-    fun syncNow(mode: Int = 0) {
+    fun syncNow(mode: Int, targets: List<github.idrisokys.myl.qs.Peer>) {
         if (syncing) return
         syncing = true
         toast(L("Eşitleniyor…", "Syncing…"))
         scope.launch {
             val r = lock.withLock {
                 withContext(Dispatchers.IO) {
-                    try { github.idrisokys.myl.qs.NoteSync.run(ctx, mode) }
+                    try { github.idrisokys.myl.qs.NoteSync.run(ctx, mode, targets) }
                     catch (e: Exception) { github.idrisokys.myl.qs.NoteSync.Result(mode = mode, error = e.message ?: "?") }
                 }
             }
@@ -566,20 +566,46 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
         }
     }
 
-    if (dialog == "syncmode") AlertDialog(
-        onDismissRequest = { dialog = null },
-        title = { Text(L("Nasıl eşitlensin?", "How to sync?")) },
-        text = {
-            Column {
-                @Composable fun opt(title: String, sub: String, mode: Int) = ListItem(
-                    modifier = Modifier.clickable { dialog = null; syncNow(mode) },
-                    headlineContent = { Text(title) }, supportingContent = { Text(sub) })
-                opt(L("Bu cihaza göre", "Based on this device"), L("Karşıdakinde fazla olanlar silinir, bununki karşıya yazılır", "Extras on the other device are deleted; this device's data is copied over"), 1)
-                opt(L("Karşıdaki cihaza göre", "Based on the other device"), L("Bu cihazda fazla olanlar silinir, karşıdakiyle aynı olur", "Extras here are deleted; becomes identical to the other device"), 2)
-                opt(L("İki cihaz aynı olsun", "Make both the same"), L("Eksikler iki yöne tamamlanır, yeni olan kazanır; silme yok", "Missing items are copied both ways, newer wins; nothing is deleted"), 0)
-            }
-        },
-        confirmButton = { TextButton({ dialog = null }) { Text(L("İptal", "Cancel")) } })
+    if (dialog == "syncmode") {
+        var found by remember { mutableStateOf<List<github.idrisokys.myl.qs.Peer>?>(null) }   // null = taranıyor
+        var picked by remember { mutableStateOf(setOf<String>()) }
+        LaunchedEffect(Unit) {
+            found = withContext(Dispatchers.IO) { try { github.idrisokys.myl.qs.NoteSync.scan(ctx) } catch (e: Exception) { emptyList() } }
+        }
+        val chosen = found?.filter { it.id in picked } ?: emptyList()
+        AlertDialog(
+            onDismissRequest = { dialog = null },
+            title = { Text(L("Nasıl eşitlensin?", "How to sync?")) },
+            text = {
+                Column {
+                    val f = found
+                    when {
+                        f == null -> Row(Modifier.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                            Spacer(Modifier.width(12.dp)); Text(L("Cihazlar aranıyor…", "Searching for devices…"))
+                        }
+                        f.isEmpty() -> Text(L("Açık cihaz bulunamadı", "No open device found"), Modifier.padding(vertical = 8.dp))
+                        else -> f.forEach { d ->
+                            Row(Modifier.fillMaxWidth().clickable { picked = if (d.id in picked) picked - d.id else picked + d.id },
+                                verticalAlignment = Alignment.CenterVertically) {
+                                Checkbox(d.id in picked, { picked = if (it) picked + d.id else picked - d.id })
+                                Text(d.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                        }
+                    }
+                    HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                    val on = chosen.isNotEmpty()
+                    listOf(1 to L("Bu cihaza göre", "Based on this device"),
+                        2 to L("Karşıdaki cihaza göre", "Based on the other device"),
+                        0 to L("İki cihazda aynı olsun", "Make both the same")).forEach { (m, label) ->
+                        TextButton({ dialog = null; syncNow(m, chosen) }, enabled = on, modifier = Modifier.fillMaxWidth()) {
+                            Text(label, Modifier.fillMaxWidth())
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton({ dialog = null }) { Text(L("İptal", "Cancel")) } })
+    }
 
     if (dialog == "folder") {
         var title by remember { mutableStateOf("") }

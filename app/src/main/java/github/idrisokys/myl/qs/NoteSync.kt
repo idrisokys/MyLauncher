@@ -343,29 +343,47 @@ object NoteSync {
         return sent to got
     }
 
+    private fun reachable(p: Peer): Boolean = try {
+        Socket().use { it.connect(InetSocketAddress(p.host, p.port), 1500) }; true
+    } catch (e: Exception) { false }
+
     /**
-     * Ağdaki tüm açık cihazlarla eşitler. Arka plan iş parçacığında çağrılmalı (ağ + disk).
-     * Hızlı Paylaş servisi çalışmıyorsa cihaz aramasını geçici olarak kendisi yapar.
+     * Ağı tek seferlik tarar ve gerçekten açık (bağlanılabilen) cihazları döndürür. Arka plan iş parçacığında çağrılmalı.
+     * Hızlı Paylaş servisi açık olsa da kendi aramasını yapar (liste her seferinde sıfırdan kurulur).
      */
-    /** mode: 0 = iki cihaz birleşir (aynı olur), 1 = bu cihaza göre, 2 = karşıdaki cihaza göre. */
-    fun run(c: Context, mode: Int = 0): Result {
-        val res = Result(mode = mode)
-        if (!Store.hasAccess(c)) { res.error = L("depolama izni yok", "no storage permission"); return res }
+    fun scan(c: Context): List<Peer> {
         Identity.init(c)
-        var disc: Discovery? = null
-        Hold.acquire(c)
+        Peers.clear()
+        val disc = try { Discovery(c).also { it.browse() } } catch (e: Exception) { null }
         try {
-            if (!ReceiverService.running) disc = Discovery(c).also { it.browse() }
-            // Cihaz bulununca çoklu cihazın hepsi listeye girsin diye kısa süre daha beklenir; hiç bulunamazsa 4 sn'de vazgeçilir.
             val t0 = SystemClock.uptimeMillis(); var found = -1L
             while (true) {
                 val now = SystemClock.uptimeMillis()
                 if (found < 0 && Peers.list().isNotEmpty()) found = now
-                if (found >= 0 && now - found >= 800) break
-                if (found < 0 && now - t0 >= 4000) break
+                if (found >= 0 && now - found >= 1000) break
+                if (found < 0 && now - t0 >= 3500) break
                 Thread.sleep(150)
             }
-            for (p0 in Peers.list().let { if (mode == 2) it.take(1) else it }) {   // "karşıdaki cihaz" tek olmalı: ilk bulunan
+            val cand = Peers.list()
+            val ok = java.util.concurrent.ConcurrentLinkedQueue<Peer>()
+            cand.map { p -> kotlin.concurrent.thread(isDaemon = true) { if (reachable(p)) ok.add(p) else Peers.del(p.svc) } }
+                .forEach { it.join(2500) }
+            return cand.filter { it in ok }
+        } finally { try { disc?.stop() } catch (e: Exception) { } }
+    }
+
+    /**
+     * Seçilen cihazlarla eşitler. Arka plan iş parçacığında çağrılmalı (ağ + disk).
+     * mode: 0 = iki cihaz aynı olsun (birleştirir), 1 = bu cihaza göre, 2 = karşıdaki cihaza göre (ilk seçilen).
+     */
+    fun run(c: Context, mode: Int, targets: List<Peer>): Result {
+        val res = Result(mode = mode)
+        if (!Store.hasAccess(c)) { res.error = L("depolama izni yok", "no storage permission"); return res }
+        if (targets.isEmpty()) { res.error = L("cihaz seçilmedi", "no device selected"); return res }
+        Identity.init(c)
+        Hold.acquire(c)
+        try {
+            for (p0 in if (mode == 2) targets.take(1) else targets) {
                 var p = p0
                 try {
                     fun go(x: Peer) = when (mode) { 1 -> mirrorPeer(x, res.errors); 2 -> pullMirror(x, res.errors); else -> syncPeer(x, res.errors) }
@@ -382,10 +400,7 @@ object NoteSync {
                     res.errors.add("${p0.name}: ${e.message ?: L("bağlantı hatası", "connection error")}")
                 }
             }
-        } finally {
-            disc?.stop()
-            Hold.release()
-        }
+        } finally { Hold.release() }
         return res
     }
 }

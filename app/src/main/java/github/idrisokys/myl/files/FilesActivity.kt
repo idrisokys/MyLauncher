@@ -368,7 +368,7 @@ class FilesActivity : Activity() {
                 }
                 row.addView(iconView(f), dp(48), dp(48))
                 val c = LinearLayout(this@FilesActivity).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(12), 0, 0, 0) }
-                c.addView(tv((if (f.path in topPinSet) "\uD83D\uDCCC " else "") + f.name, 19f, Color.WHITE).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END })
+                c.addView(tv(f.name, 19f, Color.WHITE).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END })
                 val sub = if (f.isDirectory) "${f.listFiles()?.size ?: 0} öğe" else sz(f.length())
                 c.addView(tv("$sub • ${df.format(Date(f.lastModified()))}", 14f, 0xFF999999.toInt()))
                 row.addView(c, LinearLayout.LayoutParams(0, -2, 1f))
@@ -380,6 +380,13 @@ class FilesActivity : Activity() {
                         setOnClickListener { itemMenu(f, it) }
                         setOnLongClickListener { toggleEditMode(); true }
                     }, LinearLayout.LayoutParams(dp(48), dp(48)))
+                }
+                // Sabitlenmiş öğe: üç noktanın sağında minik yuvarlak
+                if (f.path in topPinSet) {
+                    val dot = View(this@FilesActivity).apply {
+                        background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(0xFF8AB4F8.toInt()) }
+                    }
+                    row.addView(dot, LinearLayout.LayoutParams(dp(8), dp(8)).apply { marginStart = dp(2); marginEnd = dp(2) })
                 }
                 return row
             }

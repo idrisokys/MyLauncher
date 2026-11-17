@@ -11,9 +11,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.Image
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
@@ -42,18 +40,10 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.TextRange
 import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.isShiftPressed
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -481,9 +471,10 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
                             if (editMode) Spacer(Modifier.size(24.dp))   // düzenleme modunda kutucuk yok: yalnızca boşluk (seçim satıra dokunarak yapılır)
                             else Icon(if (e.isDir) Icons.Default.Folder else if (e.isTxt) Icons.Default.Description else Icons.Default.Link, null)
                         },
-                        headlineContent = { Text((if (e.pinned) "\uD83D\uDCCC " else "") + e.title, maxLines = 4, overflow = TextOverflow.Ellipsis) },
+                        headlineContent = { Text(e.title, maxLines = 4, overflow = TextOverflow.Ellipsis) },
                         trailingContent = {
                             // Üç nokta: tek dokunuş menü (Taşı / Paylaş / Sil), basılı tutunca düzenleme modu açılır/kapanır
+                            Row(verticalAlignment = Alignment.CenterVertically) {
                             Box {
                                 var menu by remember { mutableStateOf(false) }
                                 Box(
@@ -502,6 +493,9 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
                                     DropdownMenuItem(text = { Text(L("Paylaş", "Share")) }, onClick = { menu = false; shareEntries(targets) })
                                     DropdownMenuItem(text = { Text(L("Sil", "Delete")) }, onClick = { menu = false; deleteNow(targets) })
                                 }
+                            }
+                            // Sabitlenmiş öğe: üç noktanın sağında minik yuvarlak
+                            if (e.pinned) Box(Modifier.padding(start = 2.dp, end = 2.dp).size(8.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary))
                             }
                         })
                     HorizontalDivider()
@@ -767,9 +761,9 @@ fun SearchResults(pad: PaddingValues, hits: List<Hit>?, onOpen: (Entry) -> Unit,
         else -> LazyColumn(Modifier.padding(pad).fillMaxSize()) {
             items(hits, key = { it.entry.key }) { h ->
                 ListItem(
-                    modifier = Modifier.clickable { onOpen(h.entry) },
+                    modifier = Modifier.clickable { if (h.entry.isDir) onGoto(h.path + h.entry) else onOpen(h.entry) },
                     overlineContent = { Text(if (h.path.isEmpty()) L("Ana liste", "Main list") else h.path.joinToString(" › ") { it.name }, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                    leadingContent = { Icon(if (h.isNote || h.entry.isTxt) Icons.Default.Description else Icons.Default.Link, null) },
+                    leadingContent = { Icon(if (h.entry.isDir) Icons.Default.Folder else if (h.isNote || h.entry.isTxt) Icons.Default.Description else Icons.Default.Link, null) },
                     headlineContent = { Text(h.entry.title, maxLines = 4, overflow = TextOverflow.Ellipsis) },
                     supportingContent = { if (!h.isNote && h.detail.isNotBlank()) Text(h.detail, maxLines = 2, overflow = TextOverflow.Ellipsis) },
                     trailingContent = { IconButton({ onGoto(h.path) }) { Icon(Icons.Default.FolderOpen, L("Klasöre git", "Go to folder")) } })

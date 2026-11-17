@@ -9,13 +9,9 @@ import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
 import android.net.wifi.WifiManager
 import android.os.Build
-import android.os.Handler
-import android.os.Looper
 import android.os.PowerManager
-import android.os.SystemClock
 import android.provider.OpenableColumns
 import android.provider.Settings
-import android.widget.Toast
 import github.idrisokys.myl.L
 import java.io.BufferedInputStream
 import java.io.BufferedReader

@@ -163,7 +163,17 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
     val current = stack.lastOrNull()?.uri ?: rootUri
     var loaded by remember(current) { mutableStateOf<List<Entry>?>(null) }
     LaunchedEffect(current, tick, resume) { loaded = withContext(Dispatchers.IO) { Store.list(ctx, current) } }
+    val listState = rememberLazyListState()
     val list = loaded ?: emptyList()
+    // Yeni eklenen öğe listenin en üstüne konur; liste aşağı kaydırılmışsa görünmesi için başa kaydırılır
+    // (sıralama/taşıma gibi mevcut öğelerle ilgili değişikliklerde kaydırma yapılmaz)
+    val seenKeys = remember(current) { arrayOf<Set<String>?>(null) }
+    LaunchedEffect(loaded) {
+        val l = loaded ?: return@LaunchedEffect
+        val prev = seenKeys[0]
+        seenKeys[0] = l.mapTo(HashSet()) { it.key }
+        if (prev != null && l.isNotEmpty() && l.first().key !in prev) listState.scrollToItem(0)
+    }
     // Düzenleme modunda tam bir öğe seçiliyse adı alttaki geniş alanda değiştirilir
     val rn: Entry? = if (editMode && selected.size == 1) list.firstOrNull { it.key in selected } else null
     // .url kayıtlarında (link/not) ad alanı sınırsızdır; 220'yi aşarsa kayıt otomatik .txt olur. Klasör ve .txt adları 220 ile sınırlı kalır.
@@ -179,7 +189,6 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
     }
 
     // ---- Sıralama: düzenleme modunda seçili satır ok tuşlarıyla yukarı/aşağı taşınır ----
-    val listState = rememberLazyListState()
     val currentDir by rememberUpdatedState(current)
 
     // mode: -1 bir yukarı, 1 bir aşağı, -2 başa al, 2 sona al (seçili tüm öğeler için)

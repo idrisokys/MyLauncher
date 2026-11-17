@@ -119,7 +119,6 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
     var moving by remember { mutableStateOf<List<Entry>>(emptyList()) }   // taşınacak öğeler
     var dialog by remember { mutableStateOf<String?>(null) }
     var infoMenu by remember { mutableStateOf(false) }          // sağ üstteki bilgi (i) menüsü
-    var syncing by remember { mutableStateOf(false) }           // üstteki eşitle tuşu: devam eden eşitleme
     var renameText by remember { mutableStateOf("") }
     var txtDoc by remember { mutableStateOf<Pair<Entry, String>?>(null) }   // tam ekranda açık .txt (öğe, içerik)
     var linkText by remember { mutableStateOf("") }
@@ -298,24 +297,6 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
         if (clearText && linkText.trim() == searchQuery) linkText = ""
         searchQuery = null; hits = null
     }
-    // Eşitle tuşu: aynı ağdaki açık cihazlarla (Hızlı Paylaş) notları eşitler: eksikler eklenir, aynı dosyanın yeni olanı eskisinin üzerine yazılır
-    // mirror = true (yıldız tuşu): bu cihaz esas alınır; diğer açık cihazlarda bizde olmayanlar silinir, farklılar bizimkiyle değiştirilir
-    fun syncNow(mode: Int, targets: List<github.idrisokys.myl.qs.Peer>) {
-        if (syncing) return
-        syncing = true
-        toast(L("Eşitleniyor…", "Syncing…"))
-        scope.launch {
-            val r = lock.withLock {
-                withContext(Dispatchers.IO) {
-                    try { github.idrisokys.myl.qs.NoteSync.run(ctx, mode, targets) }
-                    catch (e: Exception) { github.idrisokys.myl.qs.NoteSync.Result(mode = mode, error = e.message ?: "?") }
-                }
-            }
-            syncing = false
-            tick++
-            Notice.show(ctx, r.message(), true)
-        }
-    }
     // Yenile tuşu: Link klasörünü tekrar kontrol eder (silinmişse yeniden oluşturur), artık var olmayan klasörlerden çıkar, listeyi (arama açıksa aramayı) yeniden yükler
     fun refreshAll() {
         selected = emptySet()
@@ -447,10 +428,6 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
             navigationIcon = { if (stack.isNotEmpty()) IconButton({ stack = stack.dropLast(1) }) { Icon(Icons.Default.ArrowBack, L("Geri", "Back")) } },
             actions = {
                 IconButton({ dialog = "folder" }) { Icon(Icons.Default.CreateNewFolder, L("Klasör", "Folder")) }
-                IconButton({ dialog = "syncmode" }, enabled = !syncing) {
-                    if (syncing) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                    else Icon(Icons.Default.Sync, L("Cihazlarla eşitle", "Sync with devices"))
-                }
                 IconButton({ refreshAll() }) { Icon(Icons.Default.Refresh, L("Yenile", "Refresh")) }
                 // En sağdaki bilgi (i) ikonu: küçük menü açar (gemi resmi, e-posta, GitHub adresi)
                 Box {
@@ -541,47 +518,6 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
                 onCopy = { t -> clipboard.setText(AnnotatedString(t)); toast(L("Kopyalandı", "Copied")) },
                 onClose = { txtDoc = null })
         }
-    }
-
-    if (dialog == "syncmode") {
-        var found by remember { mutableStateOf<List<github.idrisokys.myl.qs.Peer>?>(null) }   // null = taranıyor
-        var picked by remember { mutableStateOf(setOf<String>()) }
-        LaunchedEffect(Unit) {
-            found = withContext(Dispatchers.IO) { try { github.idrisokys.myl.qs.NoteSync.scan(ctx) } catch (e: Exception) { emptyList() } }
-        }
-        val chosen = found?.filter { it.id in picked } ?: emptyList()
-        AlertDialog(
-            onDismissRequest = { dialog = null },
-            title = { Text(L("Nasıl eşitlensin?", "How to sync?")) },
-            text = {
-                Column {
-                    val f = found
-                    when {
-                        f == null -> Row(Modifier.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                            Spacer(Modifier.width(12.dp)); Text(L("Cihazlar aranıyor…", "Searching for devices…"))
-                        }
-                        f.isEmpty() -> Text(L("Açık cihaz bulunamadı", "No open device found"), Modifier.padding(vertical = 8.dp))
-                        else -> f.forEach { d ->
-                            Row(Modifier.fillMaxWidth().clickable { picked = if (d.id in picked) picked - d.id else picked + d.id },
-                                verticalAlignment = Alignment.CenterVertically) {
-                                Checkbox(d.id in picked, { picked = if (it) picked + d.id else picked - d.id })
-                                Text(d.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            }
-                        }
-                    }
-                    HorizontalDivider(Modifier.padding(vertical = 8.dp))
-                    val on = chosen.isNotEmpty()
-                    listOf(1 to L("Bu cihaza göre", "Based on this device"),
-                        2 to L("Karşıdaki cihaza göre", "Based on the other device"),
-                        0 to L("İki cihazda aynı olsun", "Make both the same")).forEach { (m, label) ->
-                        TextButton({ dialog = null; syncNow(m, chosen) }, enabled = on, modifier = Modifier.fillMaxWidth()) {
-                            Text(label, Modifier.fillMaxWidth())
-                        }
-                    }
-                }
-            },
-            confirmButton = { TextButton({ dialog = null }) { Text(L("İptal", "Cancel")) } })
     }
 
     if (dialog == "folder") {

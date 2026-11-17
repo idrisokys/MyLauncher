@@ -13,11 +13,14 @@ import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.widget.CheckBox
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.PopupWindow
 import android.widget.TextView
 import android.widget.Toast
 import github.idrisokys.myl.L
+import github.idrisokys.myl.R
 
 /**
  * Hızlı Paylaş düğmesine basılı tutunca düğmenin hemen altında açılan küçük pencere.
@@ -28,6 +31,9 @@ import github.idrisokys.myl.L
  * 2) Cihaza dokununca sistemin dosya seçicisi açılır; birden çok dosya seçilebilir.
  * 3) Seçim dönünce aynı pencere yeniden açılır ve altındaki satırlarda
  *    "Gönderiliyor…" ve bitince "Gönderilme tamamlandı" (ya da hata) yazar.
+ *
+ * Sağ üstteki eşitleme simgesi (⇄): aynı pencerede cihazlar işaretlenir ve Link klasörü eşitleme yöntemi seçilir
+ * (Bu cihaza göre / Karşıdaki cihaza göre / İki cihazda aynı olsun); eşitleme [NoteSync] ile <ana dizin>/Link üzerinden yürür.
  *
  * Kullanım: ana ekran [show] çağırır, dosya seçici sonucunu [onPicked]'a iletir, kapanırken [dispose] çağırır.
  */
@@ -49,6 +55,10 @@ class SendPopup(
     private var shownKey = ""
     private var line1: TextView? = null          // "Gönderiliyor…"
     private var line2: TextView? = null          // "Gönderilme tamamlandı" / hata
+    private var hdrTitle: TextView? = null       // eşitleme görünümünde başlık
+    private var syncView = false                 // true: cihaz listesi yerine eşitleme seçenekleri
+    private var syncRunning = false
+    private val picked = HashSet<String>()       // eşitlenmek üzere işaretlenen cihazlar
 
     private var live: List<Peer>? = null         // null = tarama sürüyor; liste = doğrulanmış açık cihazlar
     private var scanGen = 0                      // eski taramanın sonucu yenisini ezmesin
@@ -130,6 +140,24 @@ class SendPopup(
             setPadding(dp(6), dp(8), dp(6), dp(6))
             background = GradientDrawable().apply { setColor(0xFF2A2A2A.toInt()); cornerRadius = dp(14).toFloat() }
         }
+        if (!statusMode) {
+            val hdr = LinearLayout(act).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+            val title = TextView(act).apply {
+                setTextColor(Color.WHITE); setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+                setPadding(dp(12), 0, 0, 0)
+                text = if (syncView) L("Nasıl eşitlensin?", "How to sync?") else ""
+            }
+            hdrTitle = title
+            hdr.addView(title, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            val ic = ImageView(act).apply {
+                setImageResource(R.drawable.ic_sync); setColorFilter(Color.WHITE)
+                contentDescription = L("Cihazlarla eşitle", "Sync with devices")
+                setPadding(dp(8), dp(8), dp(8), dp(8)); selectable(this)
+                setOnClickListener { toggleSync() }
+            }
+            hdr.addView(ic, LinearLayout.LayoutParams(dp(40), dp(40)))
+            box.addView(hdr, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        } else hdrTitle = null
         val lst = LinearLayout(act).apply { orientation = LinearLayout.VERTICAL }
         list = lst
         shownKey = ""
@@ -177,8 +205,91 @@ class SendPopup(
         if (p.isShowing) p.update(anchor(), 0, dp(6), dp(240), ViewGroup.LayoutParams.WRAP_CONTENT)
     }
 
+    private fun toggleSync() {
+        if (syncRunning || statusMode) return
+        syncView = !syncView
+        picked.clear()
+        hdrTitle?.text = if (syncView) L("Nasıl eşitlensin?", "How to sync?") else ""
+        shownKey = ""
+        refreshList()
+    }
+
+    /** Eşitleme görünümü: cihaz kutucukları + üç yöntem düğmesi (Notlarım'daki eski eşitleme penceresiyle aynı). */
+    private fun renderSync(lst: LinearLayout) {
+        lst.removeAllViews()
+        val peers = live
+        if (peers == null || peers.isEmpty()) {
+            lst.addView(TextView(act).apply {
+                text = if (peers == null) L("Cihazlar aranıyor…", "Searching for devices…") else L("Açık cihaz bulunamadı", "No open device found")
+                setTextColor(0xAAFFFFFF.toInt()); setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+                gravity = Gravity.CENTER_VERTICAL; setPadding(dp(12), 0, dp(12), 0)
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(40)))
+            resize(); return
+        }
+        val buttons = ArrayList<TextView>()
+        fun upd() { buttons.forEach { it.isEnabled = picked.isNotEmpty(); it.alpha = if (picked.isNotEmpty()) 1f else 0.4f } }
+        peers.forEach { p ->
+            lst.addView(CheckBox(act).apply {
+                text = p.name; setTextColor(Color.WHITE); setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+                setSingleLine(); ellipsize = TextUtils.TruncateAt.END
+                setPadding(dp(8), 0, dp(8), 0)
+                buttonTintList = android.content.res.ColorStateList.valueOf(Color.WHITE)
+                isChecked = p.id in picked
+                setOnCheckedChangeListener { _, on -> if (on) picked.add(p.id) else picked.remove(p.id); upd() }
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)))
+        }
+        lst.addView(View(act).apply { setBackgroundColor(0x33FFFFFF) },
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)).apply {
+                topMargin = dp(4); bottomMargin = dp(4); marginStart = dp(8); marginEnd = dp(8)
+            })
+        listOf(1 to L("Bu cihaza göre", "Based on this device"),
+            2 to L("Karşıdaki cihaza göre", "Based on the other device"),
+            0 to L("İki cihazda aynı olsun", "Make both the same")).forEach { (m, label) ->
+            val b = TextView(act).apply {
+                text = label; setTextColor(Color.WHITE); setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+                gravity = Gravity.CENTER_VERTICAL; setPadding(dp(12), 0, dp(12), 0)
+                selectable(this)
+                setOnClickListener { startSync(m, peers.filter { it.id in picked }) }
+            }
+            buttons.add(b)
+            lst.addView(b, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)))
+        }
+        upd()
+        resize()
+    }
+
+    private fun startSync(mode: Int, targets: List<Peer>) {
+        if (syncRunning || targets.isEmpty()) return
+        syncRunning = true
+        val lst = list
+        lst?.removeAllViews()
+        lst?.addView(TextView(act).apply {
+            text = L("Eşitleniyor…", "Syncing…"); setTextColor(Color.WHITE); setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            gravity = Gravity.CENTER_VERTICAL; setPadding(dp(12), 0, dp(12), 0)
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)))
+        resize()
+        kotlin.concurrent.thread(isDaemon = true, name = "qs-sync") {
+            val r = try { NoteSync.run(act, mode, targets) } catch (e: Exception) { NoteSync.Result(mode = mode, error = e.message ?: "?") }
+            val ok = r.error == null && r.errors.isEmpty() && r.peers > 0
+            h.post {
+                syncRunning = false
+                val l = list
+                if (pw?.isShowing == true && l != null && syncView) {
+                    l.removeAllViews()
+                    l.addView(TextView(act).apply {
+                        text = r.message(); setTextColor(if (ok) 0xFF66BB6A.toInt() else 0xFFEF5350.toInt())
+                        setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f); setPadding(dp(12), dp(8), dp(12), dp(8))
+                    }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+                    resize()
+                    h.postDelayed({ closeNow() }, if (ok) 3000 else 5000)
+                } else Toast.makeText(act, r.message(), Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
     private fun refreshList() {
         val lst = list ?: return
+        if (syncView && !statusMode) { renderSync(lst); return }
         val peers = if (statusMode) listOfNotNull(target) else (live ?: emptyList())
         val key = (if (live == null && !statusMode) "scan|" else "done|") + peers.joinToString("|") { it.id + ":" + it.name }
         if (key == shownKey && lst.childCount > 0) return
@@ -300,6 +411,7 @@ class SendPopup(
         awaitingPick = false
         statusMode = false
         target = null
+        syncView = false; picked.clear(); hdrTitle = null
         list = null; line1 = null; line2 = null; live = null
     }
 }

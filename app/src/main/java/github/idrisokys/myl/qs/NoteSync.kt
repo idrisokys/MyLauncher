@@ -14,7 +14,8 @@ import java.net.URLEncoder
 import java.util.UUID
 
 /*
- * Notlarım eşitleme: Hızlı Paylaş'ın TCP/mDNS altyapısını kullanır.
+ * Link klasörü eşitleme: Hızlı Paylaş'ın TCP/mDNS altyapısını kullanır; Hızlı Paylaş penceresindeki (SendPopup) ⇄ simgesinden başlatılır
+ * (Notlarım'da eşitleme düğmesi yoktur). Mac uygulaması da aynı uç noktaları sunar.
  * Ağda açık (Hızlı Ayarlar kutucuğu açık) olan her cihazla <ana dizin>/Link içindeki .url / .txt dosyaları ve
  * klasörler karşılaştırılır:
  *   - karşı cihazda olmayan dosya gönderilir, bizde olmayan dosya alınır (eksikler tamamlanır),

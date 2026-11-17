@@ -225,11 +225,30 @@ object Store {
         return if (u.length > 8) u else null
     }
 
+    /** Linklerin varsayılan klasörünün adı (<ana dizin>/Link/Url). */
+    private const val LINK_DIR = "Url"
+
+    /** [dir] veri klasörünün kendisiyse Url alt klasörünü (yoksa oluşturup) döndürür; başka klasörse aynen döndürür. */
+    fun linkDir(dir: Uri): Uri = synchronized(mutex) {
+        try {
+            val root = dataDir()
+            if (file(dir).canonicalPath != root.canonicalPath) return dir
+            val all = children(dir)
+            all.firstOrNull { it.isDir && it.name.equals(LINK_DIR, true) }?.let { return it.uri }
+            val d = File(root, LINK_DIR)
+            if (!d.mkdir() && !d.isDirectory) return dir
+            saveOrderIn(dir, listOf(LINK_DIR) + ordered(all).map { it.name })
+            uriOf(d)
+        } catch (e: Exception) { dir }
+    }
+
     /** Link veya metni uygun şekilde kaydeder. Ağ erişimi yaptığı için arka planda çağrılmalı. */
     fun addFromText(ctx: Context, dir: Uri, text: String, subject: String? = null): Boolean {
         val t = text.trim()
         if (t.isEmpty()) return false
         val url = extractUrl(t) ?: return addNote(ctx, dir, t)
+        // Linkler varsayılan olarak Link/Url klasörüne kaydedilir (kullanıcı başka bir alt klasörün içindeyse orada kalır).
+        val dir = linkDir(dir)
         // Ağ erişimi yok: başlık, paylaşılan konudan / metinden ya da sitenin adresinden alınır.
         val title = subject?.lines()?.firstOrNull { it.isNotBlank() }?.trim()
             ?: t.replace(url, "").lines().firstOrNull { it.isNotBlank() }?.trim()

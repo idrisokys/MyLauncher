@@ -626,9 +626,6 @@ class MainActivity : Activity() {
         // En üstte Uygulamalar; sonra bilgi simgesi ve diğerleri
         row("Uygulamalar", R.drawable.ic_menu_apps) { openApps() }
 
-        // Bilgi simgesi: dokununca ayrı küçük kartta gemi ikonu, e-posta ve Github
-        row("Bilgi", R.drawable.ic_menu_info) { showInfoCard(anchor) }
-
         box.addView(View(this).apply { setBackgroundColor(0x33FFFFFF) },
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)).apply {
                 topMargin = dp(3); bottomMargin = dp(3); marginStart = dp(10); marginEnd = dp(10)
@@ -640,39 +637,6 @@ class MainActivity : Activity() {
         row("Ayarlar", R.drawable.ic_settings) { safeStart(Intent(Settings.ACTION_SETTINGS)) }
 
 
-        pw.showAsDropDown(anchor, 0, dp(4), Gravity.END)
-    }
-
-    /** Küçük bilgi kartı: gemi ikonu, altında e-posta, altında Github (dokununca açılır). */
-    private fun showInfoCard(anchor: View) {
-        val box = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(dp(8), dp(10), dp(8), dp(6))
-            background = GradientDrawable().apply { setColor(0xFF2A2A2A.toInt()); cornerRadius = dp(14).toFloat() }
-        }
-        val pw = PopupWindow(box, ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, true)
-        pw.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
-        pw.isOutsideTouchable = true
-        pw.elevation = dp(8).toFloat()
-        val sel = TypedValue()
-        theme.resolveAttribute(android.R.attr.selectableItemBackground, sel, true)
-
-        box.addView(ImageView(this).apply { setImageDrawable(infoIcon(dp(44))) },
-            LinearLayout.LayoutParams(dp(44), dp(44)).apply { bottomMargin = dp(4) })
-        fun link(text: String, onClick: () -> Unit) {
-            box.addView(TextView(this).apply {
-                this.text = text
-                setTextColor(0xFF4FC3F7.toInt())
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-                gravity = Gravity.CENTER
-                setPadding(dp(10), 0, dp(10), 0)
-                if (sel.resourceId != 0) setBackgroundResource(sel.resourceId)
-                setOnClickListener { pw.dismiss(); onClick() }
-            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(38)))
-        }
-        link(INFO_EMAIL) { safeStart(Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:$INFO_EMAIL"))) }
-        link("github.com/idrisokys/") { safeStart(Intent(Intent.ACTION_VIEW, Uri.parse(INFO_GITHUB))) }
         pw.showAsDropDown(anchor, 0, dp(4), Gravity.END)
     }
 

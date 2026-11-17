@@ -118,7 +118,6 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
     var selected by remember { mutableStateOf(setOf<String>()) } // düzenleme modunda işaretlenen öğeler
     var moving by remember { mutableStateOf<List<Entry>>(emptyList()) }   // taşınacak öğeler
     var dialog by remember { mutableStateOf<String?>(null) }
-    var infoMenu by remember { mutableStateOf(false) }          // sağ üstteki bilgi (i) menüsü
     var renameText by remember { mutableStateOf("") }
     var txtDoc by remember { mutableStateOf<Pair<Entry, String>?>(null) }   // tam ekranda açık .txt (öğe, içerik)
     var linkText by remember { mutableStateOf("") }
@@ -257,6 +256,11 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
         scope.launch {
             val ok = withContext(Dispatchers.IO) { Store.addTextFile(ctx, current, text) }
             tick++
+            if (ok) {
+                val l = withContext(Dispatchers.IO) { Store.list(ctx, current) }
+                loaded = l
+                if (l.isNotEmpty()) listState.animateScrollToItem(0)
+            }
             toast(if (ok) L("Metin dosyası eklendi", "Text file added") else L("Eklenemedi", "Could not add"))
         }
     }
@@ -269,6 +273,12 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
         scope.launch {
             val ok = withContext(Dispatchers.IO) { Store.submit(ctx, current, text) }
             tick++
+            // Yeni kayıt en üstte eklenir: liste yenilenir ve en üste kaydırılır
+            if (ok) {
+                val l = withContext(Dispatchers.IO) { Store.list(ctx, current) }
+                loaded = l
+                if (l.isNotEmpty()) listState.animateScrollToItem(0)
+            }
             toast(if (ok) L("Eklendi", "Added") else L("Eklenemedi", "Could not add"))
         }
     }
@@ -429,30 +439,6 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
             actions = {
                 IconButton({ dialog = "folder" }) { Icon(Icons.Default.CreateNewFolder, L("Klasör", "Folder")) }
                 IconButton({ refreshAll() }) { Icon(Icons.Default.Refresh, L("Yenile", "Refresh")) }
-                // En sağdaki bilgi (i) ikonu: küçük menü açar (gemi resmi, e-posta, GitHub adresi)
-                Box {
-                    // Dokun: bilgi menüsü
-                    IconButton({ infoMenu = true }) { Icon(Icons.Default.Info, L("Bilgi", "Info")) }
-                    DropdownMenu(infoMenu, { infoMenu = false }) {
-                        Column(Modifier.padding(horizontal = 12.dp, vertical = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Image(
-                                painterResource(R.drawable.releases_icon), null,
-                                Modifier.size(36.dp).clip(CircleShape), contentScale = ContentScale.Crop)
-                            Spacer(Modifier.height(4.dp))
-                            SelectionContainer { Text("sislivadi@gmail.com", style = MaterialTheme.typography.bodySmall) }
-                            Spacer(Modifier.height(2.dp))
-                            Text(
-                                "https://github.com/idrisokys/", style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.primary,
-                                textDecoration = androidx.compose.ui.text.style.TextDecoration.Underline,
-                                modifier = Modifier.clickable {
-                                    infoMenu = false
-                                    try { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/idrisokys/"))) }
-                                    catch (e: Exception) { toast(L("Link açılamadı", "Could not open link")) }
-                                })
-                        }
-                    }
-                }
             })
     }) { pad ->
         if (searchQuery != null) SearchResults(pad, hits, { open(it) }) { path ->

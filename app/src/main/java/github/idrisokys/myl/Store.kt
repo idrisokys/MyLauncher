@@ -21,6 +21,8 @@ data class Entry(val name: String, val uri: Uri, val isDir: Boolean) {
     /** Listede gösterilen ad (uzantısız). */
     val title: String = if (!isDir && (name.endsWith(".url", true) || isTxt)) name.dropLast(4) else name
     val ext: String = if (isTxt) ".txt" else ".url"
+    /** Sabitlenmiş mi? (listenin başında durur; eşitlik karşılaştırmasına katılmaz) */
+    var pinned: Boolean = false
 }
 
 /** Arama sonucu: bulunan öğe, bulunduğu klasör zinciri ve gösterilecek özet. */
@@ -28,6 +30,7 @@ data class Hit(val entry: Entry, val path: List<Entry>, val detail: String, val 
 
 object Store {
     private const val ORDER = ".order.txt"
+    private const val PINNED = ".pinned.txt"   // sabitlenen öğelerin adları (yalnızca bu cihazda, eşitlenmez)
 
     /** Tüm veriler dahili depolamanın ana dizininde: <ana dizin>/Link */
     private const val DATA_DIR = "Link"
@@ -151,7 +154,37 @@ object Store {
         val ord = readOrder(all).distinct().mapNotNull { byName[it] }
         val seen = ord.mapTo(HashSet()) { it.name }
         val rest = files.filter { it.name !in seen }.sortedWith(compareBy({ !it.isDir }, { it.name.lowercase() }))
-        return ord + rest
+        val all2 = ord + rest
+        val pins = readPinned(all)
+        if (pins.isEmpty()) return all2
+        all2.forEach { it.pinned = it.name in pins }
+        // Sabitlenenler başta (kendi aralarında mevcut sıra korunur)
+        return all2.filter { it.pinned } + all2.filter { !it.pinned }
+    }
+
+    private fun readPinned(all: List<Entry>): Set<String> {
+        val f = all.firstOrNull { it.name == PINNED } ?: return emptySet()
+        return try { file(f.uri).readLines().filter { it.isNotBlank() }.toSet() } catch (e: Exception) { emptySet() }
+    }
+
+    private fun writePinned(dir: Uri, pins: Set<String>) {
+        val f = File(file(dir), PINNED)
+        try { if (pins.isEmpty()) f.delete() else f.writeText(pins.sorted().joinToString("\n")) } catch (e: Exception) { }
+    }
+
+    /** Öğeleri sabitler / sabitlemeyi kaldırır. */
+    fun setPinned(ctx: Context, dir: Uri, names: List<String>, pinned: Boolean) = synchronized(mutex) {
+        val pins = readPinned(children(dir)).toMutableSet()
+        if (pinned) pins.addAll(names) else pins.removeAll(names.toSet())
+        writePinned(dir, pins)
+    }
+
+    /** Ad değişince / öğe taşınınca / silinince eski ada ait sabitlemeyi yeni ada aktarır (new null ise kaldırır). */
+    private fun renamePin(dir: Uri, old: String, new: String?) {
+        val pins = readPinned(children(dir)).toMutableSet()
+        if (!pins.remove(old)) return
+        if (new != null) pins.add(new)
+        writePinned(dir, pins)
     }
 
     fun list(ctx: Context, dir: Uri): List<Entry> = synchronized(mutex) { ordered(children(dir)) }
@@ -273,7 +306,10 @@ object Store {
         try {
             val bytes = file(e.uri).readBytes()
             if (!write(target, e.title, bytes, 220, e.ext)) return false
+            val srcDir = Uri.fromFile(file(e.uri).parentFile ?: return false)
             file(e.uri).delete()
+            renamePin(srcDir, e.name, null)
+            true
         } catch (ex: Exception) { false }
     }
 
@@ -295,6 +331,7 @@ object Store {
                 src.deleteRecursively()
             }
             saveOrderIn(target, listOf(name) + ordered(all).map { it.name })
+            renamePin(from, e.name, null)
             true
         } catch (ex: Exception) { false }
     }
@@ -329,6 +366,7 @@ object Store {
             if (!file(e.uri).renameTo(dst)) return false
             if (isNote) dst.writeBytes(noteBytes(title.trim()))
             saveOrderIn(dir, order.map { if (it == e.name) newName else it })
+            renamePin(dir, e.name, newName)
             true
         } catch (ex: Exception) { false }
     }
@@ -338,7 +376,13 @@ object Store {
     }
 
     /** "Sil": öğeyi silmez, ana dizindeki gizli .onemsiz klasörüne taşır (klasörse içeriğiyle birlikte). */
-    fun trash(ctx: Context, uri: Uri): Boolean = synchronized(mutex) { moveToOnemsiz(file(uri)) }
+    fun trash(ctx: Context, uri: Uri): Boolean = synchronized(mutex) {
+        val f = file(uri)
+        val parent = f.parentFile
+        val ok = moveToOnemsiz(f)
+        if (ok && parent != null) renamePin(Uri.fromFile(parent), f.name, null)
+        ok
+    }
 
     /**
      * Düzenlenen .url kaydı ad sınırını ([ADD_MAX] / 220) aşınca çağrılır: kayıt, aynı yerde .txt dosyasına dönüşür
@@ -355,6 +399,7 @@ object Store {
             File(file(dir), name).writeText(text, Charsets.UTF_8)
             file(e.uri).delete()
             saveOrderIn(dir, order.map { if (it == e.name) name else it })
+            renamePin(dir, e.name, name)
             true
         } catch (ex: Exception) { false }
     }

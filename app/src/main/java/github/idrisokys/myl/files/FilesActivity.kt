@@ -297,7 +297,19 @@ class FilesActivity : Activity() {
         val base = list ?: (cur?.listFiles()?.toList() ?: emptyList())
         var l = if (showHidden) base else base.filter { !it.name.startsWith(".") }
         if (picking) l = l.filter { it.isDirectory }
-        return l.sortedByDescending { it.lastModified() }
+        val sorted = l.sortedByDescending { it.lastModified() }
+        // Sabitlenenler (üç nokta → Sabitle) listenin başında durur; kendi aralarında tarih sırası korunur
+        val pins = topPins()
+        return if (pins.isEmpty()) sorted else sorted.filter { it.path in pins } + sorted.filter { it.path !in pins }
+    }
+
+    /** Listede başa sabitlenen öğelerin yolları (ana ekrana sabitlemeden ayrıdır). */
+    private fun topPins(): Set<String> = HashSet(prefs.getStringSet("lpins", emptySet()) ?: emptySet())
+    private fun toggleTopPin(x: List<File>) {
+        val pins = topPins().toMutableSet()
+        if (x.all { it.path in pins }) pins.removeAll(x.map { it.path }.toSet()) else pins.addAll(x.map { it.path })
+        prefs.edit().putStringSet("lpins", pins).apply()
+        sel.clear(); editMode = false; refresh(true)
     }
 
     private fun iconView(f: File): View =
@@ -328,6 +340,7 @@ class FilesActivity : Activity() {
         }
         curLv = null; curAdapter = null
         val l = items()
+        val topPinSet = topPins()
         updateChrome()
         val lv = ListView(this).apply { divider = ColorDrawable(0xFF2E2E2E.toInt()); dividerHeight = dp(1); setBackgroundColor(bg) }
         curLv = lv
@@ -355,7 +368,7 @@ class FilesActivity : Activity() {
                 }
                 row.addView(iconView(f), dp(48), dp(48))
                 val c = LinearLayout(this@FilesActivity).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(12), 0, 0, 0) }
-                c.addView(tv(f.name, 19f, Color.WHITE).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END })
+                c.addView(tv((if (f.path in topPinSet) "\uD83D\uDCCC " else "") + f.name, 19f, Color.WHITE).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END })
                 val sub = if (f.isDirectory) "${f.listFiles()?.size ?: 0} öğe" else sz(f.length())
                 c.addView(tv("$sub • ${df.format(Date(f.lastModified()))}", 14f, 0xFF999999.toInt()))
                 row.addView(c, LinearLayout.LayoutParams(0, -2, 1f))
@@ -401,6 +414,8 @@ class FilesActivity : Activity() {
             if (t.exists()) { Notice.show(this, "Bu adda bir öğe zaten var", false); return@promptText }
             if (!f.renameTo(t)) { Notice.show(this, "Yeniden adlandırılamadı", false); return@promptText }
             try { MediaScannerConnection.scanFile(this, arrayOf(f.path, t.path), null, null) } catch (e: Exception) {}
+            val lp = topPins()
+            if (f.path in lp) prefs.edit().putStringSet("lpins", (lp - f.path + t.path)).apply()
             sel.clear()
             list = list?.map { if (it.path == f.path) t else it }
             refresh(true)
@@ -415,12 +430,14 @@ class FilesActivity : Activity() {
     private fun itemMenu(f: File, anchor: View) {
         val targets = if (f in sel && sel.size > 1) sel.toList() else listOf(f)
         val pm = PopupMenu(this, anchor)
+        pm.menu.add(0, 5, 0, if (targets.all { it.path in topPins() }) "Sabitlemeyi kaldır" else "Sabitle")
         pm.menu.add(0, 1, 0, "Taşı")
         pm.menu.add(0, 2, 1, "Paylaş")
         pm.menu.add(0, 3, 2, "Sil")
         pm.menu.add(0, 4, 3, "Yeni klasör ekle")
         pm.setOnMenuItemClickListener {
             when (it.itemId) {
+                5 -> toggleTopPin(targets)
                 1 -> moveItems(targets); 2 -> shareFiles(targets)
                 // Arama/özel listedeyken öğenin bulunduğu klasörde oluşturulur
                 4 -> newFolder(if (list != null) f.parentFile else null)

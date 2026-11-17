@@ -326,6 +326,18 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
         tick++
         toast(L("Yenilendi", "Refreshed"))
     }
+    // "Sabitle" / "Sabitlemeyi kaldır": hepsi sabitliyse kaldırır, değilse hepsini sabitler
+    fun togglePin(items: List<Entry>) {
+        if (items.isEmpty()) return
+        val pin = !items.all { it.pinned }
+        val names = items.map { it.name }
+        val dir = current
+        selected = emptySet()
+        scope.launch {
+            lock.withLock { withContext(Dispatchers.IO) { Store.setPinned(ctx, dir, names, pin) } }
+            tick++
+        }
+    }
     // "Sil": öğeler silinmez, ana dizindeki gizli .onemsiz klasörüne taşınır
     fun deleteNow(items: List<Entry>) {
         selected = emptySet()
@@ -469,7 +481,7 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
                             if (editMode) Spacer(Modifier.size(24.dp))   // düzenleme modunda kutucuk yok: yalnızca boşluk (seçim satıra dokunarak yapılır)
                             else Icon(if (e.isDir) Icons.Default.Folder else if (e.isTxt) Icons.Default.Description else Icons.Default.Link, null)
                         },
-                        headlineContent = { Text(e.title, maxLines = 4, overflow = TextOverflow.Ellipsis) },
+                        headlineContent = { Text((if (e.pinned) "\uD83D\uDCCC " else "") + e.title, maxLines = 4, overflow = TextOverflow.Ellipsis) },
                         trailingContent = {
                             // Üç nokta: tek dokunuş menü (Taşı / Paylaş / Sil), basılı tutunca düzenleme modu açılır/kapanır
                             Box {
@@ -483,6 +495,9 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
                                 DropdownMenu(menu, { menu = false }) {
                                     // Öğe birden çok seçilenin içindeyse işlem tüm seçilenlere uygulanır
                                     val targets = if (sel && selected.size > 1) list.filter { it.key in selected } else listOf(e)
+                                    DropdownMenuItem(
+                                        text = { Text(if (targets.all { it.pinned }) L("Sabitlemeyi kaldır", "Unpin") else L("Sabitle", "Pin")) },
+                                        onClick = { menu = false; togglePin(targets) })
                                     DropdownMenuItem(text = { Text(L("Taşı", "Move")) }, onClick = { menu = false; moving = targets; dialog = "move" })
                                     DropdownMenuItem(text = { Text(L("Paylaş", "Share")) }, onClick = { menu = false; shareEntries(targets) })
                                     DropdownMenuItem(text = { Text(L("Sil", "Delete")) }, onClick = { menu = false; deleteNow(targets) })

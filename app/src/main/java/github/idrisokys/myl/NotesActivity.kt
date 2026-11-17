@@ -33,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -120,7 +121,6 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
     var dialog by remember { mutableStateOf<String?>(null) }
     var infoMenu by remember { mutableStateOf(false) }          // sağ üstteki bilgi (i) menüsü
     var syncing by remember { mutableStateOf(false) }           // üstteki eşitle tuşu: devam eden eşitleme
-    var mirroring by remember { mutableStateOf(false) }         // yıldız tuşu: bu cihaz esas alınarak devam eden eşitleme
     var renameText by remember { mutableStateOf("") }
     var txtDoc by remember { mutableStateOf<Pair<Entry, String>?>(null) }   // tam ekranda açık .txt (öğe, içerik)
     var linkText by remember { mutableStateOf("") }
@@ -301,18 +301,18 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
     }
     // Eşitle tuşu: aynı ağdaki açık cihazlarla (Hızlı Paylaş) notları eşitler: eksikler eklenir, aynı dosyanın yeni olanı eskisinin üzerine yazılır
     // mirror = true (yıldız tuşu): bu cihaz esas alınır; diğer açık cihazlarda bizde olmayanlar silinir, farklılar bizimkiyle değiştirilir
-    fun syncNow(mirror: Boolean = false) {
+    fun syncNow(mode: Int = 0) {
         if (syncing) return
-        syncing = true; mirroring = mirror
-        toast(if (mirror) L("Bu cihaz esas alınıyor…", "Making this device the master…") else L("Eşitleniyor…", "Syncing…"))
+        syncing = true
+        toast(L("Eşitleniyor…", "Syncing…"))
         scope.launch {
             val r = lock.withLock {
                 withContext(Dispatchers.IO) {
-                    try { github.idrisokys.myl.qs.NoteSync.run(ctx, mirror) }
-                    catch (e: Exception) { github.idrisokys.myl.qs.NoteSync.Result(mirror = mirror, error = e.message ?: "?") }
+                    try { github.idrisokys.myl.qs.NoteSync.run(ctx, mode) }
+                    catch (e: Exception) { github.idrisokys.myl.qs.NoteSync.Result(mode = mode, error = e.message ?: "?") }
                 }
             }
-            syncing = false; mirroring = false
+            syncing = false
             tick++
             Notice.show(ctx, r.message(), true)
         }
@@ -406,16 +406,11 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
     Scaffold(bottomBar = {
         if (rn != null) Surface(tonalElevation = 3.dp) {
             Column(Modifier.fillMaxWidth().navigationBarsPadding().imePadding().padding(horizontal = 8.dp, vertical = 6.dp)) {
-                OutlinedTextField(
+                NativeEdit(
                     renameText, { renameText = it.take(editCap) },
-                    modifier = Modifier.fillMaxWidth().onPreviewKeyEvent { ev ->
-                        // Donanım klavyesi: Enter kaydeder, Shift+Enter yeni satır
-                        if (ev.key == Key.Enter && !ev.isShiftPressed) { if (ev.type == KeyEventType.KeyDown) saveRename(); true } else false
-                    },
-                    label = { Text(if (rn.isDir) L("Klasör adı", "Folder name") else L("Ad", "Name")) },
-                    singleLine = false, minLines = 1, maxLines = 4,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                    keyboardActions = KeyboardActions(onSend = { saveRename() }))
+                    modifier = Modifier.fillMaxWidth(),
+                    hint = if (rn.isDir) L("Klasör adı", "Folder name") else L("Ad", "Name"),
+                    minLines = 1, maxLines = 4, send = true, onSend = { saveRename() })
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     val over = renameText.length > maxChars
                     Text(if (over) "${renameText.length}/$maxChars → .txt" else "${renameText.length}/$maxChars", style = MaterialTheme.typography.labelSmall,
@@ -437,16 +432,11 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
             }
         } else Surface(tonalElevation = 3.dp) {
             Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 8.dp, vertical = 6.dp)) {
-                OutlinedTextField(
+                NativeEdit(
                     linkText, { linkText = it },
-                    modifier = Modifier.fillMaxWidth().onPreviewKeyEvent { ev ->
-                        // Donanım klavyesi: Enter gönderir, Shift+Enter yeni satır
-                        if (ev.key == Key.Enter && !ev.isShiftPressed) { if (ev.type == KeyEventType.KeyDown) submit(); true } else false
-                    },
-                    placeholder = { Text(L("Link veya metin yapıştır (Enter: kaydet)", "Paste a link or text (Enter: save)")) },
-                    singleLine = false, minLines = 2, maxLines = 8,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                    keyboardActions = KeyboardActions(onSend = { submit() }))
+                    modifier = Modifier.fillMaxWidth(),
+                    hint = L("Link veya metin yapıştır (Enter: kaydet)", "Paste a link or text (Enter: save)"),
+                    minLines = 2, maxLines = 8, send = true, onSend = { submit() })
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     val canAdd = linkText.isNotBlank()
                     Text("${linkText.length}/$addMax", style = MaterialTheme.typography.labelSmall, color = if (linkText.length > addMax) MaterialTheme.colorScheme.error else Color.Unspecified, modifier = Modifier.padding(start = 8.dp))
@@ -477,14 +467,9 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
             navigationIcon = { if (stack.isNotEmpty()) IconButton({ stack = stack.dropLast(1) }) { Icon(Icons.Default.ArrowBack, L("Geri", "Back")) } },
             actions = {
                 IconButton({ dialog = "folder" }) { Icon(Icons.Default.CreateNewFolder, L("Klasör", "Folder")) }
-                IconButton({ syncNow() }, enabled = !syncing) {
-                    if (syncing && !mirroring) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                IconButton({ dialog = "syncmode" }, enabled = !syncing) {
+                    if (syncing) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
                     else Icon(Icons.Default.Sync, L("Cihazlarla eşitle", "Sync with devices"))
-                }
-                // Yıldız: bu cihazdaki notlar esas alınır, diğer cihazlar bunun kopyası olur (onay sorulur)
-                IconButton({ dialog = "master" }, enabled = !syncing) {
-                    if (syncing && mirroring) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                    else Icon(Icons.Default.Star, L("Bu cihazı esas al", "Use this device as master"), tint = Color(0xFFFFC107))
                 }
                 IconButton({ refreshAll() }) { Icon(Icons.Default.Refresh, L("Yenile", "Refresh")) }
                 // En sağdaki bilgi (i) ikonu: küçük menü açar (gemi resmi, e-posta, GitHub adresi)
@@ -581,16 +566,20 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
         }
     }
 
-    if (dialog == "master") AlertDialog(
+    if (dialog == "syncmode") AlertDialog(
         onDismissRequest = { dialog = null },
-        icon = { Icon(Icons.Default.Star, null, tint = Color(0xFFFFC107)) },
-        title = { Text(L("Bu cihaz esas alınsın mı?", "Use this device as master?")) },
+        title = { Text(L("Nasıl eşitlensin?", "How to sync?")) },
         text = {
-            Text(L("Ağdaki diğer açık cihazlar bu cihazın aynısı olur: bu cihazda olmayan notlar/klasörler onlardan silinir (gizli .onemsiz klasörüne taşınır), farklı olanlar bu cihazdakiyle değiştirilir. Bu cihazdaki notlara dokunulmaz.",
-                "Other open devices on the network will become a copy of this one: notes/folders missing here are removed from them (moved to the hidden .onemsiz folder) and different ones are replaced with this device's versions. Notes on this device are not touched."))
+            Column {
+                @Composable fun opt(title: String, sub: String, mode: Int) = ListItem(
+                    modifier = Modifier.clickable { dialog = null; syncNow(mode) },
+                    headlineContent = { Text(title) }, supportingContent = { Text(sub) })
+                opt(L("Bu cihaza göre", "Based on this device"), L("Karşıdakinde fazla olanlar silinir, bununki karşıya yazılır", "Extras on the other device are deleted; this device's data is copied over"), 1)
+                opt(L("Karşıdaki cihaza göre", "Based on the other device"), L("Bu cihazda fazla olanlar silinir, karşıdakiyle aynı olur", "Extras here are deleted; becomes identical to the other device"), 2)
+                opt(L("İki cihaz aynı olsun", "Make both the same"), L("Eksikler iki yöne tamamlanır, yeni olan kazanır; silme yok", "Missing items are copied both ways, newer wins; nothing is deleted"), 0)
+            }
         },
-        confirmButton = { TextButton({ dialog = null; syncNow(mirror = true) }) { Text(L("Esas al", "Use as master")) } },
-        dismissButton = { TextButton({ dialog = null }) { Text(L("İptal", "Cancel")) } })
+        confirmButton = { TextButton({ dialog = null }) { Text(L("İptal", "Cancel")) } })
 
     if (dialog == "folder") {
         var title by remember { mutableStateOf("") }
@@ -752,13 +741,10 @@ fun TxtScreen(
                     // metin yukarı çıkar ve klavyenin üstünde rahatça düzenlenir.
                     val screenH = LocalConfiguration.current.screenHeightDp.dp
                     Column(Modifier.padding(pad).fillMaxSize().imePadding().verticalScroll(rememberScrollState())) {
-                        TextField(
-                            value, { value = it },
-                            modifier = Modifier.fillMaxWidth().heightIn(min = screenH * 0.4f).focusRequester(focus),
-                            colors = TextFieldDefaults.colors(
-                                focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent,
-                                focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent),
-                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default))
+                        NativeEdit(
+                            value.text, { value = TextFieldValue(it, TextRange(it.length)) },
+                            modifier = Modifier.fillMaxWidth(),
+                            minHeightDp = (screenH.value * 0.4f).toInt(), plain = true, requestFocus = true)
                         Spacer(Modifier.height(screenH * 0.5f))
                     }
                 } else {
@@ -851,4 +837,67 @@ fun SearchResults(pad: PaddingValues, hits: List<Hit>?, onOpen: (Entry) -> Unit,
             }
         }
     }
+}
+
+
+/**
+ * Sistemin kendi EditText'i. Compose TextField'ında metin seçim tutamaçları/araç çubuğu bu cihazda bir satır yukarıda çıkıyordu;
+ * EditText'in seçim arayüzünü Android'in kendisi çizdiği için doğru yerde (seçili metnin altında) görünür.
+ * [send]: Enter / klavyedeki Gönder → [onSend]; Shift+Enter yeni satır. [plain]: çerçevesiz (tam ekran düzenleyici).
+ */
+@Composable
+fun NativeEdit(
+    value: String, onChange: (String) -> Unit, modifier: Modifier = Modifier, hint: String = "",
+    minLines: Int = 1, maxLines: Int = Int.MAX_VALUE, send: Boolean = false, onSend: () -> Unit = {},
+    minHeightDp: Int = 0, plain: Boolean = false, requestFocus: Boolean = false
+) {
+    val cs = MaterialTheme.colorScheme
+    val textColor = cs.onSurface.toArgb(); val hintColor = cs.onSurfaceVariant.toArgb(); val outline = cs.outline.toArgb()
+    val sendNow = rememberUpdatedState(onSend)
+    val changed = rememberUpdatedState(onChange)
+    androidx.compose.ui.viewinterop.AndroidView(modifier = modifier, factory = { c ->
+        val d = c.resources.displayMetrics.density
+        android.widget.EditText(c).apply {
+            background = if (plain) null else android.graphics.drawable.GradientDrawable().apply {
+                setStroke((1 * d).toInt().coerceAtLeast(1), outline); cornerRadius = 4 * d
+            }
+            val h = (if (plain) 16 else 12) * d
+            setPadding((16 * d).toInt(), h.toInt(), (16 * d).toInt(), h.toInt())
+            setTextColor(textColor); setHintTextColor(hintColor); this.hint = hint
+            textSize = 16f
+            gravity = android.view.Gravity.TOP or android.view.Gravity.START
+            setMinLines(minLines); setMaxLines(maxLines)
+            if (minHeightDp > 0) minHeight = (minHeightDp * d).toInt()
+            if (send) {
+                // Çok satırlı görünür ama klavyede Enter yerine Gönder tuşu çıkar
+                setRawInputType(android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES)
+                imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_SEND
+                setOnEditorActionListener { _, a, _ ->
+                    if (a == android.view.inputmethod.EditorInfo.IME_ACTION_SEND) { sendNow.value(); true } else false
+                }
+                setOnKeyListener { _, code, ev ->
+                    if (code == android.view.KeyEvent.KEYCODE_ENTER && !ev.isShiftPressed) {
+                        if (ev.action == android.view.KeyEvent.ACTION_DOWN) sendNow.value(); true
+                    } else false
+                }
+            } else {
+                inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE or
+                    android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+            }
+            setText(value); setSelection(value.length)
+            addTextChangedListener(object : android.text.TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, st: Int, c: Int, a: Int) {}
+                override fun onTextChanged(s: CharSequence?, st: Int, b: Int, c: Int) {}
+                override fun afterTextChanged(s: android.text.Editable?) { changed.value(s?.toString() ?: "") }
+            })
+            if (requestFocus) post {
+                requestFocus()
+                (c.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager)
+                    .showSoftInput(this, 0)
+            }
+        }
+    }, update = { et ->
+        if (et.text.toString() != value) { et.setText(value); et.setSelection(value.length) }
+        if (et.hint?.toString() != hint) et.hint = hint
+    })
 }

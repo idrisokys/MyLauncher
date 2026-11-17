@@ -33,11 +33,15 @@ object NoteSync {
     class Item(val rel: String, val dir: Boolean, val size: Long, val mtime: Long)
 
     class Result(
-        var peers: Int = 0, var sent: Int = 0, var got: Int = 0, var deleted: Int = 0, val mirror: Boolean = false,
+        var peers: Int = 0, var sent: Int = 0, var got: Int = 0, var deleted: Int = 0, val mode: Int = 0,
         val errors: MutableList<String> = mutableListOf(), var error: String? = null
     ) {
         fun message(): String = when {
-            error == null && peers > 0 && mirror -> {
+            error == null && peers > 0 && mode == 2 -> {
+                val base = L("Karşıdaki cihaza göre eşitlendi: $got alındı, $deleted silindi", "Synced to the other device: $got received, $deleted deleted")
+                if (errors.isEmpty()) base else base + "\n" + errors.first()
+            }
+            error == null && peers > 0 && mode == 1 -> {
                 val base = L("Bu cihaz esas alındı: $peers cihaz, $sent gönderildi, $deleted silindi", "This device is now the master: $peers device(s), $sent sent, $deleted deleted")
                 if (errors.isEmpty()) base else base + "\n" + errors.first()
             }
@@ -287,6 +291,33 @@ object NoteSync {
         return sent to deleted
     }
 
+    /** Bu cihazı karşı cihazın aynısı yapar; (alınan, silinen) döndürür. Karşı cihazda yeni sürüm gerekmez. */
+    private fun pullMirror(p: Peer, errs: MutableList<String>): Pair<Int, Int> {
+        val remote = fetchManifest(p)
+        val loc = local()
+        var got = 0; var deleted = 0
+        val depth = { k: String -> k.count { c -> c == '/' } }
+        val stale = loc.keys.filter { k -> val r = remote[k]; r == null || r.dir != loc[k]!!.dir }
+        val gone = mutableListOf<String>()
+        for (k in stale.sortedWith(compareBy(depth, { it }))) {
+            if (gone.any { k.startsWith("$it/") }) continue
+            val l = loc[k]!!
+            try {
+                val f = resolve(k, dir = l.dir)
+                if (f != null && f.exists() && !github.idrisokys.myl.common.moveToOnemsiz(f)) error(k)
+                deleted++; if (l.dir) gone.add(k)
+            } catch (e: Exception) { errs.add("${p.name}: ${e.message ?: k}") }
+        }
+        for (k in remote.keys.sortedWith(compareBy(depth, { it }))) {
+            val r = remote[k]!!; val l = loc[k]?.takeIf { it.dir == r.dir && k !in gone }
+            try {
+                if (r.dir) { if (l == null) resolve(k, dir = true)?.mkdirs() }
+                else if (l == null || l.size != r.size || Math.abs(l.mtime - r.mtime) > TOL) { pull(p, r); got++ }
+            } catch (e: Exception) { errs.add("${p.name}: ${e.message ?: k}") }
+        }
+        return got to deleted
+    }
+
     /** Tek cihazla eşitler; (gönderilen, alınan) sayısını döndürür. Dosya bazlı hatalar [errs]'e eklenir, diğer dosyalar sürer. */
     private fun syncPeer(p: Peer, errs: MutableList<String>): Pair<Int, Int> {
         val remote = fetchManifest(p)
@@ -316,8 +347,9 @@ object NoteSync {
      * Ağdaki tüm açık cihazlarla eşitler. Arka plan iş parçacığında çağrılmalı (ağ + disk).
      * Hızlı Paylaş servisi çalışmıyorsa cihaz aramasını geçici olarak kendisi yapar.
      */
-    fun run(c: Context, mirror: Boolean = false): Result {
-        val res = Result(mirror = mirror)
+    /** mode: 0 = iki cihaz birleşir (aynı olur), 1 = bu cihaza göre, 2 = karşıdaki cihaza göre. */
+    fun run(c: Context, mode: Int = 0): Result {
+        val res = Result(mode = mode)
         if (!Store.hasAccess(c)) { res.error = L("depolama izni yok", "no storage permission"); return res }
         Identity.init(c)
         var disc: Discovery? = null
@@ -333,18 +365,18 @@ object NoteSync {
                 if (found < 0 && now - t0 >= 4000) break
                 Thread.sleep(150)
             }
-            for (p0 in Peers.list()) {
+            for (p0 in Peers.list().let { if (mode == 2) it.take(1) else it }) {   // "karşıdaki cihaz" tek olmalı: ilk bulunan
                 var p = p0
                 try {
-                    fun go(x: Peer) = if (mirror) mirrorPeer(x, res.errors) else syncPeer(x, res.errors)
+                    fun go(x: Peer) = when (mode) { 1 -> mirrorPeer(x, res.errors); 2 -> pullMirror(x, res.errors); else -> syncPeer(x, res.errors) }
                     val (a, b) = try { go(p) } catch (e: java.io.IOException) {
                         // Bayat adres/port olabilir: mDNS'ten yeniden çözüp bir kez daha dene.
                         val np = reresolve(c, p) ?: throw e
                         Peers.put(np.svc, np); p = np
                         go(p)
                     }
-                    res.peers++; res.sent += a
-                    if (mirror) res.deleted += b else res.got += b
+                    res.peers++
+                    when (mode) { 1 -> { res.sent += a; res.deleted += b }; 2 -> { res.got += a; res.deleted += b }; else -> { res.sent += a; res.got += b } }
                 } catch (e: Exception) {
                     Peers.del(p0.svc)
                     res.errors.add("${p0.name}: ${e.message ?: L("bağlantı hatası", "connection error")}")

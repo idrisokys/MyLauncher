@@ -848,53 +848,19 @@ fun QuickShareDialog(ctx: android.content.Context, files: List<java.io.File>, on
     var status by remember { mutableStateOf<String?>(null) }
     var sending by remember { mutableStateOf(false) }
     var failed by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
-    DisposableEffect(Unit) {
-        var disc: github.idrisokys.myl.qs.Discovery? = null
-        val job = scope.launch(Dispatchers.IO) {
-            try {
-                github.idrisokys.myl.qs.Identity.init(ctx)
-                github.idrisokys.myl.qs.Peers.clear()
-                disc = github.idrisokys.myl.qs.Discovery(ctx).also { it.browse() }
-            } catch (e: Exception) { }
-            val t0 = android.os.SystemClock.uptimeMillis(); var found = -1L
-            while (isActive) {
-                val now = android.os.SystemClock.uptimeMillis()
-                if (found < 0 && github.idrisokys.myl.qs.Peers.list().isNotEmpty()) found = now
-                if (found >= 0 && now - found >= 1000) break
-                if (found < 0 && now - t0 >= 3500) break
-                delay(150)
-            }
-            // Bayat kayıtları ele: her cihaza kısa bir bağlantı denemesi
-            val alive = github.idrisokys.myl.qs.Peers.list().filter { p ->
-                try { java.net.Socket().use { it.connect(java.net.InetSocketAddress(p.host, p.port), 1500) }; true } catch (e: Exception) { false }
-            }
-            try { disc?.stop() } catch (e: Exception) { }
-            peers = alive
-        }
-        onDispose {
-            job.cancel()
-            try { disc?.stop() } catch (e: Exception) { }
-            github.idrisokys.myl.qs.ReceiverService.sendListener = null
-        }
-    }
-    fun send(p: github.idrisokys.myl.qs.Peer) {
-        if (sending) return
-        sending = true; failed = false
-        status = L("Gönderiliyor…", "Sending…")
-        val h = android.os.Handler(android.os.Looper.getMainLooper())
-        github.idrisokys.myl.qs.ReceiverService.sendListener = { st, msg ->
-            h.post {
+    val session = remember {
+        github.idrisokys.myl.qs.QuickShareSession(ctx, files,
+            onPeers = { peers = it },
+            onStatus = { st, msg ->
+                status = msg
                 when (st) {
-                    0 -> status = msg
-                    1 -> { status = "✓ $msg"; sending = false; h.postDelayed({ onDismiss() }, 1500) }
-                    else -> { status = msg; failed = true; sending = false }
+                    0 -> { sending = true; failed = false }
+                    1 -> { sending = false; failed = false; android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ onDismiss() }, 1500) }
+                    else -> { sending = false; failed = true }
                 }
-            }
-        }
-        try { github.idrisokys.myl.qs.Sender.submit(ctx, files.map { Uri.fromFile(it) }, p.id) }
-        catch (e: Exception) { status = L("Gönderilemedi", "Could not send"); failed = true; sending = false }
+            })
     }
+    DisposableEffect(Unit) { session.start(); onDispose { session.stop() } }
     AlertDialog(
         onDismissRequest = { if (!sending) onDismiss() },
         title = { Text(L("Hızlı Paylaş", "Quick Share") + if (files.size > 1) " (${files.size})" else "") },
@@ -909,7 +875,7 @@ fun QuickShareDialog(ctx: android.content.Context, files: List<java.io.File>, on
                     ps.isEmpty() -> Text(L("Açık cihaz bulunamadı. Karşı cihazda Hızlı Paylaş açık olmalı.", "No open device found. Quick Share must be on on the other device."))
                     else -> ps.forEach { p ->
                         ListItem(
-                            modifier = Modifier.clickable(enabled = !sending) { send(p) },
+                            modifier = Modifier.clickable(enabled = !sending) { session.send(p) },
                             leadingContent = { Box(Modifier.size(8.dp).clip(CircleShape).background(Color(0xFF66BB6A))) },
                             headlineContent = { Text(p.name, maxLines = 1, overflow = TextOverflow.Ellipsis) })
                     }

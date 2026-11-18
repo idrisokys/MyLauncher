@@ -104,6 +104,15 @@ object Store {
         } catch (e: Exception) { }
     }
 
+    /** Dosya yöneticisinde açmak için: Uri'yi harici depolama belge Uri'sine çevirir. */
+    fun documentUri(dir: Uri): Uri? {
+        val base = Environment.getExternalStorageDirectory().absolutePath
+        val p = dir.path ?: return null
+        if (!p.startsWith(base)) return null
+        val rel = p.removePrefix(base).trim('/')
+        return android.provider.DocumentsContract.buildDocumentUri("com.android.externalstorage.documents", "primary:$rel")
+    }
+
     private val WS = Regex("\\s+")
     private val CTRL = Regex("[\\r\\n\\t]+")
     private val SEPS = Regex("\\s*[:|/\\\\]\\s*")
@@ -437,21 +446,15 @@ object Store {
         return sb.toString()
     }
 
-    /** Tüm klasörlerde; klasör adı, başlık, link adresi ve not metninde arar. Yazılan her kelime bulunmalıdır. Dosyalar paralel okunur. */
+    /** Tüm klasörlerde; başlık, link adresi ve not metninde arar. Yazılan her kelime bulunmalıdır. Dosyalar paralel okunur. */
     fun search(ctx: Context, root: Uri, query: String, alive: () -> Boolean = { true }): List<Hit> {
         val terms = fold(query).split(WS).filter { it.isNotEmpty() }
         if (terms.isEmpty()) return emptyList()
         val files = ArrayList<Pair<Entry, List<Entry>>>()
-        val folderHits = ArrayList<Hit>()
         fun walk(dir: Uri, path: List<Entry>) {
             for (e in list(ctx, dir)) {
                 if (!alive()) return
-                if (e.isDir) {
-                    // Klasör adı da aranır: yazılan her kelime klasör adında geçmeli
-                    val fn = fold(e.title)
-                    if (terms.all { fn.contains(it) }) folderHits.add(Hit(e, path, "", false, true))
-                    walk(e.uri, path + e)
-                } else files.add(e to path)
+                if (e.isDir) walk(e.uri, path + e) else files.add(e to path)
             }
         }
         walk(root, emptyList())
@@ -498,6 +501,6 @@ object Store {
             // Kullanıcı aramayı değiştirdiyse bekleyen işleri mümkün olduğunca erken durdur.
             pending.forEach { it.cancel(true) }
         }
-        return (folderHits + out).sortedBy { !it.titleMatch }   // başlıkta (klasör adı dahil) geçenler önce
+        return out.sortedBy { !it.titleMatch }   // başlıkta geçenler önce
     }
 }

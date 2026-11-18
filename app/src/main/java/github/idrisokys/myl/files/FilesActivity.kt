@@ -2,12 +2,15 @@ package github.idrisokys.myl.files
 
 import github.idrisokys.myl.common.*
 
+import android.Manifest
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.Intent
 import android.view.DragEvent
+import android.content.pm.ApplicationInfo
+import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
@@ -16,18 +19,22 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.os.StatFs
 import android.provider.OpenableColumns
 import android.provider.Settings
 import android.text.TextUtils
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.media.MediaScannerConnection
 import android.webkit.MimeTypeMap
 import android.widget.*
 import android.graphics.drawable.Drawable
 import java.io.*
+import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
+import java.util.zip.ZipOutputStream
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -46,6 +53,9 @@ class FilesActivity : Activity() {
     private val root: File = Environment.getExternalStorageDirectory()
     private val prefs by lazy { getSharedPreferences("files", 0) }
     private val IMG = setOf("jpg", "jpeg", "png", "gif", "webp", "bmp", "heic", "svg")
+    private val VID = setOf("mp4", "mkv", "avi", "mov", "webm", "3gp", "m4v")
+    private val AUD = setOf("mp3", "m4a", "wav", "flac", "ogg", "aac", "opus")
+    private val DOC = setOf("pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "odt", "rtf", "csv", "epub")
     private val TXT = setOf("txt", "md", "log", "json", "xml", "ini", "conf", "cfg", "yml", "yaml", "properties", "js", "css", "kt", "kts", "java", "py", "sh", "gradle", "srt", "tex")
     private val df = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault())
 
@@ -281,6 +291,7 @@ class FilesActivity : Activity() {
     private fun setSlot(n: Int, f: File) { prefs.edit().putString("slot$n", f.path).apply(); slotsChanged() }
 
     private fun browse(d: File) { cur = d; list = null; sel.clear(); editMode = false; refresh() }
+    private fun openList(t: String, l: List<File>) { list = l; listTitle = t; sel.clear(); editMode = false; refresh() }
 
     private fun items(): List<File> {
         val base = list ?: (cur?.listFiles()?.toList() ?: emptyList())
@@ -357,7 +368,7 @@ class FilesActivity : Activity() {
                 }
                 row.addView(iconView(f), dp(48), dp(48))
                 val c = LinearLayout(this@FilesActivity).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(12), 0, 0, 0) }
-                c.addView(tv(f.name, 19f, Color.WHITE).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END })
+                c.addView(tv((if (f.path in topPinSet) "\uD83D\uDCCC " else "") + f.name, 19f, Color.WHITE).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END })
                 val sub = if (f.isDirectory) "${f.listFiles()?.size ?: 0} öğe" else sz(f.length())
                 c.addView(tv("$sub • ${df.format(Date(f.lastModified()))}", 14f, 0xFF999999.toInt()))
                 row.addView(c, LinearLayout.LayoutParams(0, -2, 1f))
@@ -369,13 +380,6 @@ class FilesActivity : Activity() {
                         setOnClickListener { itemMenu(f, it) }
                         setOnLongClickListener { toggleEditMode(); true }
                     }, LinearLayout.LayoutParams(dp(48), dp(48)))
-                }
-                // Sabitlenmiş öğe: üç noktanın sağında minik yuvarlak
-                if (f.path in topPinSet) {
-                    val dot = View(this@FilesActivity).apply {
-                        background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(0xFF8AB4F8.toInt()) }
-                    }
-                    row.addView(dot, LinearLayout.LayoutParams(dp(8), dp(8)).apply { marginStart = dp(2); marginEnd = dp(2) })
                 }
                 return row
             }
@@ -496,6 +500,37 @@ class FilesActivity : Activity() {
                 if (t.mkdirs()) refresh(true) else Notice.show(this, "Klasör oluşturulamadı", false)
             }
         }
+    }
+
+    private fun zipSelected() {
+        val items = sel.toList(); if (items.isEmpty()) return
+        val dir = (if (list == null) cur else null) ?: items.first().parentFile ?: return
+        val base = if (items.size == 1) (if (items[0].isDirectory) items[0].name else items[0].nameWithoutExtension) else "Arsiv"
+        val out = uniqueFile(dir, "$base.zip"); sel.clear()
+        Notice.show(this, "Sıkıştırılıyor…", false)
+        Thread {
+            var ok = true
+            try {
+                ZipOutputStream(BufferedOutputStream(FileOutputStream(out))).use { z ->
+                    fun add(f: File, path: String) {
+                        if (f.absoluteFile == out.absoluteFile) return
+                        if (f.isDirectory) {
+                            val kids = f.listFiles() ?: emptyArray()
+                            if (kids.isEmpty()) { z.putNextEntry(ZipEntry("$path/")); z.closeEntry() }
+                            kids.forEach { add(it, "$path/${it.name}") }
+                        } else {
+                            try { f.inputStream().use { i -> z.putNextEntry(ZipEntry(path)); i.copyTo(z); z.closeEntry() } } catch (e: IOException) {}
+                        }
+                    }
+                    items.forEach { add(it, it.name) }
+                }
+            } catch (e: Exception) { ok = false; out.delete() }
+            runOnUiThread {
+                Notice.show(this, if (ok) "Oluşturuldu: ${out.name}" else "Sıkıştırma başarısız", true)
+                if (list != null) list = list!! + (if (ok) listOf(out) else emptyList())
+                refresh()
+            }
+        }.start()
     }
 
     private fun unzip(z: File) {

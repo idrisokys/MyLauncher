@@ -2,10 +2,14 @@ package github.idrisokys.myl.gallery
 
 import github.idrisokys.myl.common.*
 
+import android.Manifest
 import android.app.Activity
+import android.app.AlertDialog
 import android.app.Dialog
+import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Color
@@ -19,10 +23,12 @@ import android.media.MediaMetadataRetriever
 import android.media.MediaPlayer
 import android.media.MediaScannerConnection
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Environment
 import android.os.Handler
 import android.os.Looper
+import android.provider.Settings
 import android.text.TextUtils
 import android.util.LruCache
 import android.view.Gravity

@@ -110,6 +110,7 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
     var selected by remember { mutableStateOf(setOf<String>()) } // düzenleme modunda işaretlenen öğeler
     var moving by remember { mutableStateOf<List<Entry>>(emptyList()) }   // taşınacak öğeler
     var dialog by remember { mutableStateOf<String?>(null) }
+    var shareFiles by remember { mutableStateOf<List<java.io.File>?>(null) }   // Hızlı Paylaş ile gönderilecek dosyalar
     var renameText by remember { mutableStateOf("") }
     var txtDoc by remember { mutableStateOf<Pair<Entry, String>?>(null) }   // tam ekranda açık .txt (öğe, içerik)
     var linkText by remember { mutableStateOf("") }
@@ -324,20 +325,12 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
             toast(if (n == items.size) L(".onemsiz klasörüne taşındı ($n)", "Moved to .onemsiz ($n)") else L("$n/${items.size} öğe .onemsiz'e taşınabildi", "$n/${items.size} items moved to .onemsiz"))
         }
     }
-    // "Paylaş": notlar metin olarak paylaşılır (.txt: içerik, link: adres, not: metin); klasörler paylaşılamaz
+    // "Paylaş": seçili notların kaynak dosyaları (.txt / .url) Hızlı Paylaş ile paylaşıma açık cihazlara gönderilir; klasörler gönderilemez
     fun shareEntries(items: List<Entry>) {
-        scope.launch {
-            val texts = withContext(Dispatchers.IO) {
-                items.filter { !it.isDir }.mapNotNull { e ->
-                    if (e.isTxt) Store.readPlain(ctx, e.uri)
-                    else { val (u, t) = Store.readLink(ctx, e.uri); u ?: t ?: e.title }
-                }
-            }
-            if (texts.isEmpty()) { toast(L("Klasörler paylaşılamaz", "Folders cannot be shared")); return@launch }
-            selected = emptySet(); editMode = false
-            val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, texts.joinToString("\n\n"))
-            try { ctx.startActivity(Intent.createChooser(send, L("Paylaş", "Share"))) } catch (ex: Exception) { toast(L("Paylaşılamadı", "Could not share")) }
-        }
+        val files = items.filter { !it.isDir }.map { java.io.File(it.uri.path ?: "") }.filter { it.isFile }
+        if (files.isEmpty()) { toast(L("Klasörler paylaşılamaz", "Folders cannot be shared")); return }
+        selected = emptySet()
+        shareFiles = files
     }
     fun saveRename() {
         val r = rn ?: return
@@ -375,6 +368,7 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
                     val over = renameText.length > maxChars
                     Text(if (over) "${renameText.length}/$maxChars → .txt" else "${renameText.length}/$maxChars", style = MaterialTheme.typography.labelSmall,
                         color = if (over) MaterialTheme.colorScheme.error else Color.Unspecified, modifier = Modifier.padding(start = 8.dp))
+                    EditModeButton(editMode) { editMode = !editMode; selected = emptySet() }
                     Spacer(Modifier.weight(1f))
                     IconButton({ clipboard.getText()?.text?.let { renameText = it.take(editCap) } }) { Icon(Icons.Default.ContentPaste, L("Yapıştır", "Paste")) }
                     IconButton({ saveRename() }, enabled = renameText.isNotBlank()) {
@@ -387,6 +381,7 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
         } else if (editMode && selected.size > 1) Surface(tonalElevation = 3.dp) {
             Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(L("${selected.size} seçili", "${selected.size} selected"), style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(start = 8.dp))
+                EditModeButton(editMode) { editMode = false; selected = emptySet() }
                 Spacer(Modifier.weight(1f))
                 MoveButtons(canUp, canDown) { moveSelected(it) }
             }
@@ -399,6 +394,7 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
                     minLines = 2, maxLines = 8, send = true, onSend = { submit() })
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text("${linkText.length}/$addMax", style = MaterialTheme.typography.labelSmall, color = if (linkText.length > addMax) MaterialTheme.colorScheme.error else Color.Unspecified, modifier = Modifier.padding(start = 8.dp))
+                    EditModeButton(editMode) { editMode = !editMode; selected = emptySet() }
                     Spacer(Modifier.weight(1f))
                     IconButton({ startSearch() }, enabled = linkText.isNotBlank()) { Icon(Icons.Default.Search, L("Ara", "Search")) }
                     IconButton({ linkText = "" }, enabled = linkText.isNotEmpty()) { Icon(Icons.Default.Clear, L("Temizle", "Clear")) }
@@ -421,6 +417,13 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
             navigationIcon = { if (stack.isNotEmpty()) IconButton({ stack = stack.dropLast(1) }) { Icon(Icons.Default.ArrowBack, L("Geri", "Back")) } },
             actions = {
                 IconButton({ dialog = "folder" }) { Icon(Icons.Default.CreateNewFolder, L("Klasör", "Folder")) }
+                // U: içinde bulunulan klasör linklerin (URL) varsayılan kayıt yeri olur
+                IconButton({
+                    Store.setPlaceU(ctx, current)
+                    toast(L("Veri yeri U: ", "Data place U: ") + placeName(current))
+                }) { Text("U", style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) }
+                // D: diğer kayıtların (kısa metin ve .txt) kayıt klasörü listeden seçilir
+                IconButton({ dialog = "placeD" }) { Text("D", style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) }
                 IconButton({ refreshAll() }) { Icon(Icons.Default.Refresh, L("Yenile", "Refresh")) }
             })
     }) { pad ->
@@ -454,34 +457,23 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
                         },
                         headlineContent = { Text(e.title, maxLines = 4, overflow = TextOverflow.Ellipsis) },
                         trailingContent = {
-                            // Üç nokta: tek dokunuş menü (Taşı / Paylaş / Sil), basılı tutunca düzenleme modu açılır/kapanır
+                            // Üç nokta: tek dokunuş menü (Sabitle / Taşı / Paylaş / Sil)
                             Row(verticalAlignment = Alignment.CenterVertically) {
                             Box {
                                 var menu by remember { mutableStateOf(false) }
                                 Box(
-                                    Modifier.size(40.dp).clip(CircleShape).combinedClickable(
-                                        onClick = { menu = true },
-                                        onLongClick = { editMode = !editMode; selected = emptySet() }),
+                                    Modifier.size(40.dp).clip(CircleShape).clickable { menu = true },
                                     Alignment.Center
                                 ) { Icon(Icons.Default.MoreVert, L("Menü", "Menu"), tint = if (e.pinned) PinnedRed else LocalContentColor.current) }
                                 DropdownMenu(menu, { menu = false }) {
                                     // Öğe birden çok seçilenin içindeyse işlem tüm seçilenlere uygulanır
                                     val targets = if (sel && selected.size > 1) list.filter { it.key in selected } else listOf(e)
                                     DropdownMenuItem(
-                                        text = { Text(if (targets.all { it.pinned }) L("Sabitlemeyi kaldır", "Unpin") else L("Sabitle", "Pin")) },
+                                        text = { Text(if (targets.all { it.pinned }) L("Sabiti kaldır", "Unpin") else L("Sabitle", "Pin")) },
                                         onClick = { menu = false; togglePin(targets) })
                                     DropdownMenuItem(text = { Text(L("Taşı", "Move")) }, onClick = { menu = false; moving = targets; dialog = "move" })
                                     DropdownMenuItem(text = { Text(L("Paylaş", "Share")) }, onClick = { menu = false; shareEntries(targets) })
                                     DropdownMenuItem(text = { Text(L("Sil", "Delete")) }, onClick = { menu = false; deleteNow(targets) })
-                                    // Veri yeri U: seçili klasör (satır klasörse o, değilse içinde bulunulan klasör) linklerin varsayılan kayıt yeri olur
-                                    DropdownMenuItem(text = { Text(L("Veri yeri U", "Data place U")) }, onClick = {
-                                        menu = false
-                                        val dir = e.takeIf { it.isDir }?.uri ?: current
-                                        Store.setPlaceU(ctx, dir)
-                                        toast(L("Veri yeri U: ", "Data place U: ") + placeName(dir))
-                                    })
-                                    // Veri yeri D: diğer kayıtların (kısa metin .url ve .txt) hangi klasöre ekleneceği listeden seçilir
-                                    DropdownMenuItem(text = { Text(L("Veri yeri D", "Data place D")) }, onClick = { menu = false; dialog = "placeD" })
                                 }
                             }
                             }
@@ -526,6 +518,8 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
             }
         }
     }
+
+    shareFiles?.let { fs -> QuickShareDialog(ctx, fs) { shareFiles = null } }
 
     if (dialog == "placeD") {
         MoveDialog(ctx, rootUri, current, emptySet(), { dialog = null },
@@ -834,4 +828,104 @@ fun NativeEdit(
         if (et.text.toString() != value) { et.setText(value); et.setSelection(value.length) }
         if (et.hint?.toString() != hint) et.hint = hint
     })
+}
+
+
+/** Düzenleme modu düğmesi: iç içe iki halka. Mod açıkken vurgu rengiyle çizilir. */
+@Composable
+fun EditModeButton(active: Boolean, onClick: () -> Unit) {
+    val c = if (active) MaterialTheme.colorScheme.primary else LocalContentColor.current
+    IconButton(onClick) {
+        androidx.compose.foundation.Canvas(Modifier.size(24.dp)) {
+            val w = 2.dp.toPx()
+            drawCircle(c, radius = size.minDimension / 2f - w / 2f, style = androidx.compose.ui.graphics.drawscope.Stroke(w))
+            drawCircle(c, radius = size.minDimension / 4f, style = androidx.compose.ui.graphics.drawscope.Stroke(w))
+        }
+    }
+}
+
+/**
+ * Hızlı Paylaş ile gönderim: ağ bir kez taranır, açık olduğu doğrulanan cihazlar listelenir; cihaza dokununca
+ * [files] (kaynak .txt / .url dosyaları) o cihaza gönderilir. Gönderim durumu aynı pencerede gösterilir.
+ */
+@Composable
+fun QuickShareDialog(ctx: android.content.Context, files: List<java.io.File>, onDismiss: () -> Unit) {
+    var peers by remember { mutableStateOf<List<github.idrisokys.myl.qs.Peer>?>(null) }   // null = taranıyor
+    var status by remember { mutableStateOf<String?>(null) }
+    var sending by remember { mutableStateOf(false) }
+    var failed by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    DisposableEffect(Unit) {
+        var disc: github.idrisokys.myl.qs.Discovery? = null
+        val job = scope.launch(Dispatchers.IO) {
+            try {
+                github.idrisokys.myl.qs.Identity.init(ctx)
+                github.idrisokys.myl.qs.Peers.clear()
+                disc = github.idrisokys.myl.qs.Discovery(ctx).also { it.browse() }
+            } catch (e: Exception) { }
+            val t0 = android.os.SystemClock.uptimeMillis(); var found = -1L
+            while (isActive) {
+                val now = android.os.SystemClock.uptimeMillis()
+                if (found < 0 && github.idrisokys.myl.qs.Peers.list().isNotEmpty()) found = now
+                if (found >= 0 && now - found >= 1000) break
+                if (found < 0 && now - t0 >= 3500) break
+                delay(150)
+            }
+            // Bayat kayıtları ele: her cihaza kısa bir bağlantı denemesi
+            val alive = github.idrisokys.myl.qs.Peers.list().filter { p ->
+                try { java.net.Socket().use { it.connect(java.net.InetSocketAddress(p.host, p.port), 1500) }; true } catch (e: Exception) { false }
+            }
+            try { disc?.stop() } catch (e: Exception) { }
+            peers = alive
+        }
+        onDispose {
+            job.cancel()
+            try { disc?.stop() } catch (e: Exception) { }
+            github.idrisokys.myl.qs.ReceiverService.sendListener = null
+        }
+    }
+    fun send(p: github.idrisokys.myl.qs.Peer) {
+        if (sending) return
+        sending = true; failed = false
+        status = L("Gönderiliyor…", "Sending…")
+        val h = android.os.Handler(android.os.Looper.getMainLooper())
+        github.idrisokys.myl.qs.ReceiverService.sendListener = { st, msg ->
+            h.post {
+                when (st) {
+                    0 -> status = msg
+                    1 -> { status = "✓ $msg"; sending = false; h.postDelayed({ onDismiss() }, 1500) }
+                    else -> { status = msg; failed = true; sending = false }
+                }
+            }
+        }
+        try { github.idrisokys.myl.qs.Sender.submit(ctx, files.map { Uri.fromFile(it) }, p.id) }
+        catch (e: Exception) { status = L("Gönderilemedi", "Could not send"); failed = true; sending = false }
+    }
+    AlertDialog(
+        onDismissRequest = { if (!sending) onDismiss() },
+        title = { Text(L("Hızlı Paylaş", "Quick Share") + if (files.size > 1) " (${files.size})" else "") },
+        text = {
+            Column {
+                val ps = peers
+                when {
+                    ps == null -> Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                        Spacer(Modifier.width(12.dp)); Text(L("Cihazlar aranıyor…", "Searching for devices…"))
+                    }
+                    ps.isEmpty() -> Text(L("Açık cihaz bulunamadı. Karşı cihazda Hızlı Paylaş açık olmalı.", "No open device found. Quick Share must be on on the other device."))
+                    else -> ps.forEach { p ->
+                        ListItem(
+                            modifier = Modifier.clickable(enabled = !sending) { send(p) },
+                            leadingContent = { Box(Modifier.size(8.dp).clip(CircleShape).background(Color(0xFF66BB6A))) },
+                            headlineContent = { Text(p.name, maxLines = 1, overflow = TextOverflow.Ellipsis) })
+                    }
+                }
+                status?.let {
+                    Spacer(Modifier.height(8.dp))
+                    Text(it, color = if (failed) MaterialTheme.colorScheme.error else Color.Unspecified, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton({ onDismiss() }, enabled = !sending) { Text(L("Kapat", "Close")) } })
 }

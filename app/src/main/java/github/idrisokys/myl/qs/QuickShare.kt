@@ -491,7 +491,8 @@ object Sender {
         val errOpen = L("Dosya açılamadı", "Could not open file")
         val cr = c.contentResolver
         var name = "file"
-        cr.query(u, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use {
+        if (u.scheme == "file") u.lastPathSegment?.let { name = it }
+        else cr.query(u, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use {
             if (it.moveToFirst()) {
                 val i = it.getColumnIndex(OpenableColumns.DISPLAY_NAME)
                 if (i >= 0) it.getString(i)?.let { n -> name = n }

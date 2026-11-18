@@ -100,7 +100,7 @@
             android:excludeFromRecents="true"
             android:theme="@android:style/Theme.Black.NoTitleBar" />
         <!-- Dosyalarım: dosya yöneticisi bölümü. Notlarım gibi kendi görevinde çalışır; ana ekranda uygulama olarak görünmez (MyL menüsündeki kısayoldan açılır).
-             Paylaş menüsünde de görünür: gelen dosyaları seçilen klasöre kaydeder. -->
+             Paylaş menüsünde artık görünmez. -->
         <activity
             android:name=".files.FilesActivity"
             android:exported="true"
@@ -108,16 +108,6 @@
             android:theme="@android:style/Theme.DeviceDefault.NoActionBar"
             android:launchMode="singleTask"
             android:taskAffinity="github.idrisokys.myl.files">
-            <intent-filter>
-                <action android:name="android.intent.action.SEND" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:mimeType="*/*" />
-            </intent-filter>
-            <intent-filter>
-                <action android:name="android.intent.action.SEND_MULTIPLE" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:mimeType="*/*" />
-            </intent-filter>
         </activity>
         <!-- Uygulamalar: yüklü uygulamalar listesi. Kendi görevinde çalışır; ana ekranda uygulama olarak görünmez (MyL menüsündeki kısayoldan açılır). -->
         <activity
@@ -162,25 +152,15 @@
             android:grantUriPermissions="true" />
 
         <!-- ===== Hızlı Paylaş (eski QuickShare) — arayüzsüz: ana ekrandaki düğme + Paylaş menüsü ===== -->
-        <!-- Paylaş menüsünde "Hızlı Paylaş": dosyaları aynı ağdaki açık tüm cihazlara gönderir -->
+        <!-- Paylaş menüsünden kaldırıldı (intent-filter yok); Hızlı Paylaş yalnızca ana ekrandaki düğmeyle kullanılır -->
         <activity
             android:name=".qs.QsShareActivity"
-            android:exported="true"
+            android:exported="false"
             android:label="Hızlı Paylaş"
             android:icon="@mipmap/ic_qs"
             android:excludeFromRecents="true"
             android:taskAffinity=""
             android:theme="@style/QsDialog">
-            <intent-filter>
-                <action android:name="android.intent.action.SEND" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:mimeType="*/*" />
-            </intent-filter>
-            <intent-filter>
-                <action android:name="android.intent.action.SEND_MULTIPLE" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:mimeType="*/*" />
-            </intent-filter>
         </activity>
         <!-- Hızlı Paylaş düğmesine ilk dokunuşta izin eksikse açılan arayüzsüz izin etkinliği -->
         <activity

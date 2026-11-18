@@ -422,7 +422,7 @@ class FilesActivity : Activity() {
     private fun itemMenu(f: File, anchor: View) {
         val targets = if (f in sel && sel.size > 1) sel.toList() else listOf(f)
         val pm = PopupMenu(this, anchor)
-        pm.menu.add(0, 5, 0, if (targets.all { it.path in topPins() }) "Sabitlemeyi kaldır" else "Sabitle")
+        pm.menu.add(0, 5, 0, if (targets.all { it.path in topPins() }) "Sabiti kaldır" else "Sabitle")
         pm.menu.add(0, 1, 0, "Taşı")
         pm.menu.add(0, 2, 1, "Paylaş")
         pm.menu.add(0, 3, 2, "Sil")

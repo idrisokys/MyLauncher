@@ -569,12 +569,8 @@ class FilesActivity : Activity() {
         quickShareDialog(files)
     }
 
-    /**
-     * Hızlı Paylaş ile gönderim (Notlarım'daki QuickShareDialog'un birebir karşılığı): ağ bir kez taranır,
-     * açık olduğu doğrulanan cihazlar listelenir; cihaza dokununca [files] o cihaza gönderilir.
-     */
+    /** Hızlı Paylaş penceresi: tarama/gönderim mantığı Notlarım ile ortak [QuickShareSession]'dadır, burası yalnızca View arayüzüdür. */
     private fun quickShareDialog(files: List<File>) {
-        val h = android.os.Handler(android.os.Looper.getMainLooper())
         val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(24), dp(8), dp(24), 0) }
         val statusV = TextView(this).apply { textSize = 13f; visibility = View.GONE; setPadding(0, dp(8), 0, 0) }
         box.addView(LinearLayout(this).apply {
@@ -583,83 +579,38 @@ class FilesActivity : Activity() {
             addView(TextView(this@FilesActivity).apply { text = L("Cihazlar aranıyor…", "Searching for devices…"); setPadding(dp(12), 0, 0, 0) })
         })
         box.addView(statusV)
-        var sending = false
-        var closed = false
-        var disc: github.idrisokys.myl.qs.Discovery? = null
         lateinit var dlg: AlertDialog
-        val title = L("Hızlı Paylaş", "Quick Share") + if (files.size > 1) " (${files.size})" else ""
-        dlg = AlertDialog.Builder(this).setTitle(title).setView(box)
-            .setNegativeButton(L("Kapat", "Close"), null).create()
-        fun stopAll() {
-            closed = true
-            try { disc?.stop() } catch (e: Exception) { }
-            github.idrisokys.myl.qs.ReceiverService.sendListener = null
-        }
-        fun setStatus(t: String, err: Boolean) {
-            statusV.text = t; statusV.visibility = View.VISIBLE
-            statusV.setTextColor(if (err) 0xFFEF5350.toInt() else 0xFF9E9E9E.toInt())
-        }
-        fun send(p: github.idrisokys.myl.qs.Peer) {
-            if (sending) return
-            sending = true
-            dlg.setCanceledOnTouchOutside(false)
-            dlg.getButton(AlertDialog.BUTTON_NEGATIVE)?.isEnabled = false
-            setStatus(L("Gönderiliyor…", "Sending…"), false)
-            github.idrisokys.myl.qs.ReceiverService.sendListener = { st, msg ->
-                h.post {
-                    when (st) {
-                        0 -> setStatus(msg, false)
-                        1 -> { setStatus("✓ $msg", false); h.postDelayed({ if (dlg.isShowing) dlg.dismiss() }, 1500) }
-                        else -> {
-                            sending = false; setStatus(msg, true)
-                            dlg.getButton(AlertDialog.BUTTON_NEGATIVE)?.isEnabled = true
-                        }
-                    }
+        lateinit var session: github.idrisokys.myl.qs.QuickShareSession
+        fun closeBtn(on: Boolean) { dlg.getButton(AlertDialog.BUTTON_NEGATIVE)?.isEnabled = on }
+        session = github.idrisokys.myl.qs.QuickShareSession(this, files,
+            onPeers = { ps ->
+                box.removeAllViews()
+                if (ps.isEmpty()) {
+                    box.addView(TextView(this).apply { text = L("Açık cihaz bulunamadı. Karşı cihazda Hızlı Paylaş açık olmalı.", "No open device found. Quick Share must be on on the other device.") })
+                } else ps.forEach { p ->
+                    box.addView(LinearLayout(this).apply {
+                        gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(12), 0, dp(12))
+                        addView(View(this@FilesActivity).apply { background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(0xFF66BB6A.toInt()) } }, dp(8), dp(8))
+                        addView(TextView(this@FilesActivity).apply { text = p.name; textSize = 16f; maxLines = 1; ellipsize = TextUtils.TruncateAt.END; setPadding(dp(16), 0, 0, 0) })
+                        setOnClickListener { session.send(p) }
+                    })
                 }
-            }
-            try { github.idrisokys.myl.qs.Sender.submit(this, files.map { Uri.fromFile(it) }, p.id) }
-            catch (e: Exception) {
-                sending = false; setStatus(L("Gönderilemedi", "Could not send"), true)
-                dlg.getButton(AlertDialog.BUTTON_NEGATIVE)?.isEnabled = true
-            }
-        }
-        fun showPeers(ps: List<github.idrisokys.myl.qs.Peer>) {
-            box.removeAllViews()
-            if (ps.isEmpty()) {
-                box.addView(TextView(this).apply { text = L("Açık cihaz bulunamadı. Karşı cihazda Hızlı Paylaş açık olmalı.", "No open device found. Quick Share must be on on the other device.") })
-            } else ps.forEach { p ->
-                box.addView(LinearLayout(this).apply {
-                    gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(12), 0, dp(12))
-                    addView(View(this@FilesActivity).apply { background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(0xFF66BB6A.toInt()) } }, dp(8), dp(8))
-                    addView(TextView(this@FilesActivity).apply { text = p.name; textSize = 16f; maxLines = 1; ellipsize = TextUtils.TruncateAt.END; setPadding(dp(16), 0, 0, 0) })
-                    setOnClickListener { send(p) }
-                })
-            }
-            box.addView(statusV)
-        }
-        dlg.setOnDismissListener { stopAll() }
+                box.addView(statusV)
+            },
+            onStatus = { st, msg ->
+                statusV.text = msg; statusV.visibility = View.VISIBLE
+                statusV.setTextColor(if (st == 2) 0xFFEF5350.toInt() else 0xFF9E9E9E.toInt())
+                when (st) {
+                    0 -> { dlg.setCanceledOnTouchOutside(false); closeBtn(false) }
+                    1 -> { session.finishSending(); box.postDelayed({ if (dlg.isShowing) dlg.dismiss() }, 1500) }
+                    else -> { dlg.setCanceledOnTouchOutside(true); closeBtn(true) }
+                }
+            })
+        dlg = AlertDialog.Builder(this).setTitle(L("Hızlı Paylaş", "Quick Share") + if (files.size > 1) " (${files.size})" else "")
+            .setView(box).setNegativeButton(L("Kapat", "Close"), null).create()
+        dlg.setOnDismissListener { session.stop() }
         dlg.show()
-        Thread {
-            try {
-                github.idrisokys.myl.qs.Identity.init(this)
-                github.idrisokys.myl.qs.Peers.clear()
-                disc = github.idrisokys.myl.qs.Discovery(this).also { it.browse() }
-            } catch (e: Exception) { }
-            val t0 = android.os.SystemClock.uptimeMillis(); var found = -1L
-            while (!closed) {
-                val now = android.os.SystemClock.uptimeMillis()
-                if (found < 0 && github.idrisokys.myl.qs.Peers.list().isNotEmpty()) found = now
-                if (found >= 0 && now - found >= 1000) break
-                if (found < 0 && now - t0 >= 3500) break
-                try { Thread.sleep(150) } catch (e: InterruptedException) { break }
-            }
-            // Bayat kayıtları ele: her cihaza kısa bir bağlantı denemesi
-            val alive = github.idrisokys.myl.qs.Peers.list().filter { p ->
-                try { java.net.Socket().use { it.connect(java.net.InetSocketAddress(p.host, p.port), 1500) }; true } catch (e: Exception) { false }
-            }
-            try { disc?.stop() } catch (e: Exception) { }
-            if (!closed) h.post { if (!closed) showPeers(alive) }
-        }.start()
+        session.start()
     }
 
     private fun paste() {

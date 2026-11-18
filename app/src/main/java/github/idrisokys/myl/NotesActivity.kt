@@ -57,6 +57,8 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 private val DarkScheme = darkColorScheme()
+/** Sabitlenmiş öğenin üç nokta simgesinin rengi (koyu kırmızı). */
+private val PinnedRed = Color(0xFFB71C1C)
 private val blockedSchemes = setOf("file", "content", "intent", "javascript", "android-app")
 
 /** Launcher arama kutusundan "Notlarımda ara" ile gelen sorgu (Intent extra'sı). */
@@ -120,6 +122,7 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
     val maxChars = 220      // ad değiştirme sınırı
     val addMax = Store.ADD_MAX   // alttaki ekleme alanı sınırı
     fun toast(s: String) = Notice.show(ctx, s, false)
+    fun placeName(u: Uri): String = if (u == root) L("Ana liste", "Main list") else java.io.File(u.path ?: "").name
     fun run(reload: Boolean = true, block: () -> Unit) {
         scope.launch { lock.withLock { withContext(Dispatchers.IO) { block() } }; if (reload) tick++ }
     }
@@ -236,22 +239,6 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
             }
             if (t != null) { clipboard.setText(AnnotatedString(t)); toast(L("Kopyalandı", "Copied")) }
             else toast(L("Kopyalanamadı", "Could not copy"))
-        }
-    }
-    fun addTxt() {
-        val text = linkText.trim()
-        if (text.isEmpty()) return
-        linkText = ""
-        focus.clearFocus()
-        scope.launch {
-            val ok = withContext(Dispatchers.IO) { Store.addTextFile(ctx, current, text) }
-            tick++
-            if (ok) {
-                val l = withContext(Dispatchers.IO) { Store.list(ctx, current) }
-                loaded = l
-                if (l.isNotEmpty()) listState.animateScrollToItem(0)
-            }
-            toast(if (ok) L("Metin dosyası eklendi", "Text file added") else L("Eklenemedi", "Could not add"))
         }
     }
     // Gönder / Enter: Store.submit ile aynı kural (link → .url, kısa metin → not, uzun metin → .txt)
@@ -411,14 +398,8 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
                     hint = L("Link veya metin yapıştır (Enter: kaydet)", "Paste a link or text (Enter: save)"),
                     minLines = 2, maxLines = 8, send = true, onSend = { submit() })
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    val canAdd = linkText.isNotBlank()
                     Text("${linkText.length}/$addMax", style = MaterialTheme.typography.labelSmall, color = if (linkText.length > addMax) MaterialTheme.colorScheme.error else Color.Unspecified, modifier = Modifier.padding(start = 8.dp))
                     Spacer(Modifier.weight(1f))
-                    Box(
-                        Modifier.size(48.dp).clip(CircleShape)
-                            .combinedClickable(enabled = canAdd, onClick = { submit() }, onLongClick = { addTxt() }),
-                        contentAlignment = Alignment.Center
-                    ) { Icon(Icons.Default.Add, L("Ekle (uzun bas: .txt)", "Add (long-press: .txt)"), tint = LocalContentColor.current.copy(alpha = if (canAdd) 1f else 0.38f)) }
                     IconButton({ startSearch() }, enabled = linkText.isNotBlank()) { Icon(Icons.Default.Search, L("Ara", "Search")) }
                     IconButton({ linkText = "" }, enabled = linkText.isNotEmpty()) { Icon(Icons.Default.Clear, L("Temizle", "Clear")) }
                     IconButton({ clipboard.getText()?.text?.let { linkText = it } }) { Icon(Icons.Default.ContentPaste, L("Yapıştır", "Paste")) }
@@ -482,7 +463,7 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
                                         onClick = { menu = true },
                                         onLongClick = { editMode = !editMode; selected = emptySet() }),
                                     Alignment.Center
-                                ) { Icon(Icons.Default.MoreVert, L("Menü", "Menu")) }
+                                ) { Icon(Icons.Default.MoreVert, L("Menü", "Menu"), tint = if (e.pinned) PinnedRed else LocalContentColor.current) }
                                 DropdownMenu(menu, { menu = false }) {
                                     // Öğe birden çok seçilenin içindeyse işlem tüm seçilenlere uygulanır
                                     val targets = if (sel && selected.size > 1) list.filter { it.key in selected } else listOf(e)
@@ -492,10 +473,17 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
                                     DropdownMenuItem(text = { Text(L("Taşı", "Move")) }, onClick = { menu = false; moving = targets; dialog = "move" })
                                     DropdownMenuItem(text = { Text(L("Paylaş", "Share")) }, onClick = { menu = false; shareEntries(targets) })
                                     DropdownMenuItem(text = { Text(L("Sil", "Delete")) }, onClick = { menu = false; deleteNow(targets) })
+                                    // Veri yeri U: seçili klasör (satır klasörse o, değilse içinde bulunulan klasör) linklerin varsayılan kayıt yeri olur
+                                    DropdownMenuItem(text = { Text(L("Veri yeri U", "Data place U")) }, onClick = {
+                                        menu = false
+                                        val dir = e.takeIf { it.isDir }?.uri ?: current
+                                        Store.setPlaceU(ctx, dir)
+                                        toast(L("Veri yeri U: ", "Data place U: ") + placeName(dir))
+                                    })
+                                    // Veri yeri D: diğer kayıtların (kısa metin .url ve .txt) hangi klasöre ekleneceği listeden seçilir
+                                    DropdownMenuItem(text = { Text(L("Veri yeri D", "Data place D")) }, onClick = { menu = false; dialog = "placeD" })
                                 }
                             }
-                            // Sabitlenmiş öğe: üç noktanın sağında minik yuvarlak
-                            if (e.pinned) Box(Modifier.padding(start = 2.dp, end = 2.dp).size(8.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary))
                             }
                         })
                     HorizontalDivider()
@@ -536,6 +524,15 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
                 tick++
                 toast(if (ok == files.size) L("$ok öğe taşındı", "$ok items moved") else L("$ok/${files.size} öğe taşınabildi", "$ok/${files.size} items could be moved"))
             }
+        }
+    }
+
+    if (dialog == "placeD") {
+        MoveDialog(ctx, rootUri, current, emptySet(), { dialog = null },
+            title = L("Veri yeri D", "Data place D"), confirmLabel = L("Buraya kaydet", "Save here"), allowCurrent = true) { target ->
+            dialog = null
+            Store.setPlaceD(ctx, target)
+            toast(L("Veri yeri D: ", "Data place D: ") + placeName(target))
         }
     }
 }
@@ -707,7 +704,10 @@ fun TxtScreen(
 }
 
 @Composable
-fun MoveDialog(ctx: android.content.Context, root: Uri, current: Uri, exclude: Set<Uri>, onDismiss: () -> Unit, onPick: (Uri) -> Unit) {
+fun MoveDialog(
+    ctx: android.content.Context, root: Uri, current: Uri, exclude: Set<Uri>, onDismiss: () -> Unit,
+    title: String? = null, confirmLabel: String? = null, allowCurrent: Boolean = false, onPick: (Uri) -> Unit
+) {
     var stack by remember { mutableStateOf(listOf<Entry>()) }
     val dir = stack.lastOrNull()?.uri ?: root
     val scope = rememberCoroutineScope()
@@ -717,7 +717,7 @@ fun MoveDialog(ctx: android.content.Context, root: Uri, current: Uri, exclude: S
     LaunchedEffect(dir) { folders = withContext(Dispatchers.IO) { Store.list(ctx, dir).filter { it.isDir && it.uri !in exclude } } }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(L("Taşı", "Move") + ": " + (stack.lastOrNull()?.name ?: L("Ana liste", "Main list"))) },
+        title = { Text((title ?: L("Taşı", "Move")) + ": " + (stack.lastOrNull()?.name ?: L("Ana liste", "Main list"))) },
         text = {
             LazyColumn(Modifier.heightIn(max = 320.dp)) {
                 if (stack.isNotEmpty()) item {
@@ -747,7 +747,7 @@ fun MoveDialog(ctx: android.content.Context, root: Uri, current: Uri, exclude: S
                 }
             }
         },
-        confirmButton = { TextButton({ onPick(dir) }, enabled = dir != current) { Text(L("Buraya taşı", "Move here")) } },
+        confirmButton = { TextButton({ onPick(dir) }, enabled = allowCurrent || dir != current) { Text(confirmLabel ?: L("Buraya taşı", "Move here")) } },
         dismissButton = { TextButton(onDismiss) { Text(L("İptal", "Cancel")) } })
 }
 

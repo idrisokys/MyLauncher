@@ -1,5 +1,6 @@
 package github.idrisokys.myl.files
 
+import github.idrisokys.myl.L
 import github.idrisokys.myl.common.*
 
 import android.app.Activity
@@ -560,11 +561,105 @@ class FilesActivity : Activity() {
         catch (e: ActivityNotFoundException) { Notice.show(this, "Açacak uygulama yok", false) }
     }
 
+    /** "Paylaş": Notlarım ile aynı — seçili dosyalar Hızlı Paylaş ile paylaşıma açık cihazlara gönderilir; klasörler gönderilemez. */
     private fun shareFiles(x: List<File>) {
-        val us = ArrayList(x.filter { it.isFile }.map { uri(it) })
-        if (us.isEmpty()) { Notice.show(this, "Klasörleri paylaşmak için önce sıkıştırın", false); return }
+        val files = x.filter { it.isFile }
+        if (files.isEmpty()) { Notice.show(this, L("Klasörler paylaşılamaz", "Folders cannot be shared"), false); return }
         sel.clear(); editMode = false; refresh(true)
-        startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND_MULTIPLE).setType("*/*").putParcelableArrayListExtra(Intent.EXTRA_STREAM, us).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION), "Paylaş"))
+        quickShareDialog(files)
+    }
+
+    /**
+     * Hızlı Paylaş ile gönderim (Notlarım'daki QuickShareDialog'un birebir karşılığı): ağ bir kez taranır,
+     * açık olduğu doğrulanan cihazlar listelenir; cihaza dokununca [files] o cihaza gönderilir.
+     */
+    private fun quickShareDialog(files: List<File>) {
+        val h = android.os.Handler(android.os.Looper.getMainLooper())
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(24), dp(8), dp(24), 0) }
+        val statusV = TextView(this).apply { textSize = 13f; visibility = View.GONE; setPadding(0, dp(8), 0, 0) }
+        box.addView(LinearLayout(this).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            addView(ProgressBar(this@FilesActivity).apply { isIndeterminate = true }, dp(20), dp(20))
+            addView(TextView(this@FilesActivity).apply { text = L("Cihazlar aranıyor…", "Searching for devices…"); setPadding(dp(12), 0, 0, 0) })
+        })
+        box.addView(statusV)
+        var sending = false
+        var closed = false
+        var disc: github.idrisokys.myl.qs.Discovery? = null
+        lateinit var dlg: AlertDialog
+        val title = L("Hızlı Paylaş", "Quick Share") + if (files.size > 1) " (${files.size})" else ""
+        dlg = AlertDialog.Builder(this).setTitle(title).setView(box)
+            .setNegativeButton(L("Kapat", "Close"), null).create()
+        fun stopAll() {
+            closed = true
+            try { disc?.stop() } catch (e: Exception) { }
+            github.idrisokys.myl.qs.ReceiverService.sendListener = null
+        }
+        fun setStatus(t: String, err: Boolean) {
+            statusV.text = t; statusV.visibility = View.VISIBLE
+            statusV.setTextColor(if (err) 0xFFEF5350.toInt() else 0xFF9E9E9E.toInt())
+        }
+        fun send(p: github.idrisokys.myl.qs.Peer) {
+            if (sending) return
+            sending = true
+            dlg.setCanceledOnTouchOutside(false)
+            dlg.getButton(AlertDialog.BUTTON_NEGATIVE)?.isEnabled = false
+            setStatus(L("Gönderiliyor…", "Sending…"), false)
+            github.idrisokys.myl.qs.ReceiverService.sendListener = { st, msg ->
+                h.post {
+                    when (st) {
+                        0 -> setStatus(msg, false)
+                        1 -> { setStatus("✓ $msg", false); h.postDelayed({ if (dlg.isShowing) dlg.dismiss() }, 1500) }
+                        else -> {
+                            sending = false; setStatus(msg, true)
+                            dlg.getButton(AlertDialog.BUTTON_NEGATIVE)?.isEnabled = true
+                        }
+                    }
+                }
+            }
+            try { github.idrisokys.myl.qs.Sender.submit(this, files.map { Uri.fromFile(it) }, p.id) }
+            catch (e: Exception) {
+                sending = false; setStatus(L("Gönderilemedi", "Could not send"), true)
+                dlg.getButton(AlertDialog.BUTTON_NEGATIVE)?.isEnabled = true
+            }
+        }
+        fun showPeers(ps: List<github.idrisokys.myl.qs.Peer>) {
+            box.removeAllViews()
+            if (ps.isEmpty()) {
+                box.addView(TextView(this).apply { text = L("Açık cihaz bulunamadı. Karşı cihazda Hızlı Paylaş açık olmalı.", "No open device found. Quick Share must be on on the other device.") })
+            } else ps.forEach { p ->
+                box.addView(LinearLayout(this).apply {
+                    gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(12), 0, dp(12))
+                    addView(View(this@FilesActivity).apply { background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(0xFF66BB6A.toInt()) } }, dp(8), dp(8))
+                    addView(TextView(this@FilesActivity).apply { text = p.name; textSize = 16f; maxLines = 1; ellipsize = TextUtils.TruncateAt.END; setPadding(dp(16), 0, 0, 0) })
+                    setOnClickListener { send(p) }
+                })
+            }
+            box.addView(statusV)
+        }
+        dlg.setOnDismissListener { stopAll() }
+        dlg.show()
+        Thread {
+            try {
+                github.idrisokys.myl.qs.Identity.init(this)
+                github.idrisokys.myl.qs.Peers.clear()
+                disc = github.idrisokys.myl.qs.Discovery(this).also { it.browse() }
+            } catch (e: Exception) { }
+            val t0 = android.os.SystemClock.uptimeMillis(); var found = -1L
+            while (!closed) {
+                val now = android.os.SystemClock.uptimeMillis()
+                if (found < 0 && github.idrisokys.myl.qs.Peers.list().isNotEmpty()) found = now
+                if (found >= 0 && now - found >= 1000) break
+                if (found < 0 && now - t0 >= 3500) break
+                try { Thread.sleep(150) } catch (e: InterruptedException) { break }
+            }
+            // Bayat kayıtları ele: her cihaza kısa bir bağlantı denemesi
+            val alive = github.idrisokys.myl.qs.Peers.list().filter { p ->
+                try { java.net.Socket().use { it.connect(java.net.InetSocketAddress(p.host, p.port), 1500) }; true } catch (e: Exception) { false }
+            }
+            try { disc?.stop() } catch (e: Exception) { }
+            if (!closed) h.post { if (!closed) showPeers(alive) }
+        }.start()
     }
 
     private fun paste() {

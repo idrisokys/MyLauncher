@@ -422,8 +422,11 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
                     Store.setPlaceU(ctx, current)
                     toast(L("Veri yeri U: ", "Data place U: ") + placeName(current))
                 }) { Text("U", style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) }
-                // D: diğer kayıtların (kısa metin ve .txt) kayıt klasörü listeden seçilir
-                IconButton({ dialog = "placeD" }) { Text("D", style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) }
+                // D: içinde bulunulan klasör diğer kayıtların (kısa metin ve .txt) varsayılan kayıt yeri olur
+                IconButton({
+                    Store.setPlaceD(ctx, current)
+                    toast(L("Veri yeri D: ", "Data place D: ") + placeName(current))
+                }) { Text("D", style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) }
                 IconButton({ refreshAll() }) { Icon(Icons.Default.Refresh, L("Yenile", "Refresh")) }
             })
     }) { pad ->
@@ -520,15 +523,6 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
     }
 
     shareFiles?.let { fs -> QuickShareDialog(ctx, fs) { shareFiles = null } }
-
-    if (dialog == "placeD") {
-        MoveDialog(ctx, rootUri, current, emptySet(), { dialog = null },
-            title = L("Veri yeri D", "Data place D"), confirmLabel = L("Buraya kaydet", "Save here"), allowCurrent = true) { target ->
-            dialog = null
-            Store.setPlaceD(ctx, target)
-            toast(L("Veri yeri D: ", "Data place D: ") + placeName(target))
-        }
-    }
 }
 
 /** Düzenleme modunda seçili öğeler için: başa al, yukarı, aşağı, sona al. */

@@ -113,6 +113,7 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
     var shareFiles by remember { mutableStateOf<List<java.io.File>?>(null) }   // Hızlı Paylaş ile gönderilecek dosyalar
     var renameText by remember { mutableStateOf("") }
     var txtDoc by remember { mutableStateOf<Pair<Entry, String>?>(null) }   // tam ekranda açık .txt (öğe, içerik)
+    var txtEdit by remember { mutableStateOf(false) }                        // .txt doğrudan düzenleme modunda mı açılsın
     var linkText by remember { mutableStateOf("") }
     var searchQuery by remember { mutableStateOf<String?>(null) }   // null = normal liste
     var hits by remember { mutableStateOf<List<Hit>?>(null) }       // null = aranıyor
@@ -211,7 +212,7 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
         scope.launch {
             if (e.isTxt) {
                 val t = withContext(Dispatchers.IO) { Store.readPlain(ctx, e.uri) }
-                if (t != null) txtDoc = e to t else toast(L("Dosya okunamadı", "Could not read file"))
+                if (t != null) { txtEdit = false; txtDoc = e to t } else toast(L("Dosya okunamadı", "Could not read file"))
                 return@launch
             }
             val (u, t) = withContext(Dispatchers.IO) { Store.readLink(ctx, e.uri) }
@@ -240,6 +241,18 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
             }
             if (t != null) { clipboard.setText(AnnotatedString(t)); toast(L("Kopyalandı", "Copied")) }
             else toast(L("Kopyalanamadı", "Could not copy"))
+        }
+    }
+    // Menüden "Düzenle": .txt tam ekran düzenleyicide, link/not/klasör alttaki düzenleme alanında açılır
+    fun editEntry(e: Entry) {
+        if (e.isTxt) {
+            scope.launch {
+                val t = withContext(Dispatchers.IO) { Store.readPlain(ctx, e.uri) }
+                if (t != null) { txtEdit = true; txtDoc = e to t } else toast(L("Dosya okunamadı", "Could not read file"))
+            }
+        } else {
+            editMode = true
+            selected = setOf(e.key)
         }
     }
     // Gönder / Enter: Store.submit ile aynı kural (link → .url, kısa metin → not, uzun metin → .txt)
@@ -460,7 +473,7 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
                         },
                         headlineContent = { Text(e.title, maxLines = 4, overflow = TextOverflow.Ellipsis) },
                         trailingContent = {
-                            // Üç nokta: tek dokunuş menü (Sabitle / Taşı / Paylaş / Sil)
+                            // Üç nokta: tek dokunuş menü (Sabitle / Düzenle / Taşı / Paylaş / Sil)
                             Row(verticalAlignment = Alignment.CenterVertically) {
                             Box {
                                 var menu by remember { mutableStateOf(false) }
@@ -474,6 +487,8 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
                                     DropdownMenuItem(
                                         text = { Text(if (targets.all { it.pinned }) L("Sabiti kaldır", "Unpin") else L("Sabitle", "Pin")) },
                                         onClick = { menu = false; togglePin(targets) })
+                                    // Düzenle yalnızca tek öğe için (birden çok seçiliyse gösterilmez)
+                                    if (targets.size == 1) DropdownMenuItem(text = { Text(L("Düzenle", "Edit")) }, onClick = { menu = false; editEntry(e) })
                                     DropdownMenuItem(text = { Text(L("Taşı", "Move")) }, onClick = { menu = false; moving = targets; dialog = "move" })
                                     DropdownMenuItem(text = { Text(L("Paylaş", "Share")) }, onClick = { menu = false; shareEntries(targets) })
                                     DropdownMenuItem(text = { Text(L("Sil", "Delete")) }, onClick = { menu = false; deleteNow(targets) })
@@ -491,7 +506,7 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
     txtDoc?.let { (e, text) ->
         key(e.key) {
             TxtScreen(
-                title = e.title, initial = text,
+                title = e.title, initial = text, startEditing = txtEdit,
                 onSave = { t -> lock.withLock { withContext(Dispatchers.IO) { Store.writePlain(ctx, e.uri, t) } } },
                 onCopy = { t -> clipboard.setText(AnnotatedString(t)); toast(L("Kopyalandı", "Copied")) },
                 onClose = { txtDoc = null })
@@ -539,6 +554,7 @@ fun MoveButtons(canUp: Boolean, canDown: Boolean, onMove: (Int) -> Unit) {
 @Composable
 fun TxtScreen(
     title: String, initial: String,
+    startEditing: Boolean = false,
     onSave: suspend (String) -> Boolean,
     onCopy: (String) -> Unit,
     onClose: () -> Unit
@@ -546,8 +562,8 @@ fun TxtScreen(
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var saved by remember { mutableStateOf(initial) }                 // dosyadaki son hâl
-    var editing by remember { mutableStateOf(false) }
-    var value by remember { mutableStateOf(TextFieldValue(initial)) }
+    var editing by remember { mutableStateOf(startEditing) }
+    var value by remember { mutableStateOf(TextFieldValue(initial, TextRange(initial.length))) }
     var saving by remember { mutableStateOf(false) }
     var askDiscard by remember { mutableStateOf(false) }
     val focus = remember { FocusRequester() }

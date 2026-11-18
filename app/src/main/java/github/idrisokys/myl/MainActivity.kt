@@ -20,17 +20,12 @@ import android.content.pm.PackageManager
 import android.content.pm.ShortcutInfo
 import android.content.pm.ShortcutManager
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.ColorFilter
 import android.graphics.Paint
 import android.graphics.PixelFormat
-import android.graphics.PorterDuff
-import android.graphics.PorterDuffXfermode
-import android.graphics.Rect
 import android.graphics.RectF
-import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
@@ -640,21 +635,6 @@ class MainActivity : Activity() {
         pw.showAsDropDown(anchor, 0, dp(4), Gravity.END)
     }
 
-    /** Bilgi satırı için yuvarlak kırpılmış küçük resim. */
-    private fun infoIcon(sz: Int = dp(32)): Drawable? = try {
-        val src = BitmapFactory.decodeResource(resources, R.drawable.releases_icon)
-        if (src == null) null else {
-            val out = Bitmap.createBitmap(sz, sz, Bitmap.Config.ARGB_8888)
-            val c = Canvas(out)
-            val p = Paint(Paint.ANTI_ALIAS_FLAG)
-            c.drawCircle(sz / 2f, sz / 2f, sz / 2f, p)
-            p.xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_IN)
-            c.drawBitmap(src, Rect(0, 0, src.width, src.height), Rect(0, 0, sz, sz), p)
-            src.recycle()
-            BitmapDrawable(resources, out)
-        }
-    } catch (e: Exception) { null }
-
     // ---------- Düzen yedekleme / geri yükleme ----------
     /** Yerleşim düzenini (sıra, klasörler, kısayollar) İndirilenler klasörüne JSON olarak kaydeder. */
     private fun backupLayout() {
@@ -798,69 +778,6 @@ class MainActivity : Activity() {
         } catch (e: Exception) {
             openUrl("https://play.google.com/store/search?q=$enc&c=apps")
         }
-    }
-
-    /** Ana depolamadaki (iç depolama kökü) bir klasörü dosya yöneticisinde açar. */
-    private fun openStorageFolder(name: String) {
-        // Klasör adı büyük/küçük harfe duyarlı: diskte gerçekten var olan yazımı bul (link / Link / LINK)
-        val root = Environment.getExternalStorageDirectory()
-        val real = try {
-            root.list()?.firstOrNull { it.equals(name, ignoreCase = true) }
-                ?: listOf(name, name.lowercase(), name.replaceFirstChar { it.uppercase() }, name.uppercase())
-                    .firstOrNull { java.io.File(root, it).isDirectory } ?: name
-        } catch (e: Exception) { name }
-        val auth = "com.android.externalstorage.documents"
-        val docUri = android.provider.DocumentsContract.buildDocumentUri(auth, "primary:$real")
-        val treeUri = android.provider.DocumentsContract.buildTreeDocumentUri(auth, "primary:$real")
-
-        fun view(uri: Uri, pkg: String? = null) = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(uri, "vnd.android.document/directory")
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            if (pkg != null) setPackage(pkg)
-        }
-        // Bazı dosya yöneticileri (ColorOS/OPPO) yol olarak file:// + "resource/folder" ister
-        val path = java.io.File(root, real).absolutePath
-        fun viewFile(pkg: String? = null) = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(Uri.parse("file://" + path), "resource/folder")
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            if (pkg != null) setPackage(pkg)
-        }
-        val fmPkgs = listOf("com.alphainventor.filemanager", "com.coloros.filemanager", "com.oplus.filemanager", "com.heytap.filemanager")
-        val attempts = ArrayList<Pair<String, Intent>>()
-        // DocumentsUI açıksa: klasör seçicisi, sonra doğrudan görüntüleme
-        attempts += "seçici" to Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
-            putExtra(android.provider.DocumentsContract.EXTRA_INITIAL_URI, docUri)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        attempts += "documentsui" to view(docUri, "com.google.android.documentsui")
-        attempts += "documentsui2" to view(docUri, "com.android.documentsui")
-        // ColorOS / OPPO dosya yöneticisi
-        for (pk in fmPkgs) {
-            attempts += "$pk/doc" to view(docUri, pk)
-            attempts += "$pk/file" to viewFile(pk)
-            attempts += "$pk/tree" to view(treeUri, pk)
-            attempts += "$pk/düz" to Intent(Intent.ACTION_VIEW, Uri.parse("file://" + path))
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK).setPackage(pk)
-        }
-        attempts += "genel/doc" to view(docUri)
-        attempts += "genel/file" to viewFile()
-        attempts += "genel/tree" to view(treeUri)
-        // Son çare: dosya yöneticisini aç (klasöre gitmeyebilir)
-        for (pk in fmPkgs) packageManager.getLaunchIntentForPackage(pk)?.let {
-            attempts += "$pk/ana ekran" to it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-
-        // file:// yolunun başka uygulamaya verilmesine izin ver (yalnız bu çağrı için)
-        val oldPolicy = android.os.StrictMode.getVmPolicy()
-        android.os.StrictMode.setVmPolicy(android.os.StrictMode.VmPolicy.Builder().build())
-        try {
-            for ((name2, i) in attempts) {
-                try { startActivity(i); toast("Açıldı: $name2"); return } catch (e: Exception) { /* sıradakini dene */ }
-            }
-        } finally {
-            android.os.StrictMode.setVmPolicy(oldPolicy)
-        }
-        toast("\"$real\" klasörü açılamadı")
     }
 
     // ---------- Notlarım (eski adıyla LinkCepte): artık aynı uygulamanın içinde ----------
@@ -1112,8 +1029,6 @@ class MainActivity : Activity() {
     }
 
     private companion object {
-        const val INFO_EMAIL = "sislivadi@gmail.com"
-        const val INFO_GITHUB = "https://github.com/idrisokys/"
         const val REQ_CALL = 2
         const val REQ_RESTORE = 3
         const val REQ_WALLPAPER = 4

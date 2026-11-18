@@ -104,15 +104,6 @@ object Store {
         } catch (e: Exception) { }
     }
 
-    /** Dosya yöneticisinde açmak için: Uri'yi harici depolama belge Uri'sine çevirir. */
-    fun documentUri(dir: Uri): Uri? {
-        val base = Environment.getExternalStorageDirectory().absolutePath
-        val p = dir.path ?: return null
-        if (!p.startsWith(base)) return null
-        val rel = p.removePrefix(base).trim('/')
-        return android.provider.DocumentsContract.buildDocumentUri("com.android.externalstorage.documents", "primary:$rel")
-    }
-
     private val WS = Regex("\\s+")
     private val CTRL = Regex("[\\r\\n\\t]+")
     private val SEPS = Regex("\\s*[:|/\\\\]\\s*")
@@ -223,7 +214,7 @@ object Store {
     /** Düz metni de kaydeder (URL olmayan kayıt). */
     fun addNote(ctx: Context, dir: Uri, text: String): Boolean {
         val title = text.replace(WS, " ").trim().ifBlank { "not" }
-        return write(dir, title, noteBytes(text))
+        return write(otherDir(ctx, dir), title, noteBytes(text))
     }
 
     private fun noteBytes(text: String): ByteArray {
@@ -234,7 +225,7 @@ object Store {
     /** Metni, uzunluk sınırı olmadan düz .txt dosyası olarak kaydeder; ad metnin ilk 100 karakteridir. */
     fun addTextFile(ctx: Context, dir: Uri, text: String): Boolean {
         val title = text.replace(WS, " ").trim().ifBlank { "not" }
-        return write(dir, title, text.toByteArray(Charsets.UTF_8), 100, ".txt")
+        return write(otherDir(ctx, dir), title, text.toByteArray(Charsets.UTF_8), 100, ".txt")
     }
 
     /** .txt dosyasının tamamını okur. */
@@ -261,6 +252,50 @@ object Store {
     /** Linklerin varsayılan klasörünün adı (<ana dizin>/Link/Url). */
     private const val LINK_DIR = "Url"
 
+    // ---- Veri yeri U / D (üç nokta menüsünden seçilir; yalnızca bu cihazda tutulur) ----
+    private const val PLACE_PREFS = "dataplaces"
+    private const val PLACE_U = "placeU"   // linklerin (URL) varsayılan kayıt klasörü
+    private const val PLACE_D = "placeD"   // diğer kayıtların (kısa metin .url ve .txt) varsayılan kayıt klasörü
+
+    private fun placePrefs(ctx: Context) = ctx.applicationContext.getSharedPreferences(PLACE_PREFS, Context.MODE_PRIVATE)
+
+    /** Kayıtlı veri yeri geçerli bir klasörse onu, değilse (ayarlanmamış / silinmiş) null döndürür. */
+    private fun place(ctx: Context, key: String): Uri? {
+        val p = placePrefs(ctx).getString(key, null) ?: return null
+        val f = File(p)
+        return if (f.isDirectory) uriOf(f) else null
+    }
+
+    fun placeU(ctx: Context): Uri? = place(ctx, PLACE_U)
+    fun placeD(ctx: Context): Uri? = place(ctx, PLACE_D)
+    fun setPlaceU(ctx: Context, dir: Uri) { placePrefs(ctx).edit().putString(PLACE_U, file(dir).path).apply() }
+    fun setPlaceD(ctx: Context, dir: Uri) { placePrefs(ctx).edit().putString(PLACE_D, file(dir).path).apply() }
+
+    /** Bir klasör yeniden adlandırılınca / taşınınca / silinince veri yeri yollarını günceller (new null ise kaldırır). */
+    private fun remapPlaces(ctx: Context, old: File, new: File?) {
+        val sp = placePrefs(ctx)
+        val e = sp.edit()
+        for (k in listOf(PLACE_U, PLACE_D)) {
+            val p = sp.getString(k, null) ?: continue
+            when {
+                p == old.path -> if (new != null) e.putString(k, new.path) else e.remove(k)
+                p.startsWith(old.path + File.separator) -> if (new != null) e.putString(k, new.path + p.substring(old.path.length)) else e.remove(k)
+            }
+        }
+        e.apply()
+    }
+
+    private fun isRoot(dir: Uri): Boolean = try { file(dir).canonicalPath == dataDir().canonicalPath } catch (e: Exception) { false }
+
+    /** Link dışındaki kayıtlar (kısa metin, .txt): [dir] veri klasörünün kendisiyse Veri yeri D'ye gider; başka klasörün içindeyse orada kalır. */
+    private fun otherDir(ctx: Context, dir: Uri): Uri = if (isRoot(dir)) placeD(ctx) ?: dir else dir
+
+    /** Linkler: [dir] veri klasörünün kendisiyse Veri yeri U'ya (yoksa Url alt klasörüne) gider; başka klasörün içindeyse orada kalır. */
+    fun linkDir(ctx: Context, dir: Uri): Uri {
+        if (isRoot(dir)) placeU(ctx)?.let { return it }
+        return linkDir(dir)
+    }
+
     /** [dir] veri klasörünün kendisiyse Url alt klasörünü (yoksa oluşturup) döndürür; başka klasörse aynen döndürür. */
     fun linkDir(dir: Uri): Uri = synchronized(mutex) {
         try {
@@ -280,8 +315,8 @@ object Store {
         val t = text.trim()
         if (t.isEmpty()) return false
         val url = extractUrl(t) ?: return addNote(ctx, dir, t)
-        // Linkler varsayılan olarak Link/Url klasörüne kaydedilir (kullanıcı başka bir alt klasörün içindeyse orada kalır).
-        val dir = linkDir(dir)
+        // Linkler varsayılan olarak Veri yeri U'ya (ayarlı değilse Link/Url klasörüne) kaydedilir (kullanıcı başka bir alt klasörün içindeyse orada kalır).
+        val dir = linkDir(ctx, dir)
         // Ağ erişimi yok: başlık, paylaşılan konudan / metinden ya da sitenin adresinden alınır.
         val title = subject?.lines()?.firstOrNull { it.isNotBlank() }?.trim()
             ?: t.replace(url, "").lines().firstOrNull { it.isNotBlank() }?.trim()
@@ -332,6 +367,7 @@ object Store {
             }
             saveOrderIn(target, listOf(name) + ordered(all).map { it.name })
             renamePin(from, e.name, null)
+            remapPlaces(ctx, src, dst)
             true
         } catch (ex: Exception) { false }
     }
@@ -367,6 +403,7 @@ object Store {
             if (isNote) dst.writeBytes(noteBytes(title.trim()))
             saveOrderIn(dir, order.map { if (it == e.name) newName else it })
             renamePin(dir, e.name, newName)
+            if (e.isDir) remapPlaces(ctx, file(e.uri), dst)
             true
         } catch (ex: Exception) { false }
     }
@@ -381,6 +418,7 @@ object Store {
         val parent = f.parentFile
         val ok = moveToOnemsiz(f)
         if (ok && parent != null) renamePin(Uri.fromFile(parent), f.name, null)
+        if (ok) remapPlaces(ctx, f, null)
         ok
     }
 
@@ -446,15 +484,21 @@ object Store {
         return sb.toString()
     }
 
-    /** Tüm klasörlerde; başlık, link adresi ve not metninde arar. Yazılan her kelime bulunmalıdır. Dosyalar paralel okunur. */
+    /** Tüm klasörlerde; klasör adı, başlık, link adresi ve not metninde arar. Yazılan her kelime bulunmalıdır. Dosyalar paralel okunur. */
     fun search(ctx: Context, root: Uri, query: String, alive: () -> Boolean = { true }): List<Hit> {
         val terms = fold(query).split(WS).filter { it.isNotEmpty() }
         if (terms.isEmpty()) return emptyList()
         val files = ArrayList<Pair<Entry, List<Entry>>>()
+        val folderHits = ArrayList<Hit>()
         fun walk(dir: Uri, path: List<Entry>) {
             for (e in list(ctx, dir)) {
                 if (!alive()) return
-                if (e.isDir) walk(e.uri, path + e) else files.add(e to path)
+                if (e.isDir) {
+                    // Klasör adı da aranır: yazılan her kelime klasör adında geçmeli
+                    val fn = fold(e.title)
+                    if (terms.all { fn.contains(it) }) folderHits.add(Hit(e, path, "", false, true))
+                    walk(e.uri, path + e)
+                } else files.add(e to path)
             }
         }
         walk(root, emptyList())
@@ -501,6 +545,6 @@ object Store {
             // Kullanıcı aramayı değiştirdiyse bekleyen işleri mümkün olduğunca erken durdur.
             pending.forEach { it.cancel(true) }
         }
-        return out.sortedBy { !it.titleMatch }   // başlıkta geçenler önce
+        return (folderHits + out).sortedBy { !it.titleMatch }   // başlıkta (klasör adı dahil) geçenler önce
     }
 }

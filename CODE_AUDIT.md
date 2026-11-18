@@ -1,3 +1,10 @@
+# MyL 1.14 — temizlik (kullanılmayan kod)
+
+- Hiçbir yerden çağrılmayan kod silindi: `MainActivity.infoIcon()`, `MainActivity.openStorageFolder()`, `INFO_EMAIL`, `INFO_GITHUB`, `Store.documentUri()`, `FilesActivity.openList()`, `FilesActivity.zipSelected()`, `AUD`, `DOC`, `VID` (Dosyalarım'da).
+- Kullanılmayan 34 `import` temizlendi (`NotesActivity`, `QuickShare`, `QsPermActivity`, `FilesActivity`, `GalleryActivity`, `MainActivity`).
+- Kullanılmayan kaynaklar silindi: `drawable-nodpi/releases_icon.png` (81 KB), `drawable/ic_menu_info.xml`.
+- Davranış değişmedi; yalnızca statik analiz yapıldı, Gradle derlemesi bu ortamda denenmedi.
+
 # MyL 1.14 (hareketler, Galerim, Resmi Editle)
 
 - Ana ekran: kalem = dokun Notlarım / basılı tut düzenleme modu (mod açıkken dokunmak modu kapatır); kamera = dokun Galerim / basılı tut kamera; ⚙ menüsünden "Link klasörü" satırı ve `openLinkFolder()` silindi.

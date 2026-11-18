@@ -2,15 +2,12 @@ package github.idrisokys.myl.files
 
 import github.idrisokys.myl.common.*
 
-import android.Manifest
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.Intent
 import android.view.DragEvent
-import android.content.pm.ApplicationInfo
-import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
@@ -19,28 +16,25 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
-import android.os.StatFs
 import android.provider.OpenableColumns
 import android.provider.Settings
 import android.text.TextUtils
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
-import android.view.WindowManager
 import android.media.MediaScannerConnection
 import android.webkit.MimeTypeMap
 import android.widget.*
 import android.graphics.drawable.Drawable
 import java.io.*
-import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
-import java.util.zip.ZipOutputStream
 import java.text.SimpleDateFormat
 import java.util.*
 
 class FilesActivity : Activity() {
     companion object { const val EXTRA_PATH = "github.idrisokys.myl.files.PATH" }
 
+    private val PINNED_RED = 0xFFB71C1C.toInt()   // sabitlenmiş öğenin üç noktası
     private val dockBg = 0xFF1A1A1A.toInt(); private val bg = 0xFF121212.toInt(); private val bar = 0xFF212121.toInt(); private val card = 0xFF1E1E1E.toInt()
     private lateinit var titleV: TextView; private lateinit var pinV: ImageView; private lateinit var titleRow: LinearLayout; private lateinit var cancelV: TextView; private lateinit var body: FrameLayout; private lateinit var crumbS: HorizontalScrollView; private lateinit var crumbL: LinearLayout; private lateinit var dock: LinearLayout
     private var cur: File? = null; private var list: List<File>? = null; private var listTitle = ""
@@ -53,9 +47,6 @@ class FilesActivity : Activity() {
     private val root: File = Environment.getExternalStorageDirectory()
     private val prefs by lazy { getSharedPreferences("files", 0) }
     private val IMG = setOf("jpg", "jpeg", "png", "gif", "webp", "bmp", "heic", "svg")
-    private val VID = setOf("mp4", "mkv", "avi", "mov", "webm", "3gp", "m4v")
-    private val AUD = setOf("mp3", "m4a", "wav", "flac", "ogg", "aac", "opus")
-    private val DOC = setOf("pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "odt", "rtf", "csv", "epub")
     private val TXT = setOf("txt", "md", "log", "json", "xml", "ini", "conf", "cfg", "yml", "yaml", "properties", "js", "css", "kt", "kts", "java", "py", "sh", "gradle", "srt", "tex")
     private val df = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault())
 
@@ -291,7 +282,6 @@ class FilesActivity : Activity() {
     private fun setSlot(n: Int, f: File) { prefs.edit().putString("slot$n", f.path).apply(); slotsChanged() }
 
     private fun browse(d: File) { cur = d; list = null; sel.clear(); editMode = false; refresh() }
-    private fun openList(t: String, l: List<File>) { list = l; listTitle = t; sel.clear(); editMode = false; refresh() }
 
     private fun items(): List<File> {
         val base = list ?: (cur?.listFiles()?.toList() ?: emptyList())
@@ -368,14 +358,15 @@ class FilesActivity : Activity() {
                 }
                 row.addView(iconView(f), dp(48), dp(48))
                 val c = LinearLayout(this@FilesActivity).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(12), 0, 0, 0) }
-                c.addView(tv((if (f.path in topPinSet) "\uD83D\uDCCC " else "") + f.name, 19f, Color.WHITE).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END })
+                c.addView(tv(f.name, 19f, Color.WHITE).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END })
                 val sub = if (f.isDirectory) "${f.listFiles()?.size ?: 0} öğe" else sz(f.length())
                 c.addView(tv("$sub • ${df.format(Date(f.lastModified()))}", 14f, 0xFF999999.toInt()))
                 row.addView(c, LinearLayout.LayoutParams(0, -2, 1f))
                 if (pendingShare == null && !picking) {
-                    // Üç nokta: tek dokunuş menü (Taşı / Paylaş / Sil / Yeni klasör ekle), basılı tutunca düzenleme modu açılır/kapanır
+                    // Üç nokta: tek dokunuş menü (Sabitle / Taşı / Paylaş / Sil / Yeni klasör), basılı tutunca düzenleme modu açılır/kapanır
                     row.addView(ImageView(this@FilesActivity).apply {
-                        setImageDrawable(Icons.more()); setColorFilter(Color.WHITE); setPadding(dp(10), dp(10), dp(10), dp(10))
+                        // Sabitlenmiş öğe: üç nokta koyu kırmızı
+                        setImageDrawable(Icons.more()); setColorFilter(if (f.path in topPinSet) PINNED_RED else Color.WHITE); setPadding(dp(10), dp(10), dp(10), dp(10))
                         contentDescription = "Menü"
                         setOnClickListener { itemMenu(f, it) }
                         setOnLongClickListener { toggleEditMode(); true }
@@ -395,7 +386,7 @@ class FilesActivity : Activity() {
         }
         val wrap = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         wrap.addView(lv, LinearLayout.LayoutParams(-1, 0, 1f))
-        if (pendingShare != null) wrap.addView(saveBar(), -1, -2)
+        if (pendingShare != null) wrap.addView(saveBar(), -1, dp(52))
         else if (picking) wrap.addView(Button(this).apply { text = "Bu klasörü seç"; setOnClickListener { if (slotPick in 0..3) setSlot(slotPick, cur!!); slotPick = -1; home() } }, -1, -2)
         else if (clip.isNotEmpty() && cur != null && list == null && !editMode) wrap.addView(pasteBar(), -1, dp(52))
         if (keepScroll && (sPos > 0 || sTop != 0)) lv.setSelectionFromTop(minOf(sPos, maxOf(0, l.size - 1)), sTop)
@@ -434,7 +425,7 @@ class FilesActivity : Activity() {
         pm.menu.add(0, 1, 0, "Taşı")
         pm.menu.add(0, 2, 1, "Paylaş")
         pm.menu.add(0, 3, 2, "Sil")
-        pm.menu.add(0, 4, 3, "Yeni klasör ekle")
+        pm.menu.add(0, 4, 3, "Yeni klasör")
         pm.setOnMenuItemClickListener {
             when (it.itemId) {
                 5 -> toggleTopPin(targets)
@@ -500,37 +491,6 @@ class FilesActivity : Activity() {
                 if (t.mkdirs()) refresh(true) else Notice.show(this, "Klasör oluşturulamadı", false)
             }
         }
-    }
-
-    private fun zipSelected() {
-        val items = sel.toList(); if (items.isEmpty()) return
-        val dir = (if (list == null) cur else null) ?: items.first().parentFile ?: return
-        val base = if (items.size == 1) (if (items[0].isDirectory) items[0].name else items[0].nameWithoutExtension) else "Arsiv"
-        val out = uniqueFile(dir, "$base.zip"); sel.clear()
-        Notice.show(this, "Sıkıştırılıyor…", false)
-        Thread {
-            var ok = true
-            try {
-                ZipOutputStream(BufferedOutputStream(FileOutputStream(out))).use { z ->
-                    fun add(f: File, path: String) {
-                        if (f.absoluteFile == out.absoluteFile) return
-                        if (f.isDirectory) {
-                            val kids = f.listFiles() ?: emptyArray()
-                            if (kids.isEmpty()) { z.putNextEntry(ZipEntry("$path/")); z.closeEntry() }
-                            kids.forEach { add(it, "$path/${it.name}") }
-                        } else {
-                            try { f.inputStream().use { i -> z.putNextEntry(ZipEntry(path)); i.copyTo(z); z.closeEntry() } } catch (e: IOException) {}
-                        }
-                    }
-                    items.forEach { add(it, it.name) }
-                }
-            } catch (e: Exception) { ok = false; out.delete() }
-            runOnUiThread {
-                Notice.show(this, if (ok) "Oluşturuldu: ${out.name}" else "Sıkıştırma başarısız", true)
-                if (list != null) list = list!! + (if (ok) listOf(out) else emptyList())
-                refresh()
-            }
-        }.start()
     }
 
     private fun unzip(z: File) {
@@ -639,27 +599,30 @@ class FilesActivity : Activity() {
 
     private fun cancelShare() { pendingShare = null; picking = false; finish() }
 
+    /** Paylaşımla gelen dosyaların kaydedileceği çubuk: taşıma çubuğuyla aynı görünür (Buraya kaydet (n) · yeni klasör · kapat). */
     private fun saveBar(): View {
         val n = pendingShare?.size ?: 0
-        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(0xFF2A2A2A.toInt()); setPadding(dp(8), dp(8), dp(8), dp(8)) }
-        box.addView(tv("$n dosya kaydedilecek • klasör seçin", 14f, 0xFFCCCCCC.toInt()).apply { setPadding(dp(4), 0, 0, dp(4)) })
-        val row = LinearLayout(this)
-        row.addView(Button(this).apply { text = "İptal"; setOnClickListener { cancelShare() } }, LinearLayout.LayoutParams(0, -2, 1f))
-        row.addView(Button(this).apply {
-            text = "Yeni klasör"
+        val b = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setBackgroundColor(0xFF2A2A2A.toInt()); setPadding(dp(16), 0, dp(8), 0) }
+        b.addView(ImageView(this).apply { setImageDrawable(Icons.paste()); setColorFilter(Color.WHITE) }, dp(24), dp(24))
+        b.addView(tv("Buraya kaydet ($n)", 15f, Color.WHITE).apply { setPadding(dp(12), 0, 0, 0) }, LinearLayout.LayoutParams(0, -2, 1f))
+        b.setOnClickListener { saveShared(cur ?: root) }
+        b.addView(ImageView(this).apply {
+            setImageDrawable(Icons.newFolder()); setColorFilter(Color.WHITE); setPadding(dp(10), dp(10), dp(10), dp(10)); contentDescription = "Yeni klasör"
             setOnClickListener {
                 val d = cur ?: root
-                promptText("Klasör adı", "") { nm ->
+                promptText("Yeni klasör", "") { nm ->
                     val safe = nm.replace('/', '_').replace('\\', '_').trim()
                     if (safe.isEmpty() || safe == "." || safe == "..") return@promptText
                     val nd = File(d, safe)
                     if (nd.isDirectory || nd.mkdirs()) browse(nd) else Notice.show(this@FilesActivity, "Klasör oluşturulamadı", false)
                 }
             }
-        }, LinearLayout.LayoutParams(0, -2, 1f))
-        row.addView(Button(this).apply { text = "Buraya kaydet"; setOnClickListener { saveShared(cur ?: root) } }, LinearLayout.LayoutParams(0, -2, 1.3f))
-        box.addView(row)
-        return box
+        }, dp(44), dp(44))
+        b.addView(ImageView(this).apply {
+            setImageDrawable(Icons.close()); setColorFilter(0xFFBBBBBB.toInt()); setPadding(dp(10), dp(10), dp(10), dp(10)); contentDescription = "İptal"
+            setOnClickListener { cancelShare() }
+        }, dp(44), dp(44))
+        return b
     }
 
     private fun shareName(u: Uri): String {

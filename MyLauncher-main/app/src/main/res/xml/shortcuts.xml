@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Uygulamalar / Galerim / Dosyalarım / Notlarım artık ana ekranda ayrı uygulama olarak görünmez.
+  MyL simgesine basılı tutunca bu kısayollar çıkar; "Ana ekrana ekle" ile ızgaraya atanabilirler.
+  Kısayol simgeleri için yeni dosya eklenmedi: mevcut menü simgeleri kullanılır.
+-->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="myl_apps"
+        android:enabled="true"
+        android:icon="@drawable/ic_menu_apps"
+        android:shortcutShortLabel="@string/sc_apps"
+        android:shortcutLongLabel="@string/sc_apps">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="github.idrisokys.myl"
+            android:targetClass="github.idrisokys.myl.apps.AppsActivity" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="myl_gallery"
+        android:enabled="true"
+        android:icon="@drawable/ic_camera"
+        android:shortcutShortLabel="@string/sc_gallery"
+        android:shortcutLongLabel="@string/sc_gallery">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="github.idrisokys.myl"
+            android:targetClass="github.idrisokys.myl.gallery.GalleryActivity" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="myl_files"
+        android:enabled="true"
+        android:icon="@drawable/ic_menu_folder"
+        android:shortcutShortLabel="@string/sc_files"
+        android:shortcutLongLabel="@string/sc_files">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="github.idrisokys.myl"
+            android:targetClass="github.idrisokys.myl.files.FilesActivity" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="myl_notes"
+        android:enabled="true"
+        android:icon="@drawable/ic_edit"
+        android:shortcutShortLabel="@string/sc_notes"
+        android:shortcutLongLabel="@string/sc_notes">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="github.idrisokys.myl"
+            android:targetClass="github.idrisokys.myl.NotesActivity" />
+    </shortcut>
+</shortcuts>

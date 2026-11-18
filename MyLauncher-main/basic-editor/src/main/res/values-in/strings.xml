@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="resize_and_save">Ubah ukuran dan simpan</string>
+    <string name="width">Lebar</string>
+    <string name="height">Tinggi</string>
+    <string name="keep_aspect_ratio">Jaga aspek rasio</string>
+    <string name="invalid_values">Silakan masukkan resolusi yang valid</string>
+    <string name="editor">Penyunting</string>
+    <string name="basic_editor">Penyunting Dasar</string>
+    <string name="rotate">Rotasi</string>
+    <string name="invalid_image_path">Jalur gambar tidak valid</string>
+    <string name="image_editing_failed">Gagal menyunting gambar</string>
+    <string name="unknown_file_location">Lokasi file tidak diketahui</string>
+    <string name="flip_horizontally">Balik horizontal</string>
+    <string name="flip_vertically">Balik vertikal</string>
+    <string name="free_aspect_ratio">Bebas</string>
+    <string name="other_aspect_ratio">Lainnya</string>
+    <string name="transform">Ubah</string>
+    <string name="draw">Gambar</string>
+    <string name="crop">Potong</string>
+    <string name="overwrite_original">Timpa yang asli</string>
+</resources>

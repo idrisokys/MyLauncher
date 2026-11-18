@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="resize_and_save">Aldatu hautatutakoaren tamaina eta gorde</string>
+    <string name="width">Zabalera</string>
+    <string name="height">Altuera</string>
+    <string name="keep_aspect_ratio">Mantendu aspektu-erlazioa</string>
+    <string name="invalid_values">Sartu baliozko bereizmena</string>
+    <string name="editor">Editorea</string>
+    <string name="basic_editor">Oinarrizko editorea</string>
+    <string name="rotate">Biratu</string>
+    <string name="invalid_image_path">Irudiaren bide-izen baliogabea</string>
+    <string name="image_editing_failed">Irudia editatzeak huts egin du</string>
+    <string name="unknown_file_location">Fitxategi kokapen ezezaguna</string>
+    <string name="transform">Eraldatu</string>
+    <string name="crop">Moztu</string>
+    <string name="draw">Marraztu</string>
+    <string name="flip_horizontally">Irauli horizontalki</string>
+    <string name="flip_vertically">Irauli bertikalki</string>
+    <string name="free_aspect_ratio">Askea</string>
+    <string name="other_aspect_ratio">Bestelakoa</string>
+    <string name="overwrite_original">Gainidatzi jatorrizkoa</string>
+</resources>

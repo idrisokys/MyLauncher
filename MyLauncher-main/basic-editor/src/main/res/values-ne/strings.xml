@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="width">चाैडाई</string>
+    <string name="height">उचाई</string>
+    <string name="editor">सम्पादक</string>
+    <string name="rotate">घुमाउने</string>
+    <string name="free_aspect_ratio">स्वतन्त्र</string>
+    <string name="other_aspect_ratio">अन्य</string>
+</resources>

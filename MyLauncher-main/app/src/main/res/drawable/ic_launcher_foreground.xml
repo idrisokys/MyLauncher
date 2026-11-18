@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Kare pencere: beyaz çerçeve içinde dört farklı renkte cam -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#FFF8FAFC"
+        android:pathData="M36,25 h36 a11,11 0 0 1 11,11 v36 a11,11 0 0 1 -11,11 h-36 a11,11 0 0 1 -11,-11 v-36 a11,11 0 0 1 11,-11 z" />
+    <path android:fillColor="#FFEF4444"
+        android:pathData="M34,29 h13 a5,5 0 0 1 5,5 v13 a5,5 0 0 1 -5,5 h-13 a5,5 0 0 1 -5,-5 v-13 a5,5 0 0 1 5,-5 z" />
+    <path android:fillColor="#FF22C55E"
+        android:pathData="M61,29 h13 a5,5 0 0 1 5,5 v13 a5,5 0 0 1 -5,5 h-13 a5,5 0 0 1 -5,-5 v-13 a5,5 0 0 1 5,-5 z" />
+    <path android:fillColor="#FF3B82F6"
+        android:pathData="M34,56 h13 a5,5 0 0 1 5,5 v13 a5,5 0 0 1 -5,5 h-13 a5,5 0 0 1 -5,-5 v-13 a5,5 0 0 1 5,-5 z" />
+    <path android:fillColor="#FFFBBF24"
+        android:pathData="M61,56 h13 a5,5 0 0 1 5,5 v13 a5,5 0 0 1 -5,5 h-13 a5,5 0 0 1 -5,-5 v-13 a5,5 0 0 1 5,-5 z" />
+</vector>

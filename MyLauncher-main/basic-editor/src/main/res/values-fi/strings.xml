@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="resize_and_save">Rajaa valinta ja tallenna</string>
+    <string name="width">Leveys</string>
+    <string name="height">Korkeus</string>
+    <string name="keep_aspect_ratio">Säilytä kuvasuhde</string>
+    <string name="invalid_values">Aseta oikea resoluutio</string>
+    <string name="editor">Editori</string>
+    <string name="basic_editor">Peruseditori</string>
+    <string name="rotate">Käännä</string>
+    <string name="invalid_image_path">Virheellinen kuvan polku</string>
+    <string name="image_editing_failed">Kuvan muokkaus epäonnistui</string>
+    <string name="unknown_file_location">Tuntematon tiedostosijainti</string>
+    <string name="transform">Muunna</string>
+    <string name="crop">Leikkaa</string>
+    <string name="draw">Piirrä</string>
+    <string name="flip_horizontally">Käännä vaakasuoraan</string>
+    <string name="flip_vertically">Käännä pystysuoraan</string>
+    <string name="free_aspect_ratio">Vapaa</string>
+    <string name="other_aspect_ratio">Muu</string>
+    <string name="overwrite_original">Tallenna alkuperäisen päälle</string>
+</resources>

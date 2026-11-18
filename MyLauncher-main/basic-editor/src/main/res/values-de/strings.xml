@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="resize_and_save">Größe ändern und speichern</string>
+    <string name="width">Breite</string>
+    <string name="height">Höhe</string>
+    <string name="keep_aspect_ratio">Seitenverhältnis beibehalten</string>
+    <string name="invalid_values">Bitte eine gültige Auflösung eingeben</string>
+    <string name="basic_editor">Einfacher Editor</string>
+    <string name="rotate">Drehen</string>
+    <string name="invalid_image_path">Ungültiger Dateipfad</string>
+    <string name="image_editing_failed">Bildbearbeitung fehlgeschlagen</string>
+    <string name="unknown_file_location">Unbekannter Dateipfad</string>
+    <string name="transform">Umwandeln</string>
+    <string name="crop">Zuschneiden</string>
+    <string name="draw">Zeichnen</string>
+    <string name="flip_horizontally">Horizontal spiegeln</string>
+    <string name="flip_vertically">Vertikal spiegeln</string>
+    <string name="free_aspect_ratio">Beliebig</string>
+    <string name="other_aspect_ratio">Anderes</string>
+    <string name="editor">Editor</string>
+    <string name="overwrite_original">Original überschreiben</string>
+</resources>

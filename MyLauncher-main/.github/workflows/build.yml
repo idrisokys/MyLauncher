@@ -1,0 +1,48 @@
+name: APK Derle
+
+on:
+  workflow_dispatch:      # Actions sekmesinden elle başlatmak için
+  push:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.13
+
+      - name: Release APK derle
+        run: |
+          set -o pipefail
+          gradle assembleRelease --no-daemon 2>&1 | tee build.log
+
+      # Derleme başarısız olursa asıl hata satırlarını "Annotations" bölümüne ve özet sayfasına yazar
+      # (günlüklere giriş yapmadan da görülebilsin diye).
+      - name: Hata özeti
+        if: failure()
+        run: |
+          {
+            grep -E -A4 --no-group-separator "Error:$|^ERROR|ERROR:" build.log || true
+            grep -E "Duplicate class|What went wrong|Execution failed|^e: |Could not |Unresolved reference|AAPT|resource .* not found|Manifest merger|Caused by" build.log || true
+            f=app/build/outputs/logs/manifest-merger-release-report.txt
+            [ -f "$f" ] && grep -E -A3 --no-group-separator "ERROR|Error" "$f" || true
+          } | cut -c1-300 | awk '!seen[$0]++' | head -50 > errs.txt
+          echo '### Gradle hata özeti' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"; cat errs.txt >> "$GITHUB_STEP_SUMMARY"; echo '```' >> "$GITHUB_STEP_SUMMARY"
+          msg=$(sed ':a;N;$!ba;s/%/%25/g;s/\r//g;s/\n/%0A/g' errs.txt)
+          echo "::error title=Gradle hatasi::${msg}"
+
+      - name: APK'yı yükle
+        uses: actions/upload-artifact@v4
+        with:
+          name: MyL-release-apk
+          path: app/build/outputs/apk/release/*.apk

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="resize_and_save">Zmeniť veľkosť a uložiť</string>
+    <string name="width">Šǐrka</string>
+    <string name="height">Výška</string>
+    <string name="keep_aspect_ratio">Zachovať pomer strán</string>
+    <string name="invalid_values">Prosím zadajte platné rozlíšenie</string>
+    <string name="basic_editor">Základný editor</string>
+    <string name="rotate">Otočiť</string>
+    <string name="invalid_image_path">Neplatná cesta obrázka</string>
+    <string name="image_editing_failed">Úprava obrázka zlyhala</string>
+    <string name="unknown_file_location">Neznáme umiestnenie súboru</string>
+    <string name="transform">Transformovať</string>
+    <string name="crop">Orezať</string>
+    <string name="draw">Kresliť</string>
+    <string name="flip_horizontally">Preklopiť vodorovne</string>
+    <string name="flip_vertically">Preklopiť zvisle</string>
+    <string name="free_aspect_ratio">Voľný</string>
+    <string name="other_aspect_ratio">Iný</string>
+    <string name="editor">Editor</string>
+    <string name="overwrite_original">Prepísať originál</string>
+</resources>

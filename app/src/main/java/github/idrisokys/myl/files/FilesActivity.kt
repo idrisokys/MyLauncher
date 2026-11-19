@@ -192,6 +192,26 @@ class FilesActivity : Activity() {
         }
     }
 
+    private fun moveInto(dest: File, files: List<File>) {
+        if (!dest.isDirectory) { Notice.show(this, "Hedef klasör bulunamadı", false); return }
+        Thread {
+            var n = 0
+            files.forEach { f ->
+                if (!f.exists() || f.parentFile == dest) return@forEach
+                if (f.isDirectory && (dest.path + "/").startsWith(f.path + "/")) return@forEach
+                var t = File(dest, f.name); var i = 1
+                while (t.exists()) { t = File(dest, "${f.nameWithoutExtension}_$i" + (if (f.extension.isEmpty() || f.isDirectory) "" else "." + f.extension)); i++ }
+                try { if (!f.renameTo(t)) { f.copyRecursively(t); f.deleteRecursively() }; n++ } catch (e: Exception) {}
+            }
+            runOnUiThread {
+                Notice.show(this, if (n > 0) "$n öğe ${dest.name} klasörüne taşındı" else "Taşınacak öğe yok", false)
+                sel.clear()
+                if (list != null) list = list!!.filter { it.exists() }
+                if (cur != null || list != null) refresh()
+            }
+        }.start()
+    }
+
     private fun home() {
         cur = null; list = null; sel.clear(); editMode = false; picking = false; pendingShare = null; body.removeAllViews()
         chrome("Dosyalarım")

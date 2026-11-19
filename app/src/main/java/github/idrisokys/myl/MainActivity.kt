@@ -184,6 +184,8 @@ class MainActivity : Activity() {
         window.statusBarColor = Color.TRANSPARENT
         window.navigationBarColor = Color.TRANSPARENT
         buildUi()
+        // Hiç kayıtlı düzen yoksa (yeni kurulum) Link klasöründeki düzen, izin verilince bir kereliğine geri yüklenir.
+        if (!prefs.contains("order") && !prefs.contains("restore_pending")) prefs.edit().putBoolean("restore_pending", true).apply()
         loadPrefs()
         ReceiverService.stateListener = { main.post { if (!isDestroyed) updateQsBtn() } }
         ReceiverService.eventListener = { msg -> main.post { if (!isDestroyed) toast(msg) } }   // Dosya alındı / gönderildi: şeffaf mesaj
@@ -216,6 +218,7 @@ class MainActivity : Activity() {
         if (skipNextResumeReload) skipNextResumeReload = false else startReload()
         root.post { refreshWindow() }
         updateQsBtn()
+        tryAutoRestore()          // izin sonradan verildiyse yeni kurulumdaki düzen şimdi geri gelir
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -636,7 +639,10 @@ class MainActivity : Activity() {
     }
 
     // ---------- Düzen yedekleme / geri yükleme ----------
-    /** Yerleşim düzenini (sıra, klasörler, kısayollar) İndirilenler klasörüne JSON olarak kaydeder. */
+    /** Tek sabit dosya: <ana dizin>/Link/myl-duzen.json. Kaydet her seferinde bu dosyanın üzerine yazar. */
+    private fun layoutFile(): java.io.File = java.io.File(Store.dataDir(), LAYOUT_FILE)
+
+    /** Yerleşim düzenini (sıra, klasörler, kısayollar) tek dokunuşla Link klasöründeki sabit dosyaya yazar (üzerine yazar). */
     private fun backupLayout() {
         try {
             val fo = JSONObject()
@@ -649,18 +655,14 @@ class MainActivity : Activity() {
                 .put("folders", fo)
                 .put("shortcuts", so)
                 .toString(2)
-            val name = "myl-duzen-" + SimpleDateFormat("yyyyMMdd-HHmm", Locale.US).format(Date()) + ".json"
-            val cv = ContentValues().apply {
-                put(MediaStore.MediaColumns.DISPLAY_NAME, name)
-                put(MediaStore.MediaColumns.MIME_TYPE, "application/json")
-                put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
-            }
-            val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, cv)
-            if (uri == null) { toast("Yedek kaydedilemedi"); return }
-            contentResolver.openOutputStream(uri)?.use { it.write(json.toByteArray(Charsets.UTF_8)) }
-            toast("Yedeklendi: İndirilenler/$name")
+            if (Store.root(this) == null) { toast("Düzen kaydedilemedi: Tüm dosyalara erişim izni gerekli"); return }
+            val f = layoutFile()
+            val tmp = java.io.File(f.parentFile, "$LAYOUT_FILE.tmp")
+            tmp.writeText(json, Charsets.UTF_8)
+            if (!tmp.renameTo(f)) { f.writeText(json, Charsets.UTF_8); tmp.delete() }
+            toast("Düzen kaydedildi")
         } catch (e: Exception) {
-            toast("Yedek kaydedilemedi")
+            toast("Düzen kaydedilemedi")
         }
     }
 
@@ -673,19 +675,20 @@ class MainActivity : Activity() {
         try { startActivityForResult(i, REQ_WALLPAPER) } catch (e: Exception) { toast("Görsel seçici açılamadı") }
     }
 
+    /** Tek dokunuşla geri alma: Link klasöründeki kayıtlı düzen dosyası doğrudan uygulanır. */
     private fun confirmRestore() {
-        AlertDialog.Builder(this)
-            .setTitle("Düzeni geri al")
-            .setMessage("Mevcut yerleşim düzeni, seçeceğin yedek dosyasındaki düzenle değiştirilecek.")
-            .setPositiveButton("Dosya seç") { _, _ ->
-                val i = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-                    addCategory(Intent.CATEGORY_OPENABLE)
-                    type = "*/*"
-                }
-                try { startActivityForResult(i, REQ_RESTORE) } catch (e: Exception) { toast("Dosya seçici açılamadı") }
-            }
-            .setNegativeButton("İptal", null)
-            .show()
+        if (!Store.hasAccess(this)) { toast("Düzen geri alınamadı: Tüm dosyalara erişim izni gerekli"); return }
+        val f = layoutFile()
+        if (!f.isFile) { toast("Kayıtlı düzen yok (önce kaydet)"); return }
+        try { applyLayoutJson(f.readText(Charsets.UTF_8)) } catch (e: Exception) { toast("Düzen dosyası okunamadı") }
+    }
+
+    /** Yeni kurulumdan sonra (kayıtlı düzen yokken) Link klasöründeki düzeni bir kereliğine kendiliğinden geri yükler. */
+    private fun tryAutoRestore() {
+        if (!prefs.getBoolean("restore_pending", false) || !loadedOnce || !Store.hasAccess(this)) return
+        prefs.edit().remove("restore_pending").apply()
+        val f = layoutFile()
+        if (f.isFile) try { applyLayoutJson(f.readText(Charsets.UTF_8)) } catch (e: Exception) { }
     }
 
     @Deprecated("Deprecated in Java")
@@ -702,13 +705,14 @@ class MainActivity : Activity() {
             )
             return
         }
-        if (req != REQ_RESTORE || res != RESULT_OK) return
-        val uri = data?.data ?: return
+        return
+    }
+
+    /** Düzen JSON'unu uygular (el ile geri alma ve yeni kurulumdaki otomatik geri yükleme ortak kullanır). */
+    private fun applyLayoutJson(text: String) {
         try {
-            val text = contentResolver.openInputStream(uri)?.use { String(it.readBytes(), Charsets.UTF_8) }
-                ?: run { toast("Dosya okunamadı"); return }
             val o = JSONObject(text)
-            if (!o.has("order") || !o.has("folders") || !o.has("shortcuts")) { toast("Geçersiz yedek dosyası"); return }
+            if (!o.has("order") || !o.has("folders") || !o.has("shortcuts")) { toast("Geçersiz düzen dosyası"); return }
             val ord = ArrayList<String>()
             o.getJSONArray("order").let { a -> for (i in 0 until a.length()) ord.add(a.getString(i)) }
             val fol = LinkedHashMap<String, Folder>()
@@ -753,7 +757,7 @@ class MainActivity : Activity() {
             toast(if (scs.isEmpty()) "Düzen geri yüklendi"
                   else "Düzen geri yüklendi · kısayol: $found/${scs.size} bulundu")
         } catch (e: Exception) {
-            toast("Geçersiz yedek dosyası")
+            toast("Geçersiz düzen dosyası")
         }
     }
 
@@ -1031,6 +1035,7 @@ class MainActivity : Activity() {
     private companion object {
         const val REQ_CALL = 2
         const val REQ_RESTORE = 3
+        const val LAYOUT_FILE = "myl-duzen.json"   // <ana dizin>/Link içinde sabit ad: kaydet hep bunun üzerine yazar
         const val REQ_WALLPAPER = 4
         const val REQ_SEND = 5
         const val MAX_CONTACTS = 2  // her kaynaktan (kişi / uygulama / ayar) en fazla 2 sonuç
@@ -1778,6 +1783,7 @@ class MainActivity : Activity() {
     }
 
     private fun persistAndRefresh() {
+        prefs.edit().remove("restore_pending").apply()   // kullanıcı düzene dokundu: kendiliğinden geri yükleme artık yapılmaz
         normalize()
         savePrefs()
         refreshGrid()
@@ -1876,6 +1882,7 @@ class MainActivity : Activity() {
         refreshGrid()
         if (search.text.isNotEmpty()) updateResults(search.text.toString())
         loadedOnce = true
+        tryAutoRestore()
         pendingPinIntent?.let { pendingPinIntent = null; handleIntent(it) }
     }
 

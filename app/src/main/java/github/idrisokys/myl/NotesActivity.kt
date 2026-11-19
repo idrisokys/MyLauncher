@@ -537,7 +537,18 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
         }
     }
 
-    shareFiles?.let { fs -> QuickShareDialog(ctx, fs) { shareFiles = null } }
+    shareFiles?.let { fs ->
+        val view = androidx.compose.ui.platform.LocalView.current
+        DisposableEffect(fs) {
+            var a: android.content.Context = ctx
+            while (a is android.content.ContextWrapper && a !is android.app.Activity) a = a.baseContext
+            val act = a as? android.app.Activity
+            val p = act?.let { github.idrisokys.myl.qs.SendPopup(it, { view }, center = true) }
+            p?.onClosed = { shareFiles = null }
+            view.post { p?.showFor(fs) }        // Ana ekrandaki paylaşım penceresiyle aynı kod
+            onDispose { p?.dispose() }
+        }
+    }
 }
 
 /** Düzenleme modunda seçili öğeler için: başa al, yukarı, aşağı, sona al. */
@@ -852,56 +863,4 @@ fun EditModeButton(active: Boolean, onClick: () -> Unit) {
             drawCircle(c, radius = size.minDimension / 4f, style = androidx.compose.ui.graphics.drawscope.Stroke(w))
         }
     }
-}
-
-/**
- * Hızlı Paylaş ile gönderim: ağ bir kez taranır, açık olduğu doğrulanan cihazlar listelenir; cihaza dokununca
- * [files] (kaynak .txt / .url dosyaları) o cihaza gönderilir. Gönderim durumu aynı pencerede gösterilir.
- */
-@Composable
-fun QuickShareDialog(ctx: android.content.Context, files: List<java.io.File>, onDismiss: () -> Unit) {
-    var peers by remember { mutableStateOf<List<github.idrisokys.myl.qs.Peer>?>(null) }   // null = taranıyor
-    var status by remember { mutableStateOf<String?>(null) }
-    var sending by remember { mutableStateOf(false) }
-    var failed by remember { mutableStateOf(false) }
-    val session = remember {
-        github.idrisokys.myl.qs.QuickShareSession(ctx, files,
-            onPeers = { peers = it },
-            onStatus = { st, msg ->
-                status = msg
-                when (st) {
-                    0 -> { sending = true; failed = false }
-                    1 -> { sending = false; failed = false; android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ onDismiss() }, 1500) }
-                    else -> { sending = false; failed = true }
-                }
-            })
-    }
-    DisposableEffect(Unit) { session.start(); onDispose { session.stop() } }
-    AlertDialog(
-        onDismissRequest = { if (!sending) onDismiss() },
-        title = { Text(L("Hızlı Paylaş", "Quick Share") + if (files.size > 1) " (${files.size})" else "") },
-        text = {
-            Column {
-                val ps = peers
-                when {
-                    ps == null -> Row(verticalAlignment = Alignment.CenterVertically) {
-                        CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                        Spacer(Modifier.width(12.dp)); Text(L("Cihazlar aranıyor…", "Searching for devices…"))
-                    }
-                    ps.isEmpty() -> Text(L("Açık cihaz bulunamadı. Karşı cihazda Hızlı Paylaş açık olmalı.", "No open device found. Quick Share must be on on the other device."))
-                    else -> ps.forEach { p ->
-                        ListItem(
-                            modifier = Modifier.clickable(enabled = !sending) { session.send(p) },
-                            leadingContent = { Box(Modifier.size(8.dp).clip(CircleShape).background(Color(0xFF66BB6A))) },
-                            headlineContent = { Text(p.name, maxLines = 1, overflow = TextOverflow.Ellipsis) })
-                    }
-                }
-                status?.let {
-                    Spacer(Modifier.height(8.dp))
-                    Text(it, color = if (failed) MaterialTheme.colorScheme.error else Color.Unspecified, style = MaterialTheme.typography.bodySmall)
-                }
-            }
-        },
-        confirmButton = {},
-        dismissButton = { TextButton({ onDismiss() }, enabled = !sending) { Text(L("Kapat", "Close")) } })
 }

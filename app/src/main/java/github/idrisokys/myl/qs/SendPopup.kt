@@ -35,13 +35,19 @@ import github.idrisokys.myl.R
  * Sağ üstteki eşitleme simgesi (⇄): aynı pencerede cihazlar işaretlenir ve Link klasörü eşitleme yöntemi seçilir
  * (Bu cihaza göre / Karşıdaki cihaza göre / İki cihazda aynı olsun); eşitleme [NoteSync] ile <ana dizin>/Link üzerinden yürür.
  *
+ * Aynı pencere Dosyalarım ve Notlarım'da da kullanılır ([showFor]): cihaz arama ve eşitleme tek kodda, davranış her yerde aynı.
+ *
  * Kullanım: ana ekran [show] çağırır, dosya seçici sonucunu [onPicked]'a iletir, kapanırken [dispose] çağırır.
  */
 class SendPopup(
     private val act: Activity,
     private val anchor: () -> View,
-    private val reqPick: Int,
+    private val reqPick: Int = -1,
+    private val center: Boolean = false,        // true: düğmeye bağlı değil, ekranın ortasında açılır (Dosyalarım / Notlarım)
 ) {
+    /** Pencere kendiliğinden ya da dışarı dokunulunca kapanınca çağrılır (dispose() çağırmaz). */
+    var onClosed: (() -> Unit)? = null
+    private var preset: List<Uri>? = null        // verilmişse cihaza dokununca dosya seçici açılmaz, bunlar gönderilir
     private val h = Handler(Looper.getMainLooper())
     private val density = act.resources.displayMetrics.density
     private fun dp(v: Int) = (v * density).toInt()
@@ -59,13 +65,26 @@ class SendPopup(
     private var syncView = false                 // true: cihaz listesi yerine eşitleme seçenekleri
     private var syncRunning = false
     private val picked = HashSet<String>()       // eşitlenmek üzere işaretlenen cihazlar
+    private var folderPick: Pair<Int, List<Peer>>? = null   // eşitleme yöntemi + cihazlar seçildi, şimdi klasör seçiliyor
+    private var folderPath = ""                  // klasör seçicide bulunulan yer (Link'e göre göreli yol, "" = Link'in kendisi)
 
     private var live: List<Peer>? = null         // null = tarama sürüyor; liste = doğrulanmış açık cihazlar
     private var scanGen = 0                      // eski taramanın sonucu yenisini ezmesin
 
     // ---------- Dışarıya açık ----------
     fun show() {
-        closeNow()
+        preset = null
+        openFresh()
+    }
+
+    /** Dosyalarım / Notlarım: aynı pencere, ama gönderilecek dosyalar hazır; cihaza dokununca doğrudan gönderilir. */
+    fun showFor(files: List<java.io.File>) {
+        preset = files.map { Uri.fromFile(it) }
+        openFresh()
+    }
+
+    private fun openFresh() {
+        closeNow(false)
         statusMode = false
         live = null
         Peers.clear()                         // önceki taramadan kalan (kapanmış olabilecek) cihazlar atılır
@@ -82,7 +101,7 @@ class SendPopup(
         showStatus(p, uris)
     }
 
-    fun dispose() = closeNow()
+    fun dispose() = closeNow(false)
 
     // ---------- Cihaz arama ----------
     private fun startDiscovery() {
@@ -177,10 +196,10 @@ class SendPopup(
         p.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
         p.isOutsideTouchable = true
         p.elevation = dp(8).toFloat()
-        p.setOnDismissListener { if (pw === p && !awaitingPick) { pw = null; cleanup() } }
+        p.setOnDismissListener { if (pw === p && !awaitingPick) { pw = null; cleanup(); onClosed?.invoke() } }
         pw = p
         refreshList()                       // pencere görünmeden önce doldur
-        p.showAsDropDown(anchor(), 0, dp(6))
+        if (center) p.showAtLocation(anchor(), Gravity.CENTER, 0, 0) else p.showAsDropDown(anchor(), 0, dp(6))
     }
 
     private fun statusLine(color: Int) = TextView(act).apply {
@@ -202,13 +221,15 @@ class SendPopup(
     /** Pencere içeriği değişince (cihaz bulundu, uzun hata mesajı) boyutu yeniler. */
     private fun resize() {
         val p = pw ?: return
-        if (p.isShowing) p.update(anchor(), 0, dp(6), dp(240), ViewGroup.LayoutParams.WRAP_CONTENT)
+        if (!p.isShowing) return
+        if (center) p.update(0, 0, dp(240), ViewGroup.LayoutParams.WRAP_CONTENT)
+        else p.update(anchor(), 0, dp(6), dp(240), ViewGroup.LayoutParams.WRAP_CONTENT)
     }
 
     private fun toggleSync() {
         if (syncRunning || statusMode) return
         syncView = !syncView
-        picked.clear()
+        picked.clear(); folderPick = null; folderPath = ""
         hdrTitle?.text = if (syncView) L("Nasıl eşitlensin?", "How to sync?") else ""
         shownKey = ""
         refreshList()
@@ -249,7 +270,7 @@ class SendPopup(
                 text = label; setTextColor(Color.WHITE); setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
                 gravity = Gravity.CENTER_VERTICAL; setPadding(dp(12), 0, dp(12), 0)
                 selectable(this)
-                setOnClickListener { startSync(m, peers.filter { it.id in picked }) }
+                setOnClickListener { folderPick = m to peers.filter { it.id in picked }; folderPath = ""; hdrTitle?.text = L("Hangi klasör eşitlensin?", "Which folder to sync?"); shownKey = ""; refreshList() }
             }
             buttons.add(b)
             lst.addView(b, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)))
@@ -258,7 +279,53 @@ class SendPopup(
         resize()
     }
 
-    private fun startSync(mode: Int, targets: List<Peer>) {
+    /** Eşitlemeden önce klasör seçimi: Link klasörünün alt klasörleri arasında gezilir; "Bu klasörü eşitle" ile başlar. */
+    private fun renderFolderPick(lst: LinearLayout) {
+        val (mode, targets) = folderPick ?: return
+        lst.removeAllViews()
+        val base = github.idrisokys.myl.Store.dataDir()
+        val dir = if (folderPath.isEmpty()) base else java.io.File(base, folderPath)
+        fun row(text: String, color: Int = Color.WHITE, bold: Boolean = false, onClick: () -> Unit): TextView = TextView(act).apply {
+            this.text = text; setTextColor(color); setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+            if (bold) setTypeface(typeface, android.graphics.Typeface.BOLD)
+            gravity = Gravity.CENTER_VERTICAL; setPadding(dp(12), 0, dp(12), 0)
+            setSingleLine(); ellipsize = TextUtils.TruncateAt.END
+            selectable(this); setOnClickListener { onClick() }
+        }
+        val where = if (folderPath.isEmpty()) "Link" else "Link/$folderPath"
+        lst.addView(TextView(act).apply {
+            text = where; setTextColor(0xAAFFFFFF.toInt()); setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f)
+            setPadding(dp(12), 0, dp(12), dp(2)); setSingleLine(); ellipsize = TextUtils.TruncateAt.START
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        lst.addView(row(L("✓ Bu klasörü eşitle", "✓ Sync this folder"), 0xFF66BB6A.toInt(), true) { startSync(mode, targets, folderPath) },
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)))
+        lst.addView(row(if (folderPath.isEmpty()) L("‹ Geri", "‹ Back") else L("‹ Üst klasör", "‹ Parent folder")) {
+            if (folderPath.isEmpty()) { folderPick = null; hdrTitle?.text = L("Nasıl eşitlensin?", "How to sync?") }
+            else folderPath = folderPath.substringBeforeLast('/', "")
+            shownKey = ""; refreshList()
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)))
+        lst.addView(View(act).apply { setBackgroundColor(0x33FFFFFF) },
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)).apply {
+                topMargin = dp(2); bottomMargin = dp(2); marginStart = dp(8); marginEnd = dp(8)
+            })
+        val subs = (dir.listFiles() ?: emptyArray()).filter { it.isDirectory && !it.name.startsWith(".") }
+            .sortedBy { it.name.lowercase() }
+        val sub = LinearLayout(act).apply { orientation = LinearLayout.VERTICAL }
+        if (subs.isEmpty()) sub.addView(TextView(act).apply {
+            text = L("Alt klasör yok", "No subfolders"); setTextColor(0xAAFFFFFF.toInt()); setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+            gravity = Gravity.CENTER_VERTICAL; setPadding(dp(12), 0, dp(12), 0)
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(40)))
+        subs.forEach { d ->
+            sub.addView(row("📁  " + d.name + "  ›") { folderPath = if (folderPath.isEmpty()) d.name else folderPath + "/" + d.name; shownKey = ""; refreshList() },
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)))
+        }
+        val maxH = dp(220)
+        lst.addView(android.widget.ScrollView(act).apply { addView(sub) },
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, minOf(maxH, dp(44) * maxOf(1, subs.size))))
+        resize()
+    }
+
+    private fun startSync(mode: Int, targets: List<Peer>, folder: String) {
         if (syncRunning || targets.isEmpty()) return
         syncRunning = true
         val lst = list
@@ -269,7 +336,7 @@ class SendPopup(
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(44)))
         resize()
         kotlin.concurrent.thread(isDaemon = true, name = "qs-sync") {
-            val r = try { NoteSync.run(act, mode, targets) } catch (e: Exception) { NoteSync.Result(mode = mode, error = e.message ?: "?") }
+            val r = try { NoteSync.run(act, mode, targets, folder) } catch (e: Exception) { NoteSync.Result(mode = mode, error = e.message ?: "?") }
             val ok = r.error == null && r.errors.isEmpty() && r.peers > 0
             h.post {
                 syncRunning = false
@@ -281,7 +348,7 @@ class SendPopup(
                         setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f); setPadding(dp(12), dp(8), dp(12), dp(8))
                     }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
                     resize()
-                    h.postDelayed({ closeNow() }, if (ok) 3000 else 5000)
+                    h.postDelayed({ closeNow(true) }, if (ok) 3000 else 5000)
                 } else Toast.makeText(act, r.message(), Toast.LENGTH_LONG).show()
             }
         }
@@ -289,7 +356,7 @@ class SendPopup(
 
     private fun refreshList() {
         val lst = list ?: return
-        if (syncView && !statusMode) { renderSync(lst); return }
+        if (syncView && !statusMode) { if (folderPick != null) renderFolderPick(lst) else renderSync(lst); return }
         val peers = if (statusMode) listOfNotNull(target) else (live ?: emptyList())
         val key = (if (live == null && !statusMode) "scan|" else "done|") + peers.joinToString("|") { it.id + ":" + it.name }
         if (key == shownKey && lst.childCount > 0) return
@@ -334,6 +401,14 @@ class SendPopup(
     // ---------- Dosya seçimi ve gönderim ----------
     private fun pick(p: Peer) {
         target = p
+        val ready = preset
+        if (ready != null) {                  // dosyalar hazır: seçici yok, doğrudan gönder
+            awaitingPick = true               // eski pencere kapanırken temizlik yapılmasın
+            scanGen++
+            pw?.dismiss()
+            showStatus(p, ready)
+            return
+        }
         val i = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
             type = "*/*"
@@ -384,23 +459,24 @@ class SendPopup(
                 line2?.setTextColor(0xFF66BB6A.toInt())
                 line2?.text = "✓ $msg"
                 resize()
-                h.postDelayed({ closeNow() }, 2500)
+                h.postDelayed({ closeNow(true) }, 2500)
             }
             else -> {
                 line2?.setTextColor(0xFFEF5350.toInt())
                 line2?.text = msg
                 resize()
-                h.postDelayed({ closeNow() }, 4000)
+                h.postDelayed({ closeNow(true) }, 4000)
             }
         }
     }
 
     // ---------- Kapatma ----------
-    private fun closeNow() {
+    private fun closeNow(notify: Boolean = true) {
         val p = pw
         pw = null
         cleanup()
         try { p?.dismiss() } catch (e: Exception) { }
+        if (notify) onClosed?.invoke()
     }
 
     private fun cleanup() {
@@ -411,7 +487,7 @@ class SendPopup(
         awaitingPick = false
         statusMode = false
         target = null
-        syncView = false; picked.clear(); hdrTitle = null
+        syncView = false; picked.clear(); hdrTitle = null; folderPick = null; folderPath = ""
         list = null; line1 = null; line2 = null; live = null
     }
 }

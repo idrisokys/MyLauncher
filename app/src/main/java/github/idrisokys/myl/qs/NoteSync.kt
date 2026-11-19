@@ -279,10 +279,14 @@ object NoteSync {
         }
     }
 
+    /** Seçilen klasörün (Link'e göre göreli yol, NFC) içindekilerle sınırlar; [sub] boşsa tüm Link klasörü. */
+    private fun scoped(m: Map<String, Item>, sub: String): Map<String, Item> =
+        if (sub.isEmpty()) m else m.filterKeys { it.startsWith("$sub/") }
+
     /** Karşı cihazı bu cihazın aynısı yapar; (gönderilen, silinen) sayısını döndürür. */
-    private fun mirrorPeer(p: Peer, errs: MutableList<String>): Pair<Int, Int> {
-        val remote = fetchManifest(p)
-        val loc = local()
+    private fun mirrorPeer(p: Peer, sub: String, errs: MutableList<String>): Pair<Int, Int> {
+        val remote = scoped(fetchManifest(p), sub)
+        val loc = scoped(local(), sub)
         var sent = 0; var deleted = 0
         val depth = { k: String -> k.count { c -> c == '/' } }
         // 1) Karşıda olup bizde olmayan (ya da türü farklı) öğeleri sil; silinen klasörün içindekiler ayrıca sayılmaz
@@ -306,9 +310,14 @@ object NoteSync {
     }
 
     /** Bu cihazı karşı cihazın aynısı yapar; (alınan, silinen) döndürür. Karşı cihazda yeni sürüm gerekmez. */
-    private fun pullMirror(p: Peer, errs: MutableList<String>): Pair<Int, Int> {
-        val remote = fetchManifest(p)
-        val loc = local()
+    private fun pullMirror(p: Peer, sub: String, errs: MutableList<String>): Pair<Int, Int> {
+        val all = fetchManifest(p)
+        if (sub.isNotEmpty() && all[sub]?.dir != true) {
+            errs.add(L("${p.name}: bu klasör karşı cihazda yok", "${p.name}: this folder does not exist on the other device"))
+            return 0 to 0
+        }
+        val remote = scoped(all, sub)
+        val loc = scoped(local(), sub)
         var got = 0; var deleted = 0
         val depth = { k: String -> k.count { c -> c == '/' } }
         val stale = loc.keys.filter { k -> val r = remote[k]; r == null || r.dir != loc[k]!!.dir }
@@ -333,9 +342,9 @@ object NoteSync {
     }
 
     /** Tek cihazla eşitler; (gönderilen, alınan) sayısını döndürür. Dosya bazlı hatalar [errs]'e eklenir, diğer dosyalar sürer. */
-    private fun syncPeer(p: Peer, errs: MutableList<String>): Pair<Int, Int> {
-        val remote = fetchManifest(p)
-        val loc = local()
+    private fun syncPeer(p: Peer, sub: String, errs: MutableList<String>): Pair<Int, Int> {
+        val remote = scoped(fetchManifest(p), sub)
+        val loc = scoped(local(), sub)
         var sent = 0; var got = 0
         val keys = (loc.keys + remote.keys).sortedWith(compareBy({ it.count { c -> c == '/' } }, { it }))   // üst klasörler önce
         for (k in keys) {
@@ -390,8 +399,9 @@ object NoteSync {
      * Seçilen cihazlarla eşitler. Arka plan iş parçacığında çağrılmalı (ağ + disk).
      * mode: 0 = iki cihaz aynı olsun (birleştirir), 1 = bu cihaza göre, 2 = karşıdaki cihaza göre (ilk seçilen).
      */
-    fun run(c: Context, mode: Int, targets: List<Peer>): Result {
+    fun run(c: Context, mode: Int, targets: List<Peer>, folder: String = ""): Result {
         val res = Result(mode = mode)
+        val sub = nfc(folder.trim('/'))          // yalnızca bu klasör (Link'e göre yol) eşitlenir; boş = tüm Link
         if (!Store.hasAccess(c)) { res.error = L("depolama izni yok", "no storage permission"); return res }
         if (targets.isEmpty()) { res.error = L("cihaz seçilmedi", "no device selected"); return res }
         Identity.init(c)
@@ -402,7 +412,13 @@ object NoteSync {
             for (p0 in if (mode == 2) targets.take(1) else targets) {
                 var p = p0
                 try {
-                    fun go(x: Peer) = when (mode) { 1 -> mirrorPeer(x, res.errors); 2 -> pullMirror(x, res.errors); else -> syncPeer(x, res.errors) }
+                    fun go(x: Peer): Pair<Int, Int> {
+                        if (sub.isNotEmpty() && mode != 2) {       // seçilen klasör iki tarafta da var olsun
+                            resolve(sub, dir = true)?.mkdirs()
+                            mkdirRemote(x, sub)
+                        }
+                        return when (mode) { 1 -> mirrorPeer(x, sub, res.errors); 2 -> pullMirror(x, sub, res.errors); else -> syncPeer(x, sub, res.errors) }
+                    }
                     val (a, b) = try { go(p) } catch (e: java.io.IOException) {
                         // Bayat adres/port olabilir: mDNS'ten yeniden çözüp bir kez daha dene.
                         val np = reresolve(c, p) ?: throw e

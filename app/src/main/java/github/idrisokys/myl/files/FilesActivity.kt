@@ -120,6 +120,11 @@ class FilesActivity : Activity() {
 
     private fun hasPerm() = StoragePerm.has(this)
 
+    override fun onDestroy() {
+        sendPopup?.dispose()
+        super.onDestroy()
+    }
+
     override fun onResume() {
         super.onResume()
         if (hasPerm()) { if (cur != null || list != null) refresh(true) }
@@ -569,48 +574,12 @@ class FilesActivity : Activity() {
         quickShareDialog(files)
     }
 
-    /** Hızlı Paylaş penceresi: tarama/gönderim mantığı Notlarım ile ortak [QuickShareSession]'dadır, burası yalnızca View arayüzüdür. */
+    private var sendPopup: github.idrisokys.myl.qs.SendPopup? = null
+
+    /** Ana ekrandaki paylaşım penceresiyle aynı kod ([SendPopup]): cihaz arama, gönderme ve "Nasıl eşitlensin?". */
     private fun quickShareDialog(files: List<File>) {
-        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(24), dp(8), dp(24), 0) }
-        val statusV = TextView(this).apply { textSize = 13f; visibility = View.GONE; setPadding(0, dp(8), 0, 0) }
-        box.addView(LinearLayout(this).apply {
-            gravity = Gravity.CENTER_VERTICAL
-            addView(ProgressBar(this@FilesActivity).apply { isIndeterminate = true }, dp(20), dp(20))
-            addView(TextView(this@FilesActivity).apply { text = L("Cihazlar aranıyor…", "Searching for devices…"); setPadding(dp(12), 0, 0, 0) })
-        })
-        box.addView(statusV)
-        lateinit var dlg: AlertDialog
-        lateinit var session: github.idrisokys.myl.qs.QuickShareSession
-        fun closeBtn(on: Boolean) { dlg.getButton(AlertDialog.BUTTON_NEGATIVE)?.isEnabled = on }
-        session = github.idrisokys.myl.qs.QuickShareSession(this, files,
-            onPeers = { ps ->
-                box.removeAllViews()
-                if (ps.isEmpty()) {
-                    box.addView(TextView(this).apply { text = L("Açık cihaz bulunamadı. Karşı cihazda Hızlı Paylaş açık olmalı.", "No open device found. Quick Share must be on on the other device.") })
-                } else ps.forEach { p ->
-                    box.addView(LinearLayout(this).apply {
-                        gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(12), 0, dp(12))
-                        addView(View(this@FilesActivity).apply { background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(0xFF66BB6A.toInt()) } }, dp(8), dp(8))
-                        addView(TextView(this@FilesActivity).apply { text = p.name; textSize = 16f; maxLines = 1; ellipsize = TextUtils.TruncateAt.END; setPadding(dp(16), 0, 0, 0) })
-                        setOnClickListener { session.send(p) }
-                    })
-                }
-                box.addView(statusV)
-            },
-            onStatus = { st, msg ->
-                statusV.text = msg; statusV.visibility = View.VISIBLE
-                statusV.setTextColor(if (st == 2) 0xFFEF5350.toInt() else 0xFF9E9E9E.toInt())
-                when (st) {
-                    0 -> { dlg.setCanceledOnTouchOutside(false); closeBtn(false) }
-                    1 -> { session.finishSending(); box.postDelayed({ if (dlg.isShowing) dlg.dismiss() }, 1500) }
-                    else -> { dlg.setCanceledOnTouchOutside(true); closeBtn(true) }
-                }
-            })
-        dlg = AlertDialog.Builder(this).setTitle(L("Hızlı Paylaş", "Quick Share") + if (files.size > 1) " (${files.size})" else "")
-            .setView(box).setNegativeButton(L("Kapat", "Close"), null).create()
-        dlg.setOnDismissListener { session.stop() }
-        dlg.show()
-        session.start()
+        val p = sendPopup ?: github.idrisokys.myl.qs.SendPopup(this, { window.decorView }, center = true).also { sendPopup = it }
+        p.showFor(files)
     }
 
     private fun paste() {

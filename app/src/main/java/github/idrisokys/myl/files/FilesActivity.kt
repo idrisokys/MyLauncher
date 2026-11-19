@@ -41,7 +41,7 @@ class FilesActivity : Activity() {
     private var cur: File? = null; private var list: List<File>? = null; private var listTitle = ""
     private var editMode = false
     private lateinit var selAllV: ImageView
-    private var picking = false; private var slotPick = -1; private val sel = linkedSetOf<File>()
+    private var picking = false; private val sel = linkedSetOf<File>()
     private var clip = listOf<File>(); private var cut = false
     private var showHidden = true; private var asked = false
     private var pendingShare: List<Uri>? = null   // dışarıdan paylaşılan, kaydedilmeyi bekleyen dosyalar
@@ -49,7 +49,7 @@ class FilesActivity : Activity() {
     private val prefs by lazy { getSharedPreferences("files", 0) }
     private val IMG = setOf("jpg", "jpeg", "png", "gif", "webp", "bmp", "heic", "svg")
     private val TXT = setOf("txt", "md", "log", "json", "xml", "ini", "conf", "cfg", "yml", "yaml", "properties", "js", "css", "kt", "kts", "java", "py", "sh", "gradle", "srt", "tex")
-    private val df = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault())
+    private val df = SimpleDateFormat("dd HH:mm", Locale.getDefault())
 
     private fun dp(x: Int) = (x * resources.displayMetrics.density).toInt()
     private fun tv(t: String, s: Float, c: Int) = TextView(this).apply { text = t; textSize = s; setTextColor(c) }
@@ -97,7 +97,7 @@ class FilesActivity : Activity() {
         col.addView(tb, -1, dp(54)); col.addView(body, LinearLayout.LayoutParams(-1, 0, 1f))
         col.addView(View(this).apply { setBackgroundColor(0xFF333333.toInt()) }, -1, dp(1))
         col.addView(dock, -1, dp(100))
-        setContentView(col); migratePins(); updateDock(); home()
+        setContentView(col); updateDock(); home()
         if (s == null && (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) == 0) handleShare(intent)
         if (s == null) openRequestedPath(intent)
     }
@@ -162,72 +162,35 @@ class FilesActivity : Activity() {
         crumbS.post { crumbS.fullScroll(View.FOCUS_RIGHT) }
     }
 
+    /** Alttaki sabit dört klasör (ekleme/kaldırma yok). Yoksa oluşturulur. */
+    private val fixedDock = listOf("onemli", "Link", "Resim", "Download")
+
     private fun updateDock() {
         dock.removeAllViews()
-        for (n in 0 until 4) {
-            val p = prefs.getString("slot$n", null)
-            val f = if (p == null) null else File(p)
+        for (name in fixedDock) {
+            val f = File(root, name)
+            if (!f.exists()) try { f.mkdirs() } catch (e: Exception) {}
             val v = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER }
-            if (f == null) {
-                v.addView(ImageView(this).apply {
-                    setImageDrawable(Icons.add()); setColorFilter(0xFF888888.toInt()); setPadding(dp(5), dp(5), dp(5), dp(5))
-                    background = GradientDrawable().apply { setColor(Color.TRANSPARENT); cornerRadius = dp(8).toFloat(); setStroke(dp(1), 0xFF555555.toInt(), dp(4).toFloat(), dp(3).toFloat()) }
-                }, dp(54), dp(54))
-                v.addView(tv("Ekle", 14f, 0xFF888888.toInt()).apply { gravity = Gravity.CENTER })
-                v.setOnClickListener { if (pendingShare != null) return@setOnClickListener; slotPick = n; picking = true; browse(root) }
-            } else {
-                v.addView(ImageView(this).apply { setImageDrawable(Icons.folder()) }, dp(54), dp(54))
-                v.addView(tv(f.name, 14f, 0xFFCCCCCC.toInt()).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END; gravity = Gravity.CENTER; setPadding(dp(2), 0, dp(2), 0) })
-                v.setOnClickListener { if (f.isDirectory) { if (pendingShare == null) { picking = false; list = null }; browse(f) } else Notice.show(this, "Klasör bulunamadı", false) }
-                v.setOnLongClickListener { if (pendingShare == null) slotMenu(n); true }
-                // dosyaları bu klasöre sürükleyip bırakınca taşı
-                v.setOnDragListener { view, e ->
-                    when (e.action) {
-                        DragEvent.ACTION_DRAG_STARTED -> e.clipDescription?.hasMimeType("text/plain") == true
-                        DragEvent.ACTION_DRAG_ENTERED -> { view.setBackgroundColor(0xFF3B5568.toInt()); true }
-                        DragEvent.ACTION_DRAG_EXITED, DragEvent.ACTION_DRAG_ENDED -> { view.setBackgroundColor(Color.TRANSPARENT); true }
-                        DragEvent.ACTION_DROP -> {
-                            val t = e.clipData?.getItemAt(0)?.text?.toString()
-                            if (t != null) moveInto(f, t.split("\n").filter { it.isNotEmpty() }.map { File(it) })
-                            true
-                        }
-                        else -> true
+            v.addView(ImageView(this).apply { setImageDrawable(Icons.folder()) }, dp(54), dp(54))
+            v.addView(tv(name, 14f, 0xFFCCCCCC.toInt()).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END; gravity = Gravity.CENTER; setPadding(dp(2), 0, dp(2), 0) })
+            v.setOnClickListener { if (f.isDirectory) { if (pendingShare == null) { picking = false; list = null }; browse(f) } else Notice.show(this, "Klasör bulunamadı", false) }
+            // dosyaları bu klasöre sürükleyip bırakınca taşı
+            v.setOnDragListener { view, e ->
+                when (e.action) {
+                    DragEvent.ACTION_DRAG_STARTED -> e.clipDescription?.hasMimeType("text/plain") == true
+                    DragEvent.ACTION_DRAG_ENTERED -> { view.setBackgroundColor(0xFF3B5568.toInt()); true }
+                    DragEvent.ACTION_DRAG_EXITED, DragEvent.ACTION_DRAG_ENDED -> { view.setBackgroundColor(Color.TRANSPARENT); true }
+                    DragEvent.ACTION_DROP -> {
+                        val t = e.clipData?.getItemAt(0)?.text?.toString()
+                        if (t != null) moveInto(f, t.split("\n").filter { it.isNotEmpty() }.map { File(it) })
+                        true
                     }
+                    else -> true
                 }
             }
             dock.addView(v, LinearLayout.LayoutParams(0, -1, 1f))
         }
     }
-
-    private fun moveInto(dest: File, files: List<File>) {
-        if (!dest.isDirectory) { Notice.show(this, "Hedef klasör bulunamadı", false); return }
-        Thread {
-            var n = 0
-            files.forEach { f ->
-                if (!f.exists() || f.parentFile == dest) return@forEach
-                if (f.isDirectory && (dest.path + "/").startsWith(f.path + "/")) return@forEach
-                var t = File(dest, f.name); var i = 1
-                while (t.exists()) { t = File(dest, "${f.nameWithoutExtension}_$i" + (if (f.extension.isEmpty() || f.isDirectory) "" else "." + f.extension)); i++ }
-                try { if (!f.renameTo(t)) { f.copyRecursively(t); f.deleteRecursively() }; n++ } catch (e: Exception) {}
-            }
-            runOnUiThread {
-                Notice.show(this, if (n > 0) "$n öğe ${dest.name} klasörüne taşındı" else "Taşınacak öğe yok", false)
-                sel.clear()
-                if (list != null) list = list!!.filter { it.exists() }
-                if (cur != null || list != null) refresh()
-            }
-        }.start()
-    }
-
-    private fun slotMenu(n: Int) {
-        val f = File(prefs.getString("slot$n", null) ?: return)
-        AlertDialog.Builder(this).setTitle(f.name).setItems(arrayOf("Başka klasör seç", "Kaldır")) { _, w ->
-            if (w == 0) { slotPick = n; picking = true; browse(root) } else removeSlot(n)
-        }.setNegativeButton("İptal", null).show()
-    }
-
-    private fun removeSlot(n: Int) { prefs.edit().remove("slot$n").apply(); slotsChanged() }
-    private fun slotsChanged() { updateDock(); if (cur == null && list == null && !picking) home() }
 
     private fun home() {
         cur = null; list = null; sel.clear(); editMode = false; picking = false; pendingShare = null; body.removeAllViews()
@@ -278,14 +241,6 @@ class FilesActivity : Activity() {
         Notice.show(this, if (n > 0) "$n öğe ana ekrana sabitlendi" else "Zaten sabitlenmiş", false)
         refresh()
     }
-
-    private fun migratePins() {
-        if (prefs.getBoolean("mig", false)) return
-        val old = (prefs.getStringSet("pins", emptySet()) ?: emptySet()).sorted().take(4)
-        val e = prefs.edit(); old.forEachIndexed { i, p -> e.putString("slot$i", p) }; e.putBoolean("mig", true).apply()
-    }
-
-    private fun setSlot(n: Int, f: File) { prefs.edit().putString("slot$n", f.path).apply(); slotsChanged() }
 
     private fun browse(d: File) { cur = d; list = null; sel.clear(); editMode = false; refresh() }
 
@@ -364,9 +319,14 @@ class FilesActivity : Activity() {
                 }
                 row.addView(iconView(f), dp(48), dp(48))
                 val c = LinearLayout(this@FilesActivity).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(12), 0, 0, 0) }
-                c.addView(tv(f.name, 19f, Color.WHITE).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END })
+                // Ad: satır sonuna gelince alta devam eder (kısaltma yok)
+                c.addView(tv(f.name, 19f, Color.WHITE))
                 val sub = if (f.isDirectory) "${f.listFiles()?.size ?: 0} öğe" else sz(f.length())
-                c.addView(tv("$sub • ${df.format(Date(f.lastModified()))}", 14f, 0xFF999999.toInt()))
+                // Altta: en solda boyut, en sağda tarih (gün + saat, örn. 09 14:54)
+                val info = LinearLayout(this@FilesActivity).apply { orientation = LinearLayout.HORIZONTAL }
+                info.addView(tv(sub, 14f, 0xFF999999.toInt()), LinearLayout.LayoutParams(0, -2, 1f))
+                info.addView(tv(df.format(Date(f.lastModified())), 14f, 0xFF999999.toInt()))
+                c.addView(info, LinearLayout.LayoutParams(-1, -2))
                 row.addView(c, LinearLayout.LayoutParams(0, -2, 1f))
                 if (pendingShare == null && !picking) {
                     // Üç nokta: tek dokunuş menü (Sabitle / Taşı / Paylaş / Sil / Yeni klasör), basılı tutunca düzenleme modu açılır/kapanır
@@ -393,7 +353,6 @@ class FilesActivity : Activity() {
         val wrap = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         wrap.addView(lv, LinearLayout.LayoutParams(-1, 0, 1f))
         if (pendingShare != null) wrap.addView(saveBar(), -1, dp(52))
-        else if (picking) wrap.addView(Button(this).apply { text = "Bu klasörü seç"; setOnClickListener { if (slotPick in 0..3) setSlot(slotPick, cur!!); slotPick = -1; home() } }, -1, -2)
         else if (clip.isNotEmpty() && cur != null && list == null && !editMode) wrap.addView(pasteBar(), -1, dp(52))
         if (keepScroll && (sPos > 0 || sTop != 0)) lv.setSelectionFromTop(minOf(sPos, maxOf(0, l.size - 1)), sTop)
         curLv = lv
@@ -403,9 +362,13 @@ class FilesActivity : Activity() {
 
     /** Basılı tutulan dosya/klasörün adını değiştirir. */
     private fun renameItem(f: File) {
-        promptText("Yeni ad", f.name) { n ->
-            val name = n.trim()
-            if (name.isEmpty() || name == f.name) return@promptText
+        // Dosyalarda uzantı gösterilmez/değiştirilmez; sadece ad düzenlenir (klasörlerde tüm ad)
+        val dot = f.name.lastIndexOf('.')
+        val ext = if (f.isFile && dot > 0) f.name.substring(dot) else ""
+        val baseName = if (ext.isEmpty()) f.name else f.name.substring(0, dot)
+        promptText("Yeni ad", baseName) { n ->
+            val name = n.trim() + ext
+            if (n.trim().isEmpty() || name == f.name) return@promptText
             if (name.contains('/')) { Notice.show(this, "Ad '/' içeremez", false); return@promptText }
             val t = File(f.parentFile, name)
             if (t.exists()) { Notice.show(this, "Bu adda bir öğe zaten var", false); return@promptText }
@@ -607,7 +570,7 @@ class FilesActivity : Activity() {
         i.clipData?.let { cd -> for (k in 0 until cd.itemCount) cd.getItemAt(k).uri?.let { us.add(it) } }
         if (us.isEmpty()) { Notice.show(this, "Paylaşılan dosya bulunamadı", false); return }
         pendingShare = us.toList()
-        slotPick = -1; picking = true; list = null; sel.clear(); editMode = false
+        picking = true; list = null; sel.clear(); editMode = false
         val last = File(prefs.getString("lastSave", null) ?: "")
         browse(if (last.isDirectory) last else root)
     }

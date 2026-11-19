@@ -121,7 +121,7 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
     val clipboard = LocalClipboardManager.current
     val focus = LocalFocusManager.current
 
-    val maxChars = 220      // ad değiştirme sınırı
+    val maxChars = Store.ADD_MAX   // ad değiştirme sınırı: aşılırsa .url → .txt
     val addMax = Store.ADD_MAX   // alttaki ekleme alanı sınırı
     fun toast(s: String) = Notice.show(ctx, s, false)
     fun placeName(u: Uri): String = if (u == root) L("Ana liste", "Main list") else java.io.File(u.path ?: "").name
@@ -160,8 +160,8 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
     val list = loaded ?: emptyList()
     // Düzenleme modunda tam bir öğe seçiliyse adı alttaki geniş alanda değiştirilir
     val rn: Entry? = if (editMode && selected.size == 1) list.firstOrNull { it.key in selected } else null
-    // .url kayıtlarında (link/not) ad alanı sınırsızdır; 220'yi aşarsa kayıt otomatik .txt olur. Klasör ve .txt adları 220 ile sınırlı kalır.
-    val editCap = if (rn != null && !rn.isDir && !rn.isTxt) 20_000 else 220
+    // .url kayıtlarında (link/not) ad alanı sınırsızdır; 116'yı aşarsa kayıt otomatik .txt olur. .txt ve klasör adları da 116 ile sınırlıdır.
+    val editCap = if (rn != null && !rn.isDir && !rn.isTxt) 20_000 else maxChars
     LaunchedEffect(rn?.key) { renameText = rn?.title ?: "" }
     LaunchedEffect(current) { selected = emptySet() }   // klasör değişince işaretler temizlenir
     BackHandler(searchQuery != null || editMode || stack.isNotEmpty()) {
@@ -378,7 +378,7 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
                     hint = if (rn.isDir) L("Klasör adı", "Folder name") else L("Ad", "Name"),
                     minLines = 1, maxLines = 4, send = true, onSend = { saveRename() })
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    val over = renameText.length > maxChars
+                    val over = !rn.isDir && !rn.isTxt && renameText.length > maxChars      // yalnızca .url → .txt dönüşümü
                     Text(if (over) "${renameText.length}/$maxChars → .txt" else "${renameText.length}/$maxChars", style = MaterialTheme.typography.labelSmall,
                         color = if (over) MaterialTheme.colorScheme.error else Color.Unspecified, modifier = Modifier.padding(start = 8.dp))
                     EditModeButton(editMode) { editMode = !editMode; selected = emptySet() }

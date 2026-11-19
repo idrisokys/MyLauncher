@@ -56,7 +56,7 @@ object Store {
         else ctx.checkSelfPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
 
     /** Ekleme alanı sınırı: bundan uzun metin (tek parça link hariç) .txt dosyası olur. */
-    const val ADD_MAX = 220
+    const val ADD_MAX = 116
 
     /** Veri klasörü (<ana dizin>/Link). Diskte link / Link / LINK gibi farklı yazılmış olabilir; var olan yazım kullanılır. */
     fun dataDir(): File {
@@ -225,7 +225,7 @@ object Store {
     /** Metni, uzunluk sınırı olmadan düz .txt dosyası olarak kaydeder; ad metnin ilk 100 karakteridir. */
     fun addTextFile(ctx: Context, dir: Uri, text: String): Boolean {
         val title = text.replace(WS, " ").trim().ifBlank { "not" }
-        return write(otherDir(ctx, dir), title, text.toByteArray(Charsets.UTF_8), 100, ".txt")
+        return write(otherDir(ctx, dir), title, text.toByteArray(Charsets.UTF_8), ADD_MAX, ".txt")
     }
 
     /** .txt dosyasının tamamını okur. */
@@ -375,7 +375,7 @@ object Store {
     fun addFolder(ctx: Context, dir: Uri, name: String) = synchronized(mutex) {
         try {
             val all = children(dir)
-            val base = clean(name)
+            val base = clean(name, ADD_MAX)   // klasör adı da 116 ile sınırlı
             var n = base; var i = 2
             while (all.any { it.name.equals(n, true) }) { n = "$base ($i)"; i++ }
             File(file(dir), n).mkdir()
@@ -387,7 +387,7 @@ object Store {
     /** Link (.url) veya klasör adını değiştirir; sıralamayı korur. */
     fun rename(ctx: Context, dir: Uri, e: Entry, title: String): Boolean = synchronized(mutex) {
         try {
-            val base = clean(title, 220)
+            val base = clean(title, if (e.isDir || e.isTxt) ADD_MAX else 220)   // klasör ve .txt adları 116 ile sınırlı
             val newName = if (e.isDir) base else base + e.ext
             val all = children(dir)
             // Kısa metin (not) ise: kopyalanan içerik de yeni ada uysun diye dosya içeriği güncellenir
@@ -423,7 +423,7 @@ object Store {
     }
 
     /**
-     * Düzenlenen .url kaydı ad sınırını ([ADD_MAX] / 220) aşınca çağrılır: kayıt, aynı yerde .txt dosyasına dönüşür
+     * Düzenlenen .url kaydı ad sınırını ([ADD_MAX]) aşınca çağrılır: kayıt, aynı yerde .txt dosyasına dönüşür
      * (içerik = [text]; sıralamadaki yeri korunur, eski .url silinir). Dosya adı metnin ilk 100 karakteridir.
      */
     fun convertToTxt(ctx: Context, dir: Uri, e: Entry, text: String): Boolean = synchronized(mutex) {
@@ -431,7 +431,7 @@ object Store {
             val all = childrenOrNull(dir) ?: return false
             val order = ordered(all).map { it.name }
             val taken = all.filter { it.uri != e.uri }.mapTo(HashSet()) { it.name.lowercase() }
-            val b = clean(text.replace(WS, " ").trim().ifBlank { "not" }, 100)
+            val b = clean(text.replace(WS, " ").trim().ifBlank { "not" }, ADD_MAX)
             var name = "$b.txt"; var i = 2
             while (name.lowercase() in taken) { name = "$b ($i).txt"; i++ }
             File(file(dir), name).writeText(text, Charsets.UTF_8)

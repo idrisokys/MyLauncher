@@ -1,9 +1,0 @@
-.DS_Store
-.gradle/
-build/
-*/build/
-local.properties
-keystore.properties
-*.jks
-*.keystore
-.idea/

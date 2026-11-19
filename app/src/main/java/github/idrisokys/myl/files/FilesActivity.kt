@@ -163,7 +163,7 @@ class FilesActivity : Activity() {
     }
 
     /** Alttaki sabit dört klasör (ekleme/kaldırma yok). Yoksa oluşturulur. */
-    private val fixedDock = listOf("onemli", "Link", "Resim", "Download")
+    private val fixedDock = listOf(".onemli", "Link", "Resim", "Download")
 
     private fun updateDock() {
         dock.removeAllViews()
@@ -172,7 +172,7 @@ class FilesActivity : Activity() {
             if (!f.exists()) try { f.mkdirs() } catch (e: Exception) {}
             val v = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER }
             v.addView(ImageView(this).apply { setImageDrawable(Icons.folder()) }, dp(54), dp(54))
-            v.addView(tv(name, 14f, 0xFFCCCCCC.toInt()).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END; gravity = Gravity.CENTER; setPadding(dp(2), 0, dp(2), 0) })
+            v.addView(tv(name.removePrefix("."), 14f, 0xFFCCCCCC.toInt()).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END; gravity = Gravity.CENTER; setPadding(dp(2), 0, dp(2), 0) })
             v.setOnClickListener { if (f.isDirectory) { if (pendingShare == null) { picking = false; list = null }; browse(f) } else Notice.show(this, "Klasör bulunamadı", false) }
             // dosyaları bu klasöre sürükleyip bırakınca taşı
             v.setOnDragListener { view, e ->

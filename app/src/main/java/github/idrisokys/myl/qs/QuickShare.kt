@@ -272,6 +272,7 @@ class Receiver(private val ctx: Context) {
                 var sync = false          // Notlarım eşitlemesi: X-Name göreli yoldur (alt klasörlü)
                 var mtime = -1L
                 var isDir = false
+                var root = ""             // "dl": eşitleme Link yerine Download klasöründe
                 while (true) {
                     val l = line(ins)
                     if (l.isEmpty()) break
@@ -282,7 +283,9 @@ class Receiver(private val ctx: Context) {
                     else if (k == "x-sync") sync = v == "1"
                     else if (k == "x-mtime") mtime = v.toLongOrNull() ?: -1L
                     else if (k == "x-dir") isDir = v == "1"
+                    else if (k == "x-root") root = v
                 }
+                NoteSync.dlMode.set(root == "dl")
 
                 // Notlarım eşitleme uç noktaları (düz dosya gönderiminden bağımsız)
                 if (method == "GET" && target == "/m") {

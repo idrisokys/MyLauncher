@@ -58,9 +58,22 @@ object NoteSync {
 
     // ---------------------------------------------------------------- ortak yardımcılar
 
-    private fun root(): File = Store.dataDir()
+    /**
+     * Eşitlenen klasör: false = <ana dizin>/Link (yalnızca .url / .txt), true = Download (her dosya türü).
+     * İş parçacığına bağlıdır: istemci [run] başında, sunucu her istekte X-Root başlığına göre ayarlar.
+     */
+    val dlMode: ThreadLocal<Boolean> = ThreadLocal.withInitial { false }
+    private fun dl() = dlMode.get() == true
 
-    private fun isNoteName(n: String) = !n.endsWith(".part", true) && (n.endsWith(".url", true) || n.endsWith(".txt", true))
+    private fun root(): File =
+        if (dl()) android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS) else Store.dataDir()
+
+    private fun isNoteName(n: String): Boolean =
+        if (dl()) !n.startsWith(".") && n.none { it.code < 32 || it in ":*?\"<>|\\" } && !n.endsWith(".part", true) && !n.endsWith(".tmp", true) && !n.endsWith(".crdownload", true)
+        else !n.endsWith(".part", true) && (n.endsWith(".url", true) || n.endsWith(".txt", true))
+
+    /** Karşı cihaza giden isteklere eklenen başlık: Download eşitlemesinde kök klasörü belirtir. */
+    private fun rootHdr() = if (dl()) "X-Root: dl\r\n" else ""
 
     /** macOS dosya adları ayrışık (NFD: "s"+"̧") olabilir; Android'dekiyle eşleşsin diye birleşik (NFC) biçime çevrilir. */
     private fun nfc(s: String) = java.text.Normalizer.normalize(s, java.text.Normalizer.Form.NFC)
@@ -83,7 +96,7 @@ object NoteSync {
             if (sg.isEmpty() || sg == "." || sg == ".." || sg.toByteArray().size > 240) return null
             if (sg.any { it.code < 32 || it in ":*?\"<>|\\" }) return null
         }
-        if (!dir && !(isNoteName(segs.last()) || segs.last() == ".order.txt")) return null
+        if (!dir && !(isNoteName(segs.last()) || (!dl() && segs.last() == ".order.txt"))) return null
         val base = root()
         val f = File(base, segs.joinToString("/"))
         return try {
@@ -100,7 +113,7 @@ object NoteSync {
             val fs = d.listFiles() ?: return
             for (f in fs) {
                 val rel = prefix + f.name
-                if (f.isDirectory) { out[rel] = Item(rel, true, 0, 0); walk(f, "$rel/", depth + 1) }
+                if (f.isDirectory) { if (dl() && f.name.startsWith(".")) continue; out[rel] = Item(rel, true, 0, 0); walk(f, "$rel/", depth + 1) }
                 else if (isNoteName(f.name)) out[rel] = Item(rel, false, f.length(), f.lastModified())
             }
         }
@@ -122,7 +135,7 @@ object NoteSync {
         val sb = StringBuilder()
         for (it in local().values) sb.append(if (it.dir) "D" else "F").append('\t').append(it.size).append('\t')
             .append(it.mtime).append('\t').append(enc(it.rel)).append('\n')
-        respond(s, "200 OK", "", sb.toString().toByteArray(Charsets.UTF_8))
+        respond(s, "200 OK", if (dl()) "X-Root: dl\r\n" else "", sb.toString().toByteArray(Charsets.UTF_8))
     }
 
     /** GET /f (X-Name: yol) : tek dosyayı gönderir. */
@@ -162,7 +175,7 @@ object NoteSync {
         return sb.toString()
     }
 
-    private class Resp(val status: Int, val len: Long, val mtime: Long, val ins: InputStream)
+    private class Resp(val status: Int, val len: Long, val mtime: Long, val ins: InputStream, val root: String = "")
 
     private fun connect(p: Peer): Socket {
         val s = Socket().apply { tcpNoDelay = true; soTimeout = 30000 }
@@ -173,24 +186,29 @@ object NoteSync {
     private fun readResp(s: Socket): Resp {
         val ins = java.io.BufferedInputStream(s.inputStream, 64 * 1024)
         val st = readLine(ins).split(' ').getOrNull(1)?.toIntOrNull() ?: 0
-        var len = 0L; var mt = 0L
+        var len = 0L; var mt = 0L; var rt = ""
         while (true) {
             val l = readLine(ins)
             if (l.isEmpty()) break
             val k = l.substringBefore(':').lowercase(); val v = l.substringAfter(':').trim()
             if (k == "content-length") len = v.toLongOrNull() ?: 0L
             else if (k == "x-mtime") mt = ms(v.toLongOrNull() ?: 0L)
+            else if (k == "x-root") rt = v
         }
-        return Resp(st, len, mt, ins)
+        return Resp(st, len, mt, ins, rt)
     }
 
     private fun fetchManifest(p: Peer): Map<String, Item> {
         connect(p).use { s ->
-            s.outputStream.write("GET /m HTTP/1.1\r\nConnection: close\r\n\r\n".toByteArray()); s.outputStream.flush()
+            s.outputStream.write("GET /m HTTP/1.1\r\n${rootHdr()}Connection: close\r\n\r\n".toByteArray()); s.outputStream.flush()
             val r = readResp(s)
             require(r.status == 200) {
                 L("Karşı cihaz Link eşitlemesini desteklemiyor ya da izni yok (kod ${r.status}). Karşı cihazda uygulamayı güncelleyin, Hızlı Paylaş'ı açın ve dosya erişim izni verin.",
                     "The other device does not support Link sync or has no file access (code ${r.status}). Update the app there, turn Quick Share on and grant file access.")
+            }
+            require(!dl() || r.root == "dl") {
+                L("Karşı cihaz Download eşitlemesini desteklemiyor. Karşı cihazda uygulamayı güncelleyin.",
+                    "The other device does not support Download sync. Update the app there.")
             }
             val bytes = ByteArray(r.len.toInt().coerceIn(0, 8 shl 20))
             var n = 0
@@ -214,7 +232,7 @@ object NoteSync {
         val dest = resolve(it.rel) ?: return
         dest.parentFile?.mkdirs()
         connect(p).use { s ->
-            s.outputStream.write("GET /f HTTP/1.1\r\nX-Name: ${enc(it.raw)}\r\nConnection: close\r\n\r\n".toByteArray()); s.outputStream.flush()
+            s.outputStream.write("GET /f HTTP/1.1\r\nX-Name: ${enc(it.raw)}\r\n${rootHdr()}Connection: close\r\n\r\n".toByteArray()); s.outputStream.flush()
             val r = readResp(s)
             require(r.status == 200) { "${it.rel}: ${r.status}" }
             val tmp = File(dest.parentFile, "${dest.name}.${UUID.randomUUID().toString().take(8)}.part")
@@ -244,7 +262,7 @@ object NoteSync {
         val len = f.length(); val mt = f.lastModified()
         connect(p).use { s ->
             val out = s.outputStream
-            out.write(("POST /u HTTP/1.1\r\nX-Name: ${enc(it.rel)}\r\nX-Sync: 1\r\nX-Mtime: $mt\r\n" +
+            out.write(("POST /u HTTP/1.1\r\nX-Name: ${enc(it.rel)}\r\nX-Sync: 1\r\nX-Mtime: $mt\r\n${rootHdr()}" +
                 "Content-Length: $len\r\nConnection: close\r\n\r\n").toByteArray())
             var sent = 0L
             f.inputStream().use { i ->
@@ -264,7 +282,7 @@ object NoteSync {
 
     private fun mkdirRemote(p: Peer, rel: String) {
         connect(p).use { s ->
-            s.outputStream.write("POST /d HTTP/1.1\r\nX-Name: ${enc(rel)}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".toByteArray())
+            s.outputStream.write("POST /d HTTP/1.1\r\nX-Name: ${enc(rel)}\r\n${rootHdr()}Content-Length: 0\r\nConnection: close\r\n\r\n".toByteArray())
             s.outputStream.flush()
             require(readResp(s).status == 200) { "$rel: mkdir" }
         }
@@ -273,20 +291,16 @@ object NoteSync {
     private fun deleteRemote(p: Peer, rel: String, dir: Boolean) {
         // Bilerek DELETE ve Content-Length yok: bu özelliği bilmeyen eski sürüm isteği "400" ile reddeder (boş dosya oluşturmaz).
         connect(p).use { s ->
-            s.outputStream.write("DELETE /x HTTP/1.1\r\nX-Name: ${enc(rel)}\r\nX-Dir: ${if (dir) 1 else 0}\r\nConnection: close\r\n\r\n".toByteArray())
+            s.outputStream.write("DELETE /x HTTP/1.1\r\nX-Name: ${enc(rel)}\r\nX-Dir: ${if (dir) 1 else 0}\r\n${rootHdr()}Connection: close\r\n\r\n".toByteArray())
             s.outputStream.flush()
             require(readResp(s).status == 200) { "$rel: " + L("silinemedi / eski sürüm", "could not delete / old version") }
         }
     }
 
-    /** Seçilen klasörün (Link'e göre göreli yol, NFC) içindekilerle sınırlar; [sub] boşsa tüm Link klasörü. */
-    private fun scoped(m: Map<String, Item>, sub: String): Map<String, Item> =
-        if (sub.isEmpty()) m else m.filterKeys { it.startsWith("$sub/") }
-
     /** Karşı cihazı bu cihazın aynısı yapar; (gönderilen, silinen) sayısını döndürür. */
-    private fun mirrorPeer(p: Peer, sub: String, errs: MutableList<String>): Pair<Int, Int> {
-        val remote = scoped(fetchManifest(p), sub)
-        val loc = scoped(local(), sub)
+    private fun mirrorPeer(p: Peer, errs: MutableList<String>): Pair<Int, Int> {
+        val remote = fetchManifest(p)
+        val loc = local()
         var sent = 0; var deleted = 0
         val depth = { k: String -> k.count { c -> c == '/' } }
         // 1) Karşıda olup bizde olmayan (ya da türü farklı) öğeleri sil; silinen klasörün içindekiler ayrıca sayılmaz
@@ -310,14 +324,9 @@ object NoteSync {
     }
 
     /** Bu cihazı karşı cihazın aynısı yapar; (alınan, silinen) döndürür. Karşı cihazda yeni sürüm gerekmez. */
-    private fun pullMirror(p: Peer, sub: String, errs: MutableList<String>): Pair<Int, Int> {
-        val all = fetchManifest(p)
-        if (sub.isNotEmpty() && all[sub]?.dir != true) {
-            errs.add(L("${p.name}: bu klasör karşı cihazda yok", "${p.name}: this folder does not exist on the other device"))
-            return 0 to 0
-        }
-        val remote = scoped(all, sub)
-        val loc = scoped(local(), sub)
+    private fun pullMirror(p: Peer, errs: MutableList<String>): Pair<Int, Int> {
+        val remote = fetchManifest(p)
+        val loc = local()
         var got = 0; var deleted = 0
         val depth = { k: String -> k.count { c -> c == '/' } }
         val stale = loc.keys.filter { k -> val r = remote[k]; r == null || r.dir != loc[k]!!.dir }
@@ -342,9 +351,9 @@ object NoteSync {
     }
 
     /** Tek cihazla eşitler; (gönderilen, alınan) sayısını döndürür. Dosya bazlı hatalar [errs]'e eklenir, diğer dosyalar sürer. */
-    private fun syncPeer(p: Peer, sub: String, errs: MutableList<String>): Pair<Int, Int> {
-        val remote = scoped(fetchManifest(p), sub)
-        val loc = scoped(local(), sub)
+    private fun syncPeer(p: Peer, errs: MutableList<String>): Pair<Int, Int> {
+        val remote = fetchManifest(p)
+        val loc = local()
         var sent = 0; var got = 0
         val keys = (loc.keys + remote.keys).sortedWith(compareBy({ it.count { c -> c == '/' } }, { it }))   // üst klasörler önce
         for (k in keys) {
@@ -399,26 +408,21 @@ object NoteSync {
      * Seçilen cihazlarla eşitler. Arka plan iş parçacığında çağrılmalı (ağ + disk).
      * mode: 0 = iki cihaz aynı olsun (birleştirir), 1 = bu cihaza göre, 2 = karşıdaki cihaza göre (ilk seçilen).
      */
-    fun run(c: Context, mode: Int, targets: List<Peer>, folder: String = ""): Result {
+    fun run(c: Context, mode: Int, targets: List<Peer>, download: Boolean = false): Result {
         val res = Result(mode = mode)
-        val sub = nfc(folder.trim('/'))          // yalnızca bu klasör (Link'e göre yol) eşitlenir; boş = tüm Link
+        dlMode.set(download)                     // bu iş parçacığındaki tüm işlemler Link yerine Download klasöründe yürür
         if (!Store.hasAccess(c)) { res.error = L("depolama izni yok", "no storage permission"); return res }
         if (targets.isEmpty()) { res.error = L("cihaz seçilmedi", "no device selected"); return res }
         Identity.init(c)
         // Eşitleme her cihazın ana dizinindeki Link klasörü üzerinden yürür; klasör yoksa (eski QuickShare/Link dahil) hazırlanır.
         if (Store.root(c) == null) { res.error = L("Link klasörü hazırlanamadı", "Could not prepare the Link folder"); return res }
+        if (download) root().mkdirs()
         Hold.acquire(c)
         try {
             for (p0 in if (mode == 2) targets.take(1) else targets) {
                 var p = p0
                 try {
-                    fun go(x: Peer): Pair<Int, Int> {
-                        if (sub.isNotEmpty() && mode != 2) {       // seçilen klasör iki tarafta da var olsun
-                            resolve(sub, dir = true)?.mkdirs()
-                            mkdirRemote(x, sub)
-                        }
-                        return when (mode) { 1 -> mirrorPeer(x, sub, res.errors); 2 -> pullMirror(x, sub, res.errors); else -> syncPeer(x, sub, res.errors) }
-                    }
+                    fun go(x: Peer) = when (mode) { 1 -> mirrorPeer(x, res.errors); 2 -> pullMirror(x, res.errors); else -> syncPeer(x, res.errors) }
                     val (a, b) = try { go(p) } catch (e: java.io.IOException) {
                         // Bayat adres/port olabilir: mDNS'ten yeniden çözüp bir kez daha dene.
                         val np = reresolve(c, p) ?: throw e

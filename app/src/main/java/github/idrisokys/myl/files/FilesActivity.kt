@@ -218,7 +218,7 @@ class FilesActivity : Activity() {
         val base = list ?: (cur?.listFiles()?.toList() ?: emptyList())
         var l = if (showHidden) base else base.filter { !it.name.startsWith(".") }
         if (picking) l = l.filter { it.isDirectory }
-        val sorted = l.sortedByDescending { it.lastModified() }
+        val sorted = l.map { it to it.lastModified() }.sortedByDescending { it.second }.map { it.first }   // tarih dosya başına tek kez okunur
         // Sabitlenenler (üç nokta → Sabitle) listenin başında durur; kendi aralarında tarih sırası korunur
         val pins = topPins()
         return if (pins.isEmpty()) sorted else sorted.filter { it.path in pins } + sorted.filter { it.path !in pins }
@@ -262,6 +262,12 @@ class FilesActivity : Activity() {
         curLv = null; curAdapter = null
         val l = items()
         val topPinSet = topPins()
+        // Boyut/öğe sayısı ve tarih metinleri bir kez hesaplanır; satırlar kaydırmada yeniden kurulurken diske gidilmez
+        val subTexts = ArrayList<String>(l.size); val dateTexts = ArrayList<String>(l.size)
+        l.forEach { f ->
+            subTexts.add(if (f.isDirectory) "${f.list()?.size ?: 0} öğe" else sz(f.length()))
+            dateTexts.add(df.format(Date(f.lastModified())))
+        }
         updateChrome()
         val lv = ListView(this).apply { divider = ColorDrawable(0xFF2E2E2E.toInt()); dividerHeight = dp(1); setBackgroundColor(bg) }
         curLv = lv
@@ -283,11 +289,11 @@ class FilesActivity : Activity() {
                 val c = LinearLayout(this@FilesActivity).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(12), 0, 0, 0) }
                 // Ad: satır sonuna gelince alta devam eder (kısaltma yok)
                 c.addView(tv(f.name, 19f, Color.WHITE))
-                val sub = if (f.isDirectory) "${f.listFiles()?.size ?: 0} öğe" else sz(f.length())
+                val sub = subTexts[p]
                 // Altta: en solda boyut, en sağda tarih (gün + saat, örn. 09 14:54)
                 val info = LinearLayout(this@FilesActivity).apply { orientation = LinearLayout.HORIZONTAL }
                 info.addView(tv(sub, 14f, 0xFF999999.toInt()), LinearLayout.LayoutParams(0, -2, 1f))
-                info.addView(tv(df.format(Date(f.lastModified())), 14f, 0xFF999999.toInt()))
+                info.addView(tv(dateTexts[p], 14f, 0xFF999999.toInt()))
                 c.addView(info, LinearLayout.LayoutParams(-1, -2))
                 row.addView(c, LinearLayout.LayoutParams(0, -2, 1f))
                 if (pendingShare == null && !picking) {

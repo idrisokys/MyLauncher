@@ -25,6 +25,8 @@ android {
         targetSdk = 34
         versionCode = 17
         versionName = "1.14"
+        // Yalnızca arm64-v8a cihazlar için derle (Android 10+ = minSdk 29)
+        ndk { abiFilters += listOf("arm64-v8a") }
     }
 
     androidResources { localeFilters += listOf("tr", "en") }

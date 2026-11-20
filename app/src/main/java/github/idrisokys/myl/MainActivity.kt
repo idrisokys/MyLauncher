@@ -658,6 +658,8 @@ class MainActivity : Activity() {
                 .put("order", JSONArray(order))
                 .put("folders", fo)
                 .put("shortcuts", so)
+                .put("filesPins", JSONArray(
+                    (getSharedPreferences("files", 0).getString("hpins", "") ?: "").split("\n").filter { it.isNotEmpty() }))
                 .toString(2)
             if (Store.root(this) == null) { toast("Düzen kaydedilemedi: Tüm dosyalara erişim izni gerekli"); return }
             val f = layoutFile()
@@ -735,6 +737,13 @@ class MainActivity : Activity() {
                     val x = so.getJSONObject(k)
                     scs[k] = Sc(x.getString("p"), x.getString("i"), x.getString("l"))
                 }
+            }
+            // Dosyalarım ana ekranındaki iğneli öğeler (eski yedeklerde yoksa mevcut iğneler korunur)
+            if (o.has("filesPins")) {
+                val fp = o.getJSONArray("filesPins")
+                val pl = ArrayList<String>()
+                for (i in 0 until fp.length()) pl.add(fp.getString(i))
+                getSharedPreferences("files", 0).edit().putString("hpins", pl.joinToString("\n")).apply()
             }
             folderDialog?.dismiss()
             order.clear(); order.addAll(ord)

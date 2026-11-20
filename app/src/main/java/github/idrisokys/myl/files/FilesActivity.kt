@@ -6,9 +6,7 @@ import github.idrisokys.myl.common.*
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.ActivityNotFoundException
-import android.content.ClipData
 import android.content.Intent
-import android.view.DragEvent
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
@@ -36,8 +34,8 @@ class FilesActivity : Activity() {
     companion object { const val EXTRA_PATH = "github.idrisokys.myl.files.PATH" }
 
     private val PINNED_RED = 0xFFB71C1C.toInt()   // sabitlenmiş öğenin üç noktası
-    private val dockBg = 0xFF1A1A1A.toInt(); private val bg = 0xFF121212.toInt(); private val bar = 0xFF212121.toInt(); private val card = 0xFF1E1E1E.toInt()
-    private lateinit var titleV: TextView; private lateinit var closeV: ImageView; private lateinit var titleRow: LinearLayout; private lateinit var body: FrameLayout; private lateinit var crumbS: HorizontalScrollView; private lateinit var crumbL: LinearLayout; private lateinit var dock: LinearLayout
+    private val bg = 0xFF121212.toInt(); private val bar = 0xFF212121.toInt(); private val card = 0xFF1E1E1E.toInt()
+    private lateinit var titleV: TextView; private lateinit var closeV: ImageView; private lateinit var titleRow: LinearLayout; private lateinit var body: FrameLayout; private lateinit var crumbS: HorizontalScrollView; private lateinit var crumbL: LinearLayout
     private var cur: File? = null; private var list: List<File>? = null; private var listTitle = ""
     private var editMode = false
     private lateinit var editV: ImageView   // sağ üstte seçim (düzenleme) modu düğmesi
@@ -95,11 +93,8 @@ class FilesActivity : Activity() {
         tb.setPadding(dp(12), 0, dp(12), 0); tb.addView(center, LinearLayout.LayoutParams(0, -1, 1f))
         tb.addView(editV, LinearLayout.LayoutParams(dp(40), dp(40)))
         body = FrameLayout(this)
-        dock = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setBackgroundColor(dockBg) }
         col.addView(tb, -1, dp(54)); col.addView(body, LinearLayout.LayoutParams(-1, 0, 1f))
-        col.addView(View(this).apply { setBackgroundColor(0xFF333333.toInt()) }, -1, dp(1))
-        col.addView(dock, -1, dp(100))
-        setContentView(col); updateDock(); home()
+        setContentView(col); home()
         if (s == null && (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) == 0) handleShare(intent)
         if (s == null) openRequestedPath(intent)
     }
@@ -164,56 +159,6 @@ class FilesActivity : Activity() {
             }, LinearLayout.LayoutParams(-2, -1))
         }
         crumbS.post { crumbS.fullScroll(View.FOCUS_RIGHT) }
-    }
-
-    /** Alttaki sabit dört klasör (ekleme/kaldırma yok). Yoksa oluşturulur. */
-    private val fixedDock = listOf(".onemli", "Link", "Resim", "Download")
-
-    private fun updateDock() {
-        dock.removeAllViews()
-        for (name in fixedDock) {
-            val f = File(root, name)
-            if (!f.exists()) try { f.mkdirs() } catch (e: Exception) {}
-            val v = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER }
-            v.addView(ImageView(this).apply { setImageDrawable(Icons.folder()) }, dp(54), dp(54))
-            v.addView(tv(name.removePrefix("."), 14f, 0xFFCCCCCC.toInt()).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END; gravity = Gravity.CENTER; setPadding(dp(2), 0, dp(2), 0) })
-            v.setOnClickListener { if (f.isDirectory) { if (pendingShare == null) { picking = false; list = null }; browse(f) } else Notice.show(this, "Klasör bulunamadı", false) }
-            // dosyaları bu klasöre sürükleyip bırakınca taşı
-            v.setOnDragListener { view, e ->
-                when (e.action) {
-                    DragEvent.ACTION_DRAG_STARTED -> e.clipDescription?.hasMimeType("text/plain") == true
-                    DragEvent.ACTION_DRAG_ENTERED -> { view.setBackgroundColor(0xFF3B5568.toInt()); true }
-                    DragEvent.ACTION_DRAG_EXITED, DragEvent.ACTION_DRAG_ENDED -> { view.setBackgroundColor(Color.TRANSPARENT); true }
-                    DragEvent.ACTION_DROP -> {
-                        val t = e.clipData?.getItemAt(0)?.text?.toString()
-                        if (t != null) moveInto(f, t.split("\n").filter { it.isNotEmpty() }.map { File(it) })
-                        true
-                    }
-                    else -> true
-                }
-            }
-            dock.addView(v, LinearLayout.LayoutParams(0, -1, 1f))
-        }
-    }
-
-    private fun moveInto(dest: File, files: List<File>) {
-        if (!dest.isDirectory) { Notice.show(this, "Hedef klasör bulunamadı", false); return }
-        Thread {
-            var n = 0
-            files.forEach { f ->
-                if (!f.exists() || f.parentFile == dest) return@forEach
-                if (f.isDirectory && (dest.path + "/").startsWith(f.path + "/")) return@forEach
-                var t = File(dest, f.name); var i = 1
-                while (t.exists()) { t = File(dest, "${f.nameWithoutExtension}_$i" + (if (f.extension.isEmpty() || f.isDirectory) "" else "." + f.extension)); i++ }
-                try { if (!f.renameTo(t)) { f.copyRecursively(t); f.deleteRecursively() }; n++ } catch (e: Exception) {}
-            }
-            runOnUiThread {
-                Notice.show(this, if (n > 0) "$n öğe ${dest.name} klasörüne taşındı" else "Taşınacak öğe yok", false)
-                sel.clear()
-                if (list != null) list = list!!.filter { it.exists() }
-                if (cur != null || list != null) refresh()
-            }
-        }.start()
     }
 
     private fun home() {
@@ -328,17 +273,9 @@ class FilesActivity : Activity() {
                 val f = l[p]
                 val row = LinearLayout(this@FilesActivity).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(dp(12), dp(5), dp(12), dp(5)); if (f in sel) setBackgroundColor(0xFF2C3E50.toInt()) }
                 if (editMode) {
-                    // Soldaki boş alan: seç/kaldır ve (seçiliyse) sürükle SADECE buradan yapılır. Seçili satır renkli görünür.
+                    // Soldaki boş alan: sadece seç/kaldır
                     val hit = android.widget.FrameLayout(this@FilesActivity).apply {
                         setOnClickListener { toggle(f) }
-                        setOnLongClickListener {
-                            // sadece seçili bir kutucuğa basılı tutunca seçilenleri alttaki sabit klasörlere sürükle
-                            if (f in sel && pendingShare == null) {
-                                val payload = sel.joinToString("\n") { it.absolutePath }
-                                try { row.startDragAndDrop(ClipData.newPlainText("dosya", payload), View.DragShadowBuilder(row), null, 0) } catch (e: Exception) {}
-                            }
-                            true
-                        }
                     }
                     row.addView(hit, LinearLayout.LayoutParams(dp(56), dp(56)))
                 }
@@ -370,7 +307,7 @@ class FilesActivity : Activity() {
         lv.setOnItemLongClickListener { _, v, p, _ ->
             if (pendingShare != null) return@setOnItemLongClickListener true
             val f = l[p]
-            // seçim modunda satırın kendisi etkisiz (seç/sürükle sadece kutucuktan); aksi halde basılı tutunca ad değiştir
+            // seçim modunda satırın kendisi etkisiz (seçme sadece kutucuktan); aksi halde basılı tutunca ad değiştir
             if (!editMode) renameItem(f)
             true
         }

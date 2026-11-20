@@ -31,7 +31,26 @@ class PathIcon(private val vp: Float, private val layers: List<Pair<String, Int>
     override fun getOpacity() = PixelFormat.TRANSLUCENT
 }
 
+/** Seçim (düzenleme) modu simgesi: iç içe iki halka (Notlarım'daki ile aynı). */
+class RingsIcon : Drawable() {
+    private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; color = 0xFFFFFFFF.toInt() }
+    override fun draw(canvas: Canvas) {
+        val b = bounds; if (b.isEmpty) return
+        val d = minOf(b.width(), b.height()).toFloat()
+        val w = d / 12f   // 24 birimde 2 birim
+        paint.strokeWidth = w
+        val cx = b.exactCenterX(); val cy = b.exactCenterY()
+        canvas.drawCircle(cx, cy, d / 2f - w / 2f, paint)
+        canvas.drawCircle(cx, cy, d / 4f, paint)
+    }
+    override fun setAlpha(a: Int) { paint.alpha = a; invalidateSelf() }
+    override fun setColorFilter(cf: ColorFilter?) { paint.colorFilter = cf; invalidateSelf() }
+    @Deprecated("Deprecated in Java")
+    override fun getOpacity() = PixelFormat.TRANSLUCENT
+}
+
 object Icons {
+    fun editMode() = RingsIcon()
     private const val W = 0xFFFFFFFF.toInt()
     private fun m(d: String) = PathIcon(24f, listOf(d to W))
 

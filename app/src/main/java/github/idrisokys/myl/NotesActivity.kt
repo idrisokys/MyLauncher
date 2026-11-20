@@ -61,7 +61,7 @@ private val DarkScheme = darkColorScheme()
 private val PinnedRed = Color(0xFFB71C1C)
 private val blockedSchemes = setOf("file", "content", "intent", "javascript", "android-app")
 
-/** Launcher arama kutusundan "Notlarımda ara" ile gelen sorgu (Intent extra'sı). */
+/** Launcher arama sonucundan (.txt / klasör) gelen sorgu (Intent extra'sı). */
 const val EXTRA_QUERY = "query"
 
 /** Eski adıyla LinkCepte: linkleri ve notları <ana dizin>/Link klasöründe .url / .txt olarak tutar. */
@@ -124,7 +124,6 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
     val maxChars = Store.ADD_MAX   // ad değiştirme sınırı: aşılırsa .url → .txt
     val addMax = Store.ADD_MAX   // alttaki ekleme alanı sınırı
     fun toast(s: String) = Notice.show(ctx, s, false)
-    fun placeName(u: Uri): String = if (u == root) L("Ana liste", "Main list") else java.io.File(u.path ?: "").name
     fun run(reload: Boolean = true, block: () -> Unit) {
         scope.launch { lock.withLock { withContext(Dispatchers.IO) { block() } }; if (reload) tick++ }
     }
@@ -422,26 +421,20 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
             },
             navigationIcon = { IconButton({ exitSearch(true) }) { Icon(Icons.Default.ArrowBack, L("Aramadan çık", "Exit search")) } })
         else TopAppBar(
+            // Tüm simgeler solda, geri okunun hemen yanında; başlık metni yok (yalnızca seçili sayısı gösterilir)
             title = {
-                Text(
-                    if (editMode && selected.isNotEmpty()) L("${selected.size} seçili", "${selected.size} selected") else if (stack.isEmpty()) L("Notlarım", "My Notes") else stack.last().name,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton({ dialog = "folder" }) { Icon(Icons.Default.CreateNewFolder, L("Klasör", "Folder")) }
+                    IconButton({ refreshAll() }) { Icon(Icons.Default.Refresh, L("Yenile", "Refresh")) }
+                    // Çöp: seçilenleri hızlıca .onemsiz klasörüne taşır
+                    IconButton({
+                        val items = list.filter { it.key in selected }
+                        if (items.isEmpty()) toast(L("Önce öğe seçin", "Select items first")) else deleteNow(items)
+                    }) { Icon(Icons.Default.Delete, L("Seçilenleri .onemsiz klasörüne taşı", "Move selected to .onemsiz")) }
+                    if (editMode && selected.isNotEmpty()) Text(L("${selected.size} seçili", "${selected.size} selected"), style = MaterialTheme.typography.titleSmall, maxLines = 1, modifier = Modifier.padding(start = 4.dp))
+                }
             },
-            navigationIcon = { if (stack.isNotEmpty()) IconButton({ stack = stack.dropLast(1) }) { Icon(Icons.Default.ArrowBack, L("Geri", "Back")) } },
-            actions = {
-                IconButton({ dialog = "folder" }) { Icon(Icons.Default.CreateNewFolder, L("Klasör", "Folder")) }
-                // U: içinde bulunulan klasör linklerin (URL) varsayılan kayıt yeri olur
-                IconButton({
-                    Store.setPlaceU(ctx, current)
-                    toast(L("Veri yeri U: ", "Data place U: ") + placeName(current))
-                }) { Text("U", style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) }
-                // D: içinde bulunulan klasör diğer kayıtların (kısa metin ve .txt) varsayılan kayıt yeri olur
-                IconButton({
-                    Store.setPlaceD(ctx, current)
-                    toast(L("Veri yeri D: ", "Data place D: ") + placeName(current))
-                }) { Text("D", style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) }
-                IconButton({ refreshAll() }) { Icon(Icons.Default.Refresh, L("Yenile", "Refresh")) }
-            })
+            navigationIcon = { if (stack.isNotEmpty()) IconButton({ stack = stack.dropLast(1) }) { Icon(Icons.Default.ArrowBack, L("Geri", "Back")) } })
     }) { pad ->
         if (searchQuery != null) SearchResults(pad, hits, { open(it) }) { path ->
             exitSearch(true); stack = path

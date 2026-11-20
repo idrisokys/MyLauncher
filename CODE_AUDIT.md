@@ -100,7 +100,7 @@
 ## 1.7 değişiklikleri
 
 - Tanı kaydı özelliği tamamen kaldırıldı: menü satırı, çökme/yaşam döngüsü kayıt kodu, simge ve ilgili importlar. Eski sürümlerden kalan `life.txt` ve `crash.txt` dosyaları silinmez; zararsızdır.
-- Arama sonuçlarından "Google'da ara" kaldırıldı; yerine ColorOS 13 ayarlarında yerel arama eklendi (`SettingsIndex.kt`).
+- Arama sonuçlarından "Google'da ara" kaldırıldı; ayar araması da sonradan kaldırıldı (`SettingsIndex.kt` silindi). Ana ekran aramasında Notlarım sonuçları doğrudan listelenir (en fazla 3).
 - Uygulama listesi yenilemesinde beklenmedik bir hata (bellek hatası dahil) `loading` bayrağını takılı bırakmasın diye yakalama genişletildi.
 - Sürüm `1.7 (versionCode 10)`.
 

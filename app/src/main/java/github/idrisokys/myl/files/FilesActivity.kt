@@ -41,6 +41,7 @@ class FilesActivity : Activity() {
     private var cur: File? = null; private var list: List<File>? = null; private var listTitle = ""
     private var editMode = false
     private lateinit var selAllV: ImageView
+    private lateinit var editV: ImageView   // sağ üstte seçim (düzenleme) modu düğmesi
     private var picking = false; private val sel = linkedSetOf<File>()
     private var clip = listOf<File>(); private var cut = false
     private var showHidden = true; private var asked = false
@@ -77,6 +78,11 @@ class FilesActivity : Activity() {
                 selectionChanged()
             }
         }
+        editV = ImageView(this).apply {
+            setImageDrawable(Icons.editMode()); setPadding(dp(8), dp(8), dp(8), dp(8)); visibility = View.GONE
+            contentDescription = "Seçim modu"
+            setOnClickListener { toggleEditMode() }
+        }
         pinV = ImageView(this).apply {
             setImageDrawable(Icons.pin()); setColorFilter(Color.WHITE); setPadding(dp(8), dp(8), dp(8), dp(8)); visibility = View.GONE
             contentDescription = "Ana ekrana sabitle"; setOnClickListener { pinSelected() }
@@ -92,6 +98,7 @@ class FilesActivity : Activity() {
         tb.setPadding(dp(12), 0, dp(12), 0); tb.addView(center, LinearLayout.LayoutParams(0, -1, 1f))
         tb.addView(selAllV, LinearLayout.LayoutParams(dp(40), dp(40)))
         tb.addView(cancelV, LinearLayout.LayoutParams(-2, -1))
+        tb.addView(editV, LinearLayout.LayoutParams(dp(40), dp(40)))
         body = FrameLayout(this)
         dock = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setBackgroundColor(dockBg) }
         col.addView(tb, -1, dp(54)); col.addView(body, LinearLayout.LayoutParams(-1, 0, 1f))
@@ -142,6 +149,10 @@ class FilesActivity : Activity() {
         if (crumbs) buildCrumbs()
         cancelV.visibility = if (editMode) View.VISIBLE else View.GONE
         selAllV.visibility = if (editMode) View.VISIBLE else View.GONE
+        // Seçim modu düğmesi: etkinken açık mor, değilken beyaz; paylaşım kaydı / klasör seçme ekranlarında ve ana listede yok
+        val canEdit = pendingShare == null && !picking && (cur != null || list != null)
+        editV.visibility = if (canEdit) View.VISIBLE else View.GONE
+        editV.setColorFilter(if (editMode) 0xFFD0BCFF.toInt() else Color.WHITE)
     }
 
     private fun buildCrumbs() {
@@ -349,13 +360,12 @@ class FilesActivity : Activity() {
                 c.addView(info, LinearLayout.LayoutParams(-1, -2))
                 row.addView(c, LinearLayout.LayoutParams(0, -2, 1f))
                 if (pendingShare == null && !picking) {
-                    // Üç nokta: tek dokunuş menü (Sabitle / Taşı / Paylaş / Sil / Yeni klasör), basılı tutunca düzenleme modu açılır/kapanır
+                    // Üç nokta: tek dokunuş menü (Sabitle / Taşı / Paylaş / Sil / Yeni klasör); seçim modu sağ üstteki düğmeden açılır
                     row.addView(ImageView(this@FilesActivity).apply {
                         // Sabitlenmiş öğe: üç nokta koyu kırmızı
                         setImageDrawable(Icons.more()); setColorFilter(if (f.path in topPinSet) PINNED_RED else Color.WHITE); setPadding(dp(10), dp(10), dp(10), dp(10))
                         contentDescription = "Menü"
                         setOnClickListener { itemMenu(f, it) }
-                        setOnLongClickListener { toggleEditMode(); true }
                     }, LinearLayout.LayoutParams(dp(48), dp(48)))
                 }
                 return row
@@ -403,7 +413,7 @@ class FilesActivity : Activity() {
     }
 
 
-    /** Üç noktaya basılı tutunca düzenleme (seçim) modu açılır, tekrar basılı tutunca kapanır. */
+    /** Sağ üstteki düğme: düzenleme (seçim) modunu açar / kapatır. */
     private fun toggleEditMode() { editMode = !editMode; sel.clear(); refresh(true) }
 
     /** Üç nokta menüsü. Öğe, birden çok seçilenin içindeyse işlem tüm seçilenlere uygulanır. */

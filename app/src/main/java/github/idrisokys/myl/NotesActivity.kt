@@ -65,6 +65,7 @@ import kotlinx.coroutines.withContext
 
 private val DarkScheme = darkColorScheme()
 private val NotesBar = Color(0xFF092C29)   // alt bar rengi
+private val NotesLine = Color(0xFF457467)  // satır arası çizgi rengi
 /** Sabitlenmiş öğenin üç nokta simgesinin rengi (koyu kırmızı). */
 private val PinnedRed = Color(0xFFB71C1C)
 private val blockedSchemes = setOf("file", "content", "intent", "javascript", "android-app")
@@ -503,7 +504,7 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
                             }
                             }
                         })
-                    HorizontalDivider()
+                    HorizontalDivider(color = NotesLine)
                 }
             }
         }
@@ -791,7 +792,7 @@ fun SearchResults(pad: PaddingValues, hits: List<Hit>?, onOpen: (Entry) -> Unit,
                     headlineContent = { Text(h.entry.title, fontSize = 19.sp, maxLines = 4, overflow = TextOverflow.Ellipsis) },
                     supportingContent = { if (!h.isNote && h.detail.isNotBlank()) Text(h.detail, maxLines = 2, overflow = TextOverflow.Ellipsis) },
                     trailingContent = { IconButton({ onGoto(h.path) }) { Icon(Icons.Default.FolderOpen, L("Klasöre git", "Go to folder")) } })
-                HorizontalDivider()
+                HorizontalDivider(color = NotesLine)
             }
         }
     }

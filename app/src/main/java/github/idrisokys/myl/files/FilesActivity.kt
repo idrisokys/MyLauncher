@@ -276,7 +276,7 @@ class FilesActivity : Activity() {
             dateTexts.add(df.format(Date(f.lastModified())))
         }
         updateChrome()
-        val lv = ListView(this).apply { divider = ColorDrawable(0xFF2E2E2E.toInt()); dividerHeight = dp(1); setBackgroundColor(Color.TRANSPARENT) }
+        val lv = ListView(this).apply { divider = ColorDrawable(0xFF457467.toInt()); dividerHeight = dp(1); setBackgroundColor(Color.TRANSPARENT) }
         curLv = lv
         lv.adapter = object : BaseAdapter() {
             override fun getCount() = l.size

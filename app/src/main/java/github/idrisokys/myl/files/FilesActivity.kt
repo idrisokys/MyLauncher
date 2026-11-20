@@ -35,7 +35,7 @@ class FilesActivity : Activity() {
     companion object { const val EXTRA_PATH = "github.idrisokys.myl.files.PATH" }
 
     private val PINNED_RED = 0xFFB71C1C.toInt()   // sabitlenmiş öğenin üç noktası
-    private val bg = 0xFF121212.toInt(); private val bar = 0xFF212121.toInt(); private val card = 0xFF1E1E1E.toInt()
+    private val bg = 0xFF121212.toInt(); private val bar = 0xFF092C29.toInt(); private val card = 0xFF1E1E1E.toInt()
     private lateinit var titleV: TextView; private lateinit var closeV: ImageView; private lateinit var titleRow: LinearLayout; private lateinit var body: FrameLayout; private lateinit var crumbS: HorizontalScrollView; private lateinit var crumbL: LinearLayout
     private var cur: File? = null; private var list: List<File>? = null; private var listTitle = ""
     private var editMode = false
@@ -63,7 +63,7 @@ class FilesActivity : Activity() {
         window.statusBarColor = Color.BLACK; window.navigationBarColor = bg
         val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val tb = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setBackgroundColor(bar) }
-        titleV = tv("", 21f, Color.WHITE).apply { typeface = Typeface.DEFAULT_BOLD; maxLines = 1; ellipsize = TextUtils.TruncateAt.END }
+        titleV = tv("", 21f, Color.WHITE).apply { typeface = Fonts.bold(context); maxLines = 1; ellipsize = TextUtils.TruncateAt.END }
         crumbL = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         crumbS = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; visibility = View.GONE; addView(crumbL, -2, -1) }
         editV = ImageView(this).apply {

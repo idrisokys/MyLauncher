@@ -1,5 +1,6 @@
 package github.idrisokys.myl.apps
 
+import github.idrisokys.myl.common.Fonts
 import android.app.Activity
 import github.idrisokys.myl.common.Notice
 import android.content.Intent
@@ -44,7 +45,7 @@ class AppsActivity : Activity() {
         window.statusBarColor = Color.BLACK; window.navigationBarColor = bg
         val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(bg) }
         val tb = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setBackgroundColor(bar); setPadding(dp(16), 0, dp(16), 0) }
-        tb.addView(tv("Uygulamalar", 21f, Color.WHITE).apply { typeface = Typeface.DEFAULT_BOLD; maxLines = 1; ellipsize = TextUtils.TruncateAt.END }, LinearLayout.LayoutParams(0, -2, 1f))
+        tb.addView(tv("Uygulamalar", 21f, Color.WHITE).apply { typeface = Fonts.bold(context); maxLines = 1; ellipsize = TextUtils.TruncateAt.END }, LinearLayout.LayoutParams(0, -2, 1f))
         val count = tv("", 15f, 0xFF999999.toInt()).also { tb.addView(it, -2, -2) }
 
         val lv = ListView(this).apply { divider = ColorDrawable(0xFF2E2E2E.toInt()); dividerHeight = dp(1); setBackgroundColor(bg) }

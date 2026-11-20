@@ -1,14 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="AppTheme" parent="@android:style/Theme.DeviceDefault.Wallpaper.NoTitleBar" />
+    <style name="AppTheme" parent="@android:style/Theme.DeviceDefault.Wallpaper.NoTitleBar">
+        <item name="android:fontFamily">@font/figtree</item>
+    </style>
     <!-- Notlarım (Compose ekranı): duvar kağıdı değil, düz koyu zemin -->
-    <style name="NotesTheme" parent="android:Theme.Material.NoActionBar" />
+    <style name="NotesTheme" parent="android:Theme.Material.NoActionBar">
+        <item name="android:fontFamily">@font/figtree</item>
+    </style>
     <!-- Paylaş menüsünden açılan arayüzsüz kaydetme etkinliği -->
     <style name="ShareTheme" parent="android:Theme.Translucent.NoTitleBar" />
     <!-- Hızlı Paylaş: paylaşırken cihazlar aranırken görünen küçük pencere -->
-    <style name="QsDialog" parent="android:Theme.Material.Dialog" />
+    <style name="QsDialog" parent="android:Theme.Material.Dialog">
+        <item name="android:fontFamily">@font/figtree</item>
+    </style>
     <!-- Hızlı Paylaş: izin istenirken arayüzsüz (şeffaf) etkinlik -->
     <style name="QsPerm" parent="android:Theme.Translucent.NoTitleBar" />
     <!-- Galerim > sihirli değnek: Fossify temel düzenleyicisi commons temasından türeyen bir tema ister -->
-    <style name="EditorTheme" parent="AppTheme.Base" />
+    <style name="EditorTheme" parent="AppTheme.Base">
+        <item name="android:fontFamily">@font/figtree</item>
+    </style>
+    <!-- Dosyalarım / Uygulamalar / Galerim ve kırpma ekranı: yazı tipi tüm uygulamayla aynı -->
+    <style name="DeviceTheme" parent="@android:style/Theme.DeviceDefault.NoActionBar">
+        <item name="android:fontFamily">@font/figtree</item>
+    </style>
+    <style name="BlackTheme" parent="@android:style/Theme.Black.NoTitleBar">
+        <item name="android:fontFamily">@font/figtree</item>
+    </style>
 </resources>

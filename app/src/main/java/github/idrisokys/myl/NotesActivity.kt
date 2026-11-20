@@ -41,6 +41,9 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.TextRange
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.KeyboardActions
@@ -78,7 +81,7 @@ class NotesActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         if (savedInstanceState == null) readQuery(intent)
         setContent {
-            MaterialTheme(colorScheme = DarkScheme) {
+            MaterialTheme(colorScheme = DarkScheme, typography = AppTypography) {
                 Surface(Modifier.fillMaxSize()) {
                     NotesApp(resumes.intValue, externalQuery.value) { externalQuery.value = null }
                 }
@@ -856,4 +859,20 @@ fun EditModeButton(active: Boolean, onClick: () -> Unit) {
             drawCircle(c, radius = size.minDimension / 4f, style = androidx.compose.ui.graphics.drawscope.Stroke(w))
         }
     }
+}
+
+
+/** Notlarım (Compose): tüm metin stilleri Figtree kullanır. */
+private val AppFont = FontFamily(Font(R.font.figtree_medium, FontWeight.Normal), Font(R.font.figtree_bold, FontWeight.Bold))
+private val AppTypography = Typography().let { t ->
+    Typography(
+        displayLarge = t.displayLarge.copy(fontFamily = AppFont), displayMedium = t.displayMedium.copy(fontFamily = AppFont),
+        displaySmall = t.displaySmall.copy(fontFamily = AppFont), headlineLarge = t.headlineLarge.copy(fontFamily = AppFont),
+        headlineMedium = t.headlineMedium.copy(fontFamily = AppFont), headlineSmall = t.headlineSmall.copy(fontFamily = AppFont),
+        titleLarge = t.titleLarge.copy(fontFamily = AppFont), titleMedium = t.titleMedium.copy(fontFamily = AppFont),
+        titleSmall = t.titleSmall.copy(fontFamily = AppFont), bodyLarge = t.bodyLarge.copy(fontFamily = AppFont),
+        bodyMedium = t.bodyMedium.copy(fontFamily = AppFont), bodySmall = t.bodySmall.copy(fontFamily = AppFont),
+        labelLarge = t.labelLarge.copy(fontFamily = AppFont), labelMedium = t.labelMedium.copy(fontFamily = AppFont),
+        labelSmall = t.labelSmall.copy(fontFamily = AppFont)
+    )
 }

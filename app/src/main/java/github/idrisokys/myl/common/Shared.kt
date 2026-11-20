@@ -105,7 +105,7 @@ object Notice {
         clear()
         val tv = TextView(act).apply {
             text = msg; textSize = 17f; setTextColor(Color.WHITE); gravity = Gravity.CENTER
-            typeface = Typeface.DEFAULT_BOLD
+            typeface = Fonts.bold(context)
             setShadowLayer(8f * d, 0f, 1f * d, Color.BLACK)   // şeffaf zeminde her arka planda okunsun
             setBackgroundColor(Color.TRANSPARENT)
             setPadding((24 * d).toInt(), (8 * d).toInt(), (24 * d).toInt(), (8 * d).toInt())

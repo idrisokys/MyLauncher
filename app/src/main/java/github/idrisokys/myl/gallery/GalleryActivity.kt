@@ -77,7 +77,7 @@ class GalleryActivity : Activity() {
         window.statusBarColor = Color.BLACK; window.navigationBarColor = bg
         val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(bg) }
         val tb = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setBackgroundColor(bar); setPadding(dp(12), 0, dp(6), 0) }
-        titleV = tv("Galerim", 21f, Color.WHITE).apply { typeface = Typeface.DEFAULT_BOLD; maxLines = 1; ellipsize = TextUtils.TruncateAt.END }
+        titleV = tv("Galerim", 21f, Color.WHITE).apply { typeface = Fonts.bold(context); maxLines = 1; ellipsize = TextUtils.TruncateAt.END }
         fun ib(ic: Drawable, desc: String, vis: Int, click: () -> Unit) = ImageView(this).apply {
             setImageDrawable(ic); setColorFilter(Color.WHITE); contentDescription = desc
             setPadding(dp(9), dp(9), dp(9), dp(9)); visibility = vis; setOnClickListener { click() }
@@ -298,7 +298,7 @@ class GalleryActivity : Activity() {
         val dlg = Dialog(this@GalleryActivity, android.R.style.Theme_Black_NoTitleBar)
         var dir: File = root
         var kids = listOf<File>()
-        val pathV = tv("", 16f, Color.WHITE).apply { typeface = Typeface.DEFAULT_BOLD; maxLines = 1; ellipsize = TextUtils.TruncateAt.START }
+        val pathV = tv("", 16f, Color.WHITE).apply { typeface = Fonts.bold(context); maxLines = 1; ellipsize = TextUtils.TruncateAt.START }
         val moveB = Button(this@GalleryActivity)
         val lv = ListView(this@GalleryActivity).apply { divider = ColorDrawable(0xFF2E2E2E.toInt()); dividerHeight = dp(1); setBackgroundColor(bg) }
 
@@ -603,7 +603,7 @@ class GalleryActivity : Activity() {
         val holders = HashMap<Int, Pg>()
         var cur = start
         val pager = ViewPager(this@GalleryActivity)
-        val nameV = tv("", 16f, Color.WHITE).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END; typeface = Typeface.DEFAULT_BOLD }
+        val nameV = tv("", 16f, Color.WHITE).apply { maxLines = 1; ellipsize = TextUtils.TruncateAt.END; typeface = Fonts.bold(context) }
         val countV = tv("", 12f, 0xFFAAAAAA.toInt())
         val prevB = iconBtn(Icons.chevron(), "Önceki", 180f) { go(-1) }
         val nextB = iconBtn(Icons.chevron(), "Sonraki", 0f) { go(1) }

@@ -50,6 +50,10 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.Image
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -60,6 +64,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 private val DarkScheme = darkColorScheme()
+private val NotesBar = Color(0xFF092C29)   // alt bar rengi
 /** Sabitlenmiş öğenin üç nokta simgesinin rengi (koyu kırmızı). */
 private val PinnedRed = Color(0xFFB71C1C)
 private val blockedSchemes = setOf("file", "content", "intent", "javascript", "android-app")
@@ -82,8 +87,12 @@ class NotesActivity : ComponentActivity() {
         if (savedInstanceState == null) readQuery(intent)
         setContent {
             MaterialTheme(colorScheme = DarkScheme, typography = AppTypography) {
-                Surface(Modifier.fillMaxSize()) {
-                    NotesApp(resumes.intValue, externalQuery.value) { externalQuery.value = null }
+                // Arka plan: Dosyalarım ile aynı resim; içerik şeffaf zemin üstünde
+                Box(Modifier.fillMaxSize()) {
+                    Image(painterResource(R.drawable.files_bg), null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                    Surface(Modifier.fillMaxSize(), color = Color.Transparent, contentColor = MaterialTheme.colorScheme.onSurface) {
+                        NotesApp(resumes.intValue, externalQuery.value) { externalQuery.value = null }
+                    }
                 }
             }
         }
@@ -371,8 +380,8 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
         }
     }
 
-    Scaffold(bottomBar = {
-        if (rn != null) Surface(tonalElevation = 3.dp) {
+    Scaffold(containerColor = Color.Transparent, contentColor = MaterialTheme.colorScheme.onSurface, bottomBar = {
+        if (rn != null) Surface(color = NotesBar, tonalElevation = 0.dp) {
             Column(Modifier.fillMaxWidth().navigationBarsPadding().imePadding().padding(horizontal = 8.dp, vertical = 6.dp)) {
                 NativeEdit(
                     renameText, { renameText = it.take(editCap) },
@@ -393,14 +402,14 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
                     MoveButtons(canUp, canDown) { moveSelected(it) }
                 }
             }
-        } else if (editMode && selected.size > 1) Surface(tonalElevation = 3.dp) {
+        } else if (editMode && selected.size > 1) Surface(color = NotesBar, tonalElevation = 0.dp) {
             Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(L("${selected.size} seçili", "${selected.size} selected"), style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(start = 8.dp))
                 EditModeButton(editMode) { editMode = false; selected = emptySet() }
                 Spacer(Modifier.weight(1f))
                 MoveButtons(canUp, canDown) { moveSelected(it) }
             }
-        } else Surface(tonalElevation = 3.dp) {
+        } else Surface(color = NotesBar, tonalElevation = 0.dp) {
             Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 8.dp, vertical = 6.dp)) {
                 NativeEdit(
                     linkText, { linkText = it },
@@ -461,13 +470,13 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
                             onLongClick = { copyEntry(e) }),
                         colors = ListItemDefaults.colors(containerColor = when {
                             sel -> MaterialTheme.colorScheme.secondaryContainer
-                            else -> MaterialTheme.colorScheme.surface
+                            else -> Color.Transparent
                         }),
                         leadingContent = {
                             if (editMode) Spacer(Modifier.size(24.dp))   // düzenleme modunda kutucuk yok: yalnızca boşluk (seçim satıra dokunarak yapılır)
                             else Icon(if (e.isDir) Icons.Default.Folder else if (e.isTxt) Icons.Default.Description else Icons.Default.Link, null)
                         },
-                        headlineContent = { Text(e.title, maxLines = 4, overflow = TextOverflow.Ellipsis) },
+                        headlineContent = { Text(e.title, fontSize = 19.sp, maxLines = 4, overflow = TextOverflow.Ellipsis) },
                         trailingContent = {
                             // Üç nokta: tek dokunuş menü (Sabitle / Düzenle / Taşı / Paylaş / Sil)
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -772,10 +781,11 @@ fun SearchResults(pad: PaddingValues, hits: List<Hit>?, onOpen: (Entry) -> Unit,
         else -> LazyColumn(Modifier.padding(pad).fillMaxSize()) {
             items(hits, key = { it.entry.key }) { h ->
                 ListItem(
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                     modifier = Modifier.clickable { if (h.entry.isDir) onGoto(h.path + h.entry) else onOpen(h.entry) },
                     overlineContent = { Text(if (h.path.isEmpty()) L("Ana liste", "Main list") else h.path.joinToString(" › ") { it.name }, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                     leadingContent = { Icon(if (h.entry.isDir) Icons.Default.Folder else if (h.isNote || h.entry.isTxt) Icons.Default.Description else Icons.Default.Link, null) },
-                    headlineContent = { Text(h.entry.title, maxLines = 4, overflow = TextOverflow.Ellipsis) },
+                    headlineContent = { Text(h.entry.title, fontSize = 19.sp, maxLines = 4, overflow = TextOverflow.Ellipsis) },
                     supportingContent = { if (!h.isNote && h.detail.isNotBlank()) Text(h.detail, maxLines = 2, overflow = TextOverflow.Ellipsis) },
                     trailingContent = { IconButton({ onGoto(h.path) }) { Icon(Icons.Default.FolderOpen, L("Klasöre git", "Go to folder")) } })
                 HorizontalDivider()

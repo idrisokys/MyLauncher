@@ -43,7 +43,7 @@ import org.fossify.editor.activities.EditActivity
  * - Seçim modunda: tümünü seç, klasöre taşı, çöp (seçilenleri .onemsiz klasörüne taşı)
  */
 class GalleryActivity : Activity() {
-    private val bg = 0xFF121212.toInt(); private val bar = 0xFF212121.toInt(); private val accent = 0xFF4FA3F0.toInt()
+    private val bg = 0xFF121212.toInt(); private val bar = 0xFF092C29.toInt(); private val accent = 0xFF4FA3F0.toInt()
     private lateinit var titleV: TextView
     private lateinit var selAllV: ImageView; private lateinit var moveV: ImageView; private lateinit var trashV: ImageView; private lateinit var penV: ImageView
     private lateinit var gv: GridView; private lateinit var emptyV: TextView

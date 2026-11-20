@@ -344,7 +344,7 @@ class MainActivity : Activity() {
             hint = "Kişi, uygulama veya web'de ara"
             setHintTextColor(0xAAFFFFFF.toInt())
             setTextColor(Color.WHITE)
-            textSize = 18f
+            textSize = 20f
             setSingleLine()
             imeOptions = EditorInfo.IME_ACTION_SEND
             setPadding(dp(16), 0, dp(16), 0)
@@ -1121,7 +1121,7 @@ class MainActivity : Activity() {
             setPadding(dp(16), dp(4), dp(16), dp(4))
         }
         line.addView(TextView(this).apply {
-            textSize = 21f; setTextColor(Color.WHITE)
+            textSize = 23f; setTextColor(Color.WHITE)
             maxLines = 1; ellipsize = TextUtils.TruncateAt.END
         }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         fun btn(res: Int, desc: String) = ImageView(this).apply {
@@ -1176,11 +1176,11 @@ class MainActivity : Activity() {
                 line.addView(iv, LinearLayout.LayoutParams(dp(40), dp(40)))
                 val col = LinearLayout(this@MainActivity).apply { orientation = LinearLayout.VERTICAL }
                 val title = TextView(this@MainActivity).apply {
-                    textSize = 21f; setTextColor(Color.WHITE)
+                    textSize = 23f; setTextColor(Color.WHITE)
                     maxLines = 1; ellipsize = TextUtils.TruncateAt.END
                 }
                 val sub = TextView(this@MainActivity).apply {
-                    textSize = 13f; setTextColor(0xAAFFFFFF.toInt())
+                    textSize = 15f; setTextColor(0xAAFFFFFF.toInt())
                 }
                 col.addView(title)
                 col.addView(sub)
@@ -1210,7 +1210,7 @@ class MainActivity : Activity() {
         val iv = ImageView(this)
         cell.addView(iv, LinearLayout.LayoutParams(dp(56), dp(56)))
         val tv = TextView(this).apply {
-            textSize = 11f
+            textSize = 13f
             setTextColor(Color.WHITE)
             setShadowLayer(4f, 0f, 1f, 0xAA000000.toInt())
             maxLines = 1

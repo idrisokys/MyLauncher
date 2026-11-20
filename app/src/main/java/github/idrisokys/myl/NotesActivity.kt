@@ -428,11 +428,13 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
         }
     }, topBar = {
         if (searchQuery != null) TopAppBar(
+            colors = TopAppBarDefaults.topAppBarColors(containerColor = NotesBar, scrolledContainerColor = NotesBar),
             title = {
                 Text("“$searchQuery”" + (hits?.let { " · ${it.size} " + L("sonuç", "results") } ?: ""), maxLines = 1, overflow = TextOverflow.Ellipsis)
             },
             navigationIcon = { IconButton({ exitSearch(true) }) { Icon(Icons.Default.ArrowBack, L("Aramadan çık", "Exit search")) } })
         else TopAppBar(
+            colors = TopAppBarDefaults.topAppBarColors(containerColor = NotesBar, scrolledContainerColor = NotesBar),
             // Tüm simgeler solda, geri okunun hemen yanında; başlık metni yok (yalnızca seçili sayısı gösterilir)
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -655,6 +657,7 @@ fun TxtScreen(
         Surface(Modifier.fillMaxSize()) {
             Scaffold(topBar = {
                 TopAppBar(
+            colors = TopAppBarDefaults.topAppBarColors(containerColor = NotesBar, scrolledContainerColor = NotesBar),
                     title = {
                         if (searching && !editing) TextField(
                             query, { query = it }, singleLine = true,

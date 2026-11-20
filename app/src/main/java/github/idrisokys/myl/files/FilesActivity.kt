@@ -37,10 +37,9 @@ class FilesActivity : Activity() {
 
     private val PINNED_RED = 0xFFB71C1C.toInt()   // sabitlenmiş öğenin üç noktası
     private val dockBg = 0xFF1A1A1A.toInt(); private val bg = 0xFF121212.toInt(); private val bar = 0xFF212121.toInt(); private val card = 0xFF1E1E1E.toInt()
-    private lateinit var titleV: TextView; private lateinit var pinV: ImageView; private lateinit var titleRow: LinearLayout; private lateinit var cancelV: TextView; private lateinit var body: FrameLayout; private lateinit var crumbS: HorizontalScrollView; private lateinit var crumbL: LinearLayout; private lateinit var dock: LinearLayout
+    private lateinit var titleV: TextView; private lateinit var closeV: ImageView; private lateinit var titleRow: LinearLayout; private lateinit var body: FrameLayout; private lateinit var crumbS: HorizontalScrollView; private lateinit var crumbL: LinearLayout; private lateinit var dock: LinearLayout
     private var cur: File? = null; private var list: List<File>? = null; private var listTitle = ""
     private var editMode = false
-    private lateinit var selAllV: ImageView
     private lateinit var editV: ImageView   // sağ üstte seçim (düzenleme) modu düğmesi
     private var picking = false; private val sel = linkedSetOf<File>()
     private var clip = listOf<File>(); private var cut = false
@@ -68,36 +67,32 @@ class FilesActivity : Activity() {
         titleV = tv("", 21f, Color.WHITE).apply { typeface = Typeface.DEFAULT_BOLD; maxLines = 1; ellipsize = TextUtils.TruncateAt.END }
         crumbL = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         crumbS = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; visibility = View.GONE; addView(crumbL, -2, -1) }
-        cancelV = tv("İptal", 18f, Color.WHITE).apply { typeface = Typeface.DEFAULT_BOLD; maxLines = 1; gravity = Gravity.CENTER_VERTICAL; visibility = View.GONE; setPadding(dp(12), 0, 0, 0); setOnClickListener { sel.clear(); editMode = false; refresh(true) } }
-        selAllV = ImageView(this).apply {
-            setImageDrawable(Icons.selectAll()); setColorFilter(Color.WHITE); setPadding(dp(8), dp(8), dp(8), dp(8)); visibility = View.GONE
-            contentDescription = "Tümünü seç"
-            setOnClickListener {
-                val all = items()
-                if (all.isNotEmpty() && sel.containsAll(all)) sel.clear() else sel.addAll(all)
-                selectionChanged()
-            }
-        }
         editV = ImageView(this).apply {
             setImageDrawable(Icons.editMode()); setPadding(dp(8), dp(8), dp(8), dp(8)); visibility = View.GONE
             contentDescription = "Seçim modu"
             setOnClickListener { toggleEditMode() }
+            // Basılı tutunca: seçim modunu açar ve tümünü seçer; hepsi zaten seçiliyse seçimi temizler
+            setOnLongClickListener {
+                val all = items()
+                if (editMode && all.isNotEmpty() && sel.containsAll(all)) sel.clear() else { editMode = true; sel.addAll(all) }
+                refresh(true)
+                true
+            }
         }
-        pinV = ImageView(this).apply {
-            setImageDrawable(Icons.pin()); setColorFilter(Color.WHITE); setPadding(dp(8), dp(8), dp(8), dp(8)); visibility = View.GONE
-            contentDescription = "Ana ekrana sabitle"; setOnClickListener { pinSelected() }
+        closeV = ImageView(this).apply {
+            setImageDrawable(Icons.close()); setColorFilter(Color.WHITE); setPadding(dp(8), dp(8), dp(8), dp(8)); visibility = View.GONE
+            contentDescription = "Seçimi kapat"
+            setOnClickListener { sel.clear(); editMode = false; refresh(true) }
         }
         titleRow = LinearLayout(this).apply {
             gravity = Gravity.CENTER_VERTICAL
-            addView(titleV, LinearLayout.LayoutParams(-2, -2)); addView(pinV, LinearLayout.LayoutParams(dp(40), dp(40)))
+            addView(titleV, LinearLayout.LayoutParams(-2, -2)); addView(closeV, LinearLayout.LayoutParams(dp(40), dp(40)))
         }
         val center = FrameLayout(this).apply {
             addView(titleRow, FrameLayout.LayoutParams(-1, -2, Gravity.CENTER_VERTICAL))
             addView(crumbS, FrameLayout.LayoutParams(-1, -1))
         }
         tb.setPadding(dp(12), 0, dp(12), 0); tb.addView(center, LinearLayout.LayoutParams(0, -1, 1f))
-        tb.addView(selAllV, LinearLayout.LayoutParams(dp(40), dp(40)))
-        tb.addView(cancelV, LinearLayout.LayoutParams(-2, -1))
         tb.addView(editV, LinearLayout.LayoutParams(dp(40), dp(40)))
         body = FrameLayout(this)
         dock = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setBackgroundColor(dockBg) }
@@ -144,11 +139,9 @@ class FilesActivity : Activity() {
     private fun chrome(t: String, crumbs: Boolean = false) {
         titleV.text = t
         titleRow.visibility = if (crumbs) View.GONE else View.VISIBLE
-        pinV.visibility = if (sel.isNotEmpty()) View.VISIBLE else View.GONE
+        closeV.visibility = if (editMode) View.VISIBLE else View.GONE
         crumbS.visibility = if (crumbs) View.VISIBLE else View.GONE
         if (crumbs) buildCrumbs()
-        cancelV.visibility = if (editMode) View.VISIBLE else View.GONE
-        selAllV.visibility = if (editMode) View.VISIBLE else View.GONE
         // Seçim modu düğmesi: etkinken açık mor, değilken beyaz; paylaşım kaydı / klasör seçme ekranlarında ve ana listede yok
         val canEdit = pendingShare == null && !picking && (cur != null || list != null)
         editV.visibility = if (canEdit) View.VISIBLE else View.GONE
@@ -264,12 +257,13 @@ class FilesActivity : Activity() {
 
     private fun pinList(): List<File> = (prefs.getString("hpins", "") ?: "").split("\n").filter { it.isNotEmpty() }.map { File(it) }
     private fun savePins(l: List<File>) { prefs.edit().putString("hpins", l.joinToString("\n") { it.path }).apply() }
-    private fun pinSelected() {
-        if (sel.isEmpty()) return
+    /** "İğnele": verilen öğeleri ana ekrana sabitler. */
+    private fun pinToHome(x: List<File>) {
+        if (x.isEmpty()) return
         val l = pinList().toMutableList(); var n = 0
-        sel.forEach { f -> if (l.none { it.path == f.path }) { l.add(f); n++ } }
+        x.forEach { f -> if (l.none { it.path == f.path }) { l.add(f); n++ } }
         savePins(l); sel.clear(); editMode = false
-        Notice.show(this, if (n > 0) "$n öğe ana ekrana sabitlendi" else "Zaten sabitlenmiş", false)
+        Notice.show(this, if (n > 0) "$n öğe Dosyalarım ana ekranına iğnelendi" else "Zaten ana ekranda iğneli", false)
         refresh()
     }
 
@@ -420,14 +414,17 @@ class FilesActivity : Activity() {
     private fun itemMenu(f: File, anchor: View) {
         val targets = if (f in sel && sel.size > 1) sel.toList() else listOf(f)
         val pm = PopupMenu(this, anchor)
-        pm.menu.add(0, 5, 0, if (targets.all { it.path in topPins() }) "Sabiti kaldır" else "Sabitle")
-        pm.menu.add(0, 1, 0, "Taşı")
-        pm.menu.add(0, 2, 1, "Paylaş")
-        pm.menu.add(0, 3, 2, "Sil")
-        pm.menu.add(0, 4, 3, "Yeni klasör")
+        // Sıra: Yeni klasör, Sil, Taşı, Paylaş, Sabitle, İğnele
+        pm.menu.add(0, 4, 0, "Yeni klasör")
+        pm.menu.add(0, 3, 1, "Sil")
+        pm.menu.add(0, 1, 2, "Taşı")
+        pm.menu.add(0, 2, 3, "Paylaş")
+        pm.menu.add(0, 5, 4, if (targets.all { it.path in topPins() }) "Sabiti kaldır" else "Sabitle")
+        pm.menu.add(0, 6, 5, "İğnele")
         pm.setOnMenuItemClickListener {
             when (it.itemId) {
                 5 -> toggleTopPin(targets)
+                6 -> pinToHome(targets)
                 1 -> moveItems(targets); 2 -> shareFiles(targets)
                 // Arama/özel listedeyken öğenin bulunduğu klasörde oluşturulur
                 4 -> newFolder(if (list != null) f.parentFile else null)

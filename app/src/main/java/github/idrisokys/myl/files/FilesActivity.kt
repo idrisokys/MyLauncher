@@ -24,6 +24,7 @@ import android.view.ViewGroup
 import android.media.MediaScannerConnection
 import android.webkit.MimeTypeMap
 import android.widget.*
+import github.idrisokys.myl.R
 import android.graphics.drawable.Drawable
 import java.io.*
 import java.util.zip.ZipInputStream
@@ -60,7 +61,7 @@ class FilesActivity : Activity() {
     override fun onCreate(s: Bundle?) {
         super.onCreate(s)
         window.statusBarColor = Color.BLACK; window.navigationBarColor = bg
-        val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(bg) }
+        val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val tb = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setBackgroundColor(bar) }
         titleV = tv("", 21f, Color.WHITE).apply { typeface = Typeface.DEFAULT_BOLD; maxLines = 1; ellipsize = TextUtils.TruncateAt.END }
         crumbL = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
@@ -94,7 +95,13 @@ class FilesActivity : Activity() {
         tb.addView(editV, LinearLayout.LayoutParams(dp(40), dp(40)))
         body = FrameLayout(this)
         col.addView(tb, -1, dp(54)); col.addView(body, LinearLayout.LayoutParams(-1, 0, 1f))
-        setContentView(col); home()
+        // Arka plan resmi: tüm ekranı kaplar (centerCrop), içerik üstünde
+        val root = FrameLayout(this).apply {
+            setBackgroundColor(bg)
+            addView(ImageView(this@FilesActivity).apply { setImageResource(R.drawable.files_bg); scaleType = ImageView.ScaleType.CENTER_CROP }, FrameLayout.LayoutParams(-1, -1))
+            addView(col, FrameLayout.LayoutParams(-1, -1))
+        }
+        setContentView(root); home()
         if (s == null && (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) == 0) handleShare(intent)
         if (s == null) openRequestedPath(intent)
     }
@@ -269,7 +276,7 @@ class FilesActivity : Activity() {
             dateTexts.add(df.format(Date(f.lastModified())))
         }
         updateChrome()
-        val lv = ListView(this).apply { divider = ColorDrawable(0xFF2E2E2E.toInt()); dividerHeight = dp(1); setBackgroundColor(bg) }
+        val lv = ListView(this).apply { divider = ColorDrawable(0xFF2E2E2E.toInt()); dividerHeight = dp(1); setBackgroundColor(Color.TRANSPARENT) }
         curLv = lv
         lv.adapter = object : BaseAdapter() {
             override fun getCount() = l.size

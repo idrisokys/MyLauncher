@@ -390,9 +390,6 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
                     hint = if (rn.isDir) L("Klasör adı", "Folder name") else L("Ad", "Name"),
                     minLines = 1, maxLines = 4, send = true, onSend = { saveRename() })
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    val over = !rn.isDir && !rn.isTxt && renameText.length > maxChars      // yalnızca .url → .txt dönüşümü
-                    Text(if (over) "${renameText.length}/$maxChars → .txt" else "${renameText.length}/$maxChars", style = MaterialTheme.typography.labelSmall,
-                        color = if (over) MaterialTheme.colorScheme.error else Color.Unspecified, modifier = Modifier.padding(start = 8.dp))
                     EditModeButton(editMode) { editMode = !editMode; selected = emptySet() }
                     Spacer(Modifier.weight(1f))
                     IconButton({ clipboard.getText()?.text?.let { renameText = it.take(editCap) } }) { Icon(Icons.Default.ContentPaste, L("Yapıştır", "Paste")) }
@@ -415,10 +412,8 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
                 NativeEdit(
                     linkText, { linkText = it },
                     modifier = Modifier.fillMaxWidth(),
-                    hint = L("Link veya metin yapıştır (Enter: kaydet)", "Paste a link or text (Enter: save)"),
                     minLines = 2, maxLines = 8, send = true, onSend = { submit() })
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text("${linkText.length}/$addMax", style = MaterialTheme.typography.labelSmall, color = if (linkText.length > addMax) MaterialTheme.colorScheme.error else Color.Unspecified, modifier = Modifier.padding(start = 8.dp))
                     EditModeButton(editMode) { editMode = !editMode; selected = emptySet() }
                     Spacer(Modifier.weight(1f))
                     IconButton({ startSearch() }, enabled = linkText.isNotBlank()) { Icon(Icons.Default.Search, L("Ara", "Search")) }

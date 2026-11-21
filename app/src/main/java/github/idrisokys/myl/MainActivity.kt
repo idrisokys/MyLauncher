@@ -341,8 +341,6 @@ class MainActivity : Activity() {
             setPadding(dp(14), dp(8), dp(14), dp(8))
         }
         search = EditText(this).apply {
-            hint = "Kişi, uygulama veya web'de ara"
-            setHintTextColor(0xAAFFFFFF.toInt())
             setTextColor(Color.WHITE)
             textSize = 20f
             setSingleLine()

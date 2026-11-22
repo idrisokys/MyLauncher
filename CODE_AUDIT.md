@@ -1,3 +1,19 @@
+# MyL 1.15 — ağır işlerin Rust'a taşınması (arayüz değişmedi)
+
+Yeni `native/` Rust crate'i (`libmylnative.so`, yalnızca arm64-v8a) ve Kotlin köprüsü `Native.kt`. **Hiçbir ekran/düzen/renk/metin değişmedi**; yalnızca arka plandaki iş yapan kod yer değiştirdi. Her çağrı `Native.ok` / `null` kontrolüyle korunur: `.so` yoksa ya da yerel kod hata verirse eski Kotlin kodu aynen çalışır.
+
+| Alan | Rust | Nerede kullanılıyor |
+|---|---|---|
+| Dosya tarama | `scan.rs` — paralel dizin yürüyüşü, mtime'a göre sıralama | `GalleryActivity.scan()` |
+| Arama | `search.rs` — dosyaları paralel okuma, Türkçe/aksan duyarsız eşleştirme, özet metni | `Store.search()` (Notlarım + ana ekran araması) |
+| Arşiv | `archive.rs` — paralel ZIP açma (zip-slip korumalı), ZIP oluşturma | `FilesActivity.unzip()`; `Native.zip()` hazır (arayüzde düğme yok) |
+| Dosya analizi | `hash.rs` (SHA-256 / MD5 / CRC32), `meta.rs` (boyut/tarih/alt öğe sayısı, Link ağacı) | `FilesActivity.items()/refresh()`, `NoteSync.local()`; `Native.hashFile(s)` hazır |
+| Görsel işleme | `imaging.rs` — JPEG için DCT ölçekli çözme, EXIF yönü, kutu filtreli küçültme; toplu jpg/png/webp dönüştürme | `GalleryActivity.decodeImg()`; `Native.convertImages()` hazır |
+
+- Derleme: `cargo-ndk` kuruluysa `app/build.gradle.kts` içindeki `buildRust` görevi `preBuild`'den önce `.so` üretir; kurulu değilse atlanır. CI (`build.yml`) Rust + cargo-ndk kurar.
+- Bilinçli farklar: Rust tarama sembolik bağlı klasörlere girmez (döngü riski); `Store.search` sonuçları artık tamamlanma sırasına değil dosya sırasına göre gelir (daha tutarlı); HEIC/SVG/CMYK-JPEG gibi biçimlerde küçük resim yine Android'in `BitmapFactory` yolundan çıkar.
+- Derleme ve çalıştırma bu ortamda denenmedi (Rust araç zinciri ve ağ yoktu).
+
 # MyL 1.14 — temizlik (kullanılmayan kod)
 
 - Hiçbir yerden çağrılmayan kod silindi: `MainActivity.infoIcon()`, `MainActivity.openStorageFolder()`, `INFO_EMAIL`, `INFO_GITHUB`, `Store.documentUri()`, `FilesActivity.openList()`, `FilesActivity.zipSelected()`, `AUD`, `DOC`, `VID` (Dosyalarım'da).

@@ -1,0 +1,27 @@
+[package]
+name = "mylnative"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+jni = "0.21"
+zip = { version = "2.2", default-features = false, features = ["deflate"] }
+sha2 = "0.10"
+md-5 = "0.10"
+crc32fast = "1"
+jpeg-decoder = "0.3"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "gif", "bmp"] }
+kamadak-exif = "0.5"
+unicode-normalization = "0.1"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
+# JNI sınırında catch_unwind kullanıldığı için panic = "abort" YAPMAYIN.
+panic = "unwind"

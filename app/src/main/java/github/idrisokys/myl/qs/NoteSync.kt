@@ -3,6 +3,7 @@ package github.idrisokys.myl.qs
 import android.content.Context
 import android.os.SystemClock
 import github.idrisokys.myl.L
+import github.idrisokys.myl.Native
 import github.idrisokys.myl.Store
 import java.io.File
 import java.io.FileOutputStream
@@ -108,6 +109,16 @@ object NoteSync {
     /** Yerel not ağacı: göreli yol → öğe. */
     fun local(): Map<String, Item> {
         val out = LinkedHashMap<String, Item>()
+        // Rust: ağacı hızlıca yürür; kütüphane yoksa aşağıdaki Kotlin yürüyüşü kullanılır
+        val nat = Native.walkNotes(root(), dl(), MAX_DEPTH)
+        if (nat != null) {
+            var i = 0
+            while (i + 3 < nat.size) {
+                out[nat[i]] = Item(nat[i], nat[i + 1] == "D", nat[i + 2].toLongOrNull() ?: 0L, nat[i + 3].toLongOrNull() ?: 0L)
+                i += 4
+            }
+            return out
+        }
         fun walk(d: File, prefix: String, depth: Int) {
             if (depth > MAX_DEPTH) return
             val fs = d.listFiles() ?: return

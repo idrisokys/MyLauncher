@@ -20,6 +20,18 @@ jobs:
         with:
           gradle-version: 8.13
 
+      # Rust yerel kütüphanesi (native/): cargo-ndk, ubuntu-latest üzerindeki hazır Android NDK'yı kullanır
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: native
+
+      - name: cargo-ndk kur
+        run: cargo install cargo-ndk --locked
+
       - name: Release APK derle
         run: |
           set -o pipefail

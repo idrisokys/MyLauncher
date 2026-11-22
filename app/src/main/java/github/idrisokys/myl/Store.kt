@@ -438,6 +438,26 @@ object Store {
         }
         walk(root, emptyList())
 
+        // Rust: dosyalar 64'lük gruplar halinde paralel okunup eşleştirilir; her grup arasında iptal denetlenir.
+        if (Native.ok) {
+            val nout = ArrayList<Hit>(minOf(files.size, 500))
+            var i = 0
+            var failed = false
+            while (alive() && i < files.size && nout.size < 500) {
+                val end = minOf(files.size, i + 64)
+                val sub = files.subList(i, end)
+                val res = Native.matchNotes(sub.map { file(it.first.uri).path }, query)
+                if (res == null) { failed = true; break }
+                for (h in res) {
+                    val (e, p) = sub[h.idx]
+                    nout.add(Hit(e, p, h.detail, h.isNote, h.titleMatch))
+                    if (nout.size >= 500) break
+                }
+                i = end
+            }
+            if (!failed) return (folderHits + nout).sortedBy { !it.titleMatch }
+        }
+
         fun match(e: Entry, path: List<Entry>): Hit? {
             val ls = if (e.isTxt) emptyList() else lines(e.uri)
             val url = urlOf(ls)

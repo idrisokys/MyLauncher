@@ -71,6 +71,22 @@ kotlin {
     compilerOptions { jvmTarget.set(JvmTarget.JVM_17) }
 }
 
+// ---- Rust yerel kütüphanesi (native/ → libmylnative.so) ----
+// cargo-ndk kuruluysa derleme öncesi .so üretilip src/main/jniLibs altına konur.
+// Kurulu değilse görev atlanır; uygulama Kotlin yedek koduyla (Native.ok == false) yine çalışır.
+fun hasCargoNdk(): Boolean = try {
+    ProcessBuilder("cargo", "ndk", "--version").redirectErrorStream(true).start().waitFor() == 0
+} catch (e: Exception) { false }
+
+val buildRust by tasks.registering(Exec::class) {
+    group = "build"
+    description = "native/ Rust kütüphanesini arm64-v8a için derler"
+    workingDir = rootProject.file("native")
+    commandLine("cargo", "ndk", "-t", "arm64-v8a", "-o", file("src/main/jniLibs").absolutePath, "build", "--release")
+    onlyIf { hasCargoNdk() }
+}
+tasks.matching { it.name == "preBuild" }.configureEach { dependsOn(buildRust) }
+
 dependencies {
     // Galerim'deki sihirli değnek: Fossify temel resim düzenleyicisi (filtre, kırpma, döndürme, çizim)
     implementation(project(":basic-editor"))

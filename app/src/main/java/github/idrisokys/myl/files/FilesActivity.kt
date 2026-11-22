@@ -1,6 +1,7 @@
 package github.idrisokys.myl.files
 
 import github.idrisokys.myl.L
+import github.idrisokys.myl.Native
 import github.idrisokys.myl.common.*
 
 import android.app.Activity
@@ -221,11 +222,21 @@ class FilesActivity : Activity() {
 
     private fun browse(d: File) { cur = d; list = null; sel.clear(); editMode = false; refresh() }
 
+    /** Açık klasörün Rust'tan gelen meta verisi (boyut/tarih/alt öğe sayısı); arama listelerinde null. */
+    private var metaMap: Map<String, Native.Meta>? = null
+
     private fun items(): List<File> {
-        val base = list ?: (cur?.listFiles()?.toList() ?: emptyList())
+        val c = cur
+        var metas: Map<String, Native.Meta>? = null
+        val base: List<File> = list ?: run {
+            metas = if (c != null) Native.listDirMeta(c) else null
+            val m = metas
+            if (c != null && m != null) m.keys.map { File(c, it) } else (c?.listFiles()?.toList() ?: emptyList())
+        }
+        metaMap = metas
         var l = if (showHidden) base else base.filter { !it.name.startsWith(".") }
         if (picking) l = l.filter { it.isDirectory }
-        val sorted = l.map { it to it.lastModified() }.sortedByDescending { it.second }.map { it.first }   // tarih dosya başına tek kez okunur
+        val sorted = l.map { it to (metas?.get(it.name)?.mtime ?: it.lastModified()) }.sortedByDescending { it.second }.map { it.first }   // tarih dosya başına tek kez okunur
         // Sabitlenenler (üç nokta → Sabitle) listenin başında durur; kendi aralarında tarih sırası korunur
         val pins = topPins()
         return if (pins.isEmpty()) sorted else sorted.filter { it.path in pins } + sorted.filter { it.path !in pins }
@@ -271,9 +282,11 @@ class FilesActivity : Activity() {
         val topPinSet = topPins()
         // Boyut/öğe sayısı ve tarih metinleri bir kez hesaplanır; satırlar kaydırmada yeniden kurulurken diske gidilmez
         val subTexts = ArrayList<String>(l.size); val dateTexts = ArrayList<String>(l.size)
+        val mm = metaMap
         l.forEach { f ->
-            subTexts.add(if (f.isDirectory) "${f.list()?.size ?: 0} öğe" else sz(f.length()))
-            dateTexts.add(df.format(Date(f.lastModified())))
+            val m = mm?.get(f.name)
+            subTexts.add(if (m?.isDir ?: f.isDirectory) "${m?.children ?: (f.list()?.size ?: 0)} öğe" else sz(m?.size ?: f.length()))
+            dateTexts.add(df.format(Date(m?.mtime ?: f.lastModified())))
         }
         updateChrome()
         val lv = ListView(this).apply { divider = ColorDrawable(0xFF457467.toInt()); dividerHeight = dp(1); setBackgroundColor(Color.TRANSPARENT) }
@@ -446,14 +459,19 @@ class FilesActivity : Activity() {
         Thread {
             var ok = true
             try {
-                dest.mkdirs(); val dp = dest.canonicalPath + File.separator
-                ZipInputStream(BufferedInputStream(FileInputStream(z))).use { zin ->
-                    var e = zin.nextEntry
-                    while (e != null) {
-                        val o = File(dest, e.name)
-                        if (!o.canonicalPath.startsWith(dp)) throw SecurityException("zip-slip")
-                        if (e.isDirectory) o.mkdirs() else { o.parentFile?.mkdirs(); FileOutputStream(o).use { zin.copyTo(it) } }
-                        zin.closeEntry(); e = zin.nextEntry
+                dest.mkdirs()
+                val n = Native.unzip(z, dest)   // Rust (paralel, zip-slip korumalı); null = kütüphane yok → eski yol
+                if (n != null) { if (n < 0) throw IOException("unzip") }
+                else {
+                    val dp = dest.canonicalPath + File.separator
+                    ZipInputStream(BufferedInputStream(FileInputStream(z))).use { zin ->
+                        var e = zin.nextEntry
+                        while (e != null) {
+                            val o = File(dest, e.name)
+                            if (!o.canonicalPath.startsWith(dp)) throw SecurityException("zip-slip")
+                            if (e.isDirectory) o.mkdirs() else { o.parentFile?.mkdirs(); FileOutputStream(o).use { zin.copyTo(it) } }
+                            zin.closeEntry(); e = zin.nextEntry
+                        }
                     }
                 }
             } catch (e: Exception) { ok = false; dest.deleteRecursively() }

@@ -7,3 +7,7 @@ keystore.properties
 *.jks
 *.keystore
 .idea/
+
+# Rust
+native/target/
+app/src/main/jniLibs/

@@ -5,3 +5,5 @@
 -keepclasseswithmembernames class * {
     native <methods>;
 }
+# Rust köprüsü (JNI sembolleri sınıf/metot adlarına bağlıdır)
+-keep class github.idrisokys.myl.Native { *; }

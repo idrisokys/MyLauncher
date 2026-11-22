@@ -8,6 +8,7 @@ import android.content.ClipData
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import github.idrisokys.myl.Native
 import android.graphics.Color
 import android.graphics.Matrix
 import android.graphics.Typeface
@@ -183,14 +184,17 @@ class GalleryActivity : Activity() {
         if (scanning) return
         scanning = true
         Thread {
-            val found = ArrayList<Pair<File, Long>>()
-            try {
-                val skip = File(root, "Android")
-                root.walkTopDown().onEnter { it != skip && (it == root || !it.name.startsWith(".")) }
-                    .filter { it.isFile && !it.name.startsWith(".") }
-                    .forEach { f -> val e = f.extension.lowercase(); if (e in IMG || e in VID) found.add(f to f.lastModified()) }
-            } catch (e: Exception) {}
-            val sorted = found.sortedByDescending { it.second }.map { it.first }
+            // Rust (paralel tarama); kütüphane yoksa/hata verirse eski Kotlin yürüyüşü
+            val sorted: List<File> = Native.scanMedia(root, File(root, "Android"), IMG + VID) ?: run {
+                val found = ArrayList<Pair<File, Long>>()
+                try {
+                    val skip = File(root, "Android")
+                    root.walkTopDown().onEnter { it != skip && (it == root || !it.name.startsWith(".")) }
+                        .filter { it.isFile && !it.name.startsWith(".") }
+                        .forEach { f -> val e = f.extension.lowercase(); if (e in IMG || e in VID) found.add(f to f.lastModified()) }
+                } catch (e: Exception) {}
+                found.sortedByDescending { it.second }.map { it.first }
+            }
             runOnUiThread {
                 scanning = false; loaded = true; lastScan = System.currentTimeMillis()
                 media = sorted
@@ -382,6 +386,7 @@ class GalleryActivity : Activity() {
 
     /** fit=true: en büyük kenar maxDim'i geçmesin (tam ekran). fit=false: en küçük kenar >= maxDim (küçük resim). */
     private fun decodeImg(f: File, maxDim: Int, fit: Boolean): Bitmap? {
+        Native.decodeImage(f.path, maxDim, fit)?.let { return it }   // Rust; desteklenmeyen biçimde (heic, svg, CMYK...) aşağıdaki Android yolu
         return try {
             val o = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             BitmapFactory.decodeFile(f.path, o)

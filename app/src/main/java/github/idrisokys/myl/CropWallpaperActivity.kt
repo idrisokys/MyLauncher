@@ -104,9 +104,10 @@ class CropWallpaperActivity : Activity() {
     private fun apply() {
         setBtn.isEnabled = false
         val app = applicationContext
-        val out = cropView.render(targetW, targetH)
+        cropView.locked = true // render sürerken dokunuşlar kırpma matrisini bozmasın
         thread {
             val msg = try {
+                val out = cropView.render(targetW, targetH)
                 val wm = WallpaperManager.getInstance(app)
                 if (!wm.isWallpaperSupported || !wm.isSetWallpaperAllowed) {
                     "Bu cihaz duvar kağıdı değiştirmeyi desteklemiyor"
@@ -142,6 +143,7 @@ class CropWallpaperActivity : Activity() {
         private val border = Paint().apply {
             color = Color.WHITE; style = Paint.Style.STROKE; strokeWidth = 3f
         }
+        @Volatile var locked = false
         private var minScale = 1f
         private val vals = FloatArray(9)
 
@@ -201,6 +203,7 @@ class CropWallpaperActivity : Activity() {
         }
 
         override fun onTouchEvent(e: MotionEvent): Boolean {
+            if (locked) return true
             scaleDetector.onTouchEvent(e)
             moveDetector.onTouchEvent(e)
             return true

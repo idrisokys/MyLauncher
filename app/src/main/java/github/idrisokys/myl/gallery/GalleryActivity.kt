@@ -66,6 +66,11 @@ class GalleryActivity : Activity() {
     companion object {
         /** Dosyalarım'dan bir resme dokunulunca: bu dosya doğrudan tam ekran gezginde açılır. */
         const val EXTRA_FILE = "github.idrisokys.myl.gallery.FILE"
+        /** Disk önbelleği etiketleri (360 px kısa kenar): resim küçük resmi / video karesi. */
+        private const val TAG_IMG = 360
+        private const val TAG_VID = 361
+        /** Disk önbelleğinin üst sınırı; aşılınca en eski girdiler silinir. */
+        private const val THUMB_CACHE_MAX = 96L * 1024 * 1024
     }
 
     private fun dp(x: Int) = (x * resources.displayMetrics.density).toInt()
@@ -75,6 +80,7 @@ class GalleryActivity : Activity() {
 
     override fun onCreate(s: Bundle?) {
         super.onCreate(s)
+        Thread { Native.thumbTrim(thumbDir, THUMB_CACHE_MAX) }.apply { isDaemon = true }.start()   // eski küçük resimleri buda
         window.statusBarColor = Color.BLACK; window.navigationBarColor = bg
         val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(bg) }
         val tb = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setBackgroundColor(bar); setPadding(dp(12), 0, dp(6), 0) }
@@ -158,7 +164,7 @@ class GalleryActivity : Activity() {
         if (!f.isFile) { toast("Dosya bulunamadı"); return }
         val sibs = (f.parentFile?.listFiles() ?: emptyArray<File>())
             .filter { it.isFile && !it.name.startsWith(".") && it.extension.lowercase().let { e -> e in IMG || e in VID } }
-            .sortedByDescending { it.lastModified() }.toMutableList()
+            .map { it to it.lastModified() }.sortedByDescending { it.second }.map { it.first }.toMutableList()
         if (sibs.none { it.path == f.path }) sibs.add(0, f)
         viewer?.dlg?.dismiss()
         Viewer(sibs, sibs.indexOfFirst { it.path == f.path }) {
@@ -417,9 +423,18 @@ class GalleryActivity : Activity() {
         } catch (e: Throwable) { null } finally { try { r.release() } catch (e: Exception) {} }
     }
 
+    /** Disk önbelleği: küçük resimler (ve video kareleri) uygulama yeniden açılınca tekrar çözülmesin. */
+    private val thumbDir by lazy { File(cacheDir, "thumbs") }
+
     private fun loadThumb(f: File): Bitmap? {
         thumbs.get(f.path)?.let { return it }
-        val b = if (isVid(f)) videoFrame(f, 360) else decodeImg(f, 360, false)
+        val vid = isVid(f)
+        val tag = if (vid) TAG_VID else TAG_IMG
+        var b = Native.thumbGet(f, thumbDir, tag)                       // Rust: diskteki JPEG
+        if (b == null) {
+            b = if (vid) videoFrame(f, 360) else decodeImg(f, 360, false)
+            if (b != null) Native.thumbPut(f, thumbDir, tag, b)         // Rust: JPEG olarak yaz (anahtar: yol+boyut+tarih)
+        }
         if (b != null) thumbs.put(f.path, b)
         return b
     }

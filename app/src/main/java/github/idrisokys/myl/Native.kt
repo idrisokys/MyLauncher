@@ -21,18 +21,24 @@ object Native {
     @JvmStatic private external fun nScanMedia(root: String, skip: String, exts: Array<String>): Array<String>?
     @JvmStatic private external fun nListDirMeta(dir: String): Array<String>?
     @JvmStatic private external fun nWalkNotes(root: String, dl: Boolean, maxDepth: Int): Array<String>?
+    @JvmStatic private external fun nWalkForSearch(root: String, query: String): Array<String>?
     @JvmStatic private external fun nSearchNotes(paths: Array<String>, query: String): Array<String>?
     @JvmStatic private external fun nUnzip(zip: String, dest: String): Int
     @JvmStatic private external fun nZipPaths(sources: Array<String>, dest: String): Int
     @JvmStatic private external fun nHashFile(path: String, algo: String): Array<String>?
     @JvmStatic private external fun nHashFiles(paths: Array<String>, algo: String): Array<String>?
     @JvmStatic private external fun nDecodeImage(path: String, maxDim: Int, fit: Boolean): ByteArray?
+    @JvmStatic private external fun nThumbGet(path: String, cacheDir: String, tag: Int): ByteArray?
+    @JvmStatic private external fun nThumbPut(path: String, cacheDir: String, tag: Int, w: Int, h: Int, rgba: ByteArray): Boolean
+    @JvmStatic private external fun nThumbTrim(cacheDir: String, maxBytes: Long): Long
     @JvmStatic private external fun nConvertImages(srcs: Array<String>, destDir: String, format: String, quality: Int, maxDim: Int): Array<String>?
     @JvmStatic private external fun nSetLang(english: Boolean)
     @JvmStatic private external fun nServerStart(recvDir: String, linkRoot: String?, dlRoot: String?, trash: String?, port: Int): Long
     @JvmStatic private external fun nServerPoll(id: Long): Array<String>?
     @JvmStatic private external fun nServerStop(id: Long)
     @JvmStatic private external fun nSend(addr: String, name: String, fd: Int, len: Long): Int
+    @JvmStatic private external fun nMdnsBrowse(token: Long, service: String, local: String?, skip: String?, timeoutMs: Int): Array<String>?
+    @JvmStatic private external fun nMdnsCancel(token: Long)
     @JvmStatic private external fun nSync(mode: Int, root: String, download: Boolean, trash: String?, peers: Array<String>): Array<String>?
 
     private inline fun <T> safe(block: () -> T?): T? =
@@ -63,6 +69,24 @@ object Native {
     fun walkNotes(root: File, dl: Boolean, maxDepth: Int): Array<String>? = safe { nWalkNotes(root.path, dl, maxDepth) }
 
     // ------------------------------------------------------------ arama
+
+    /** Arama yürüyüşünde bir öğe: [rel] kök klasöre göre "/" ile ayrılmış yol. */
+    class Walked(val rel: String, val isDir: Boolean, val pinned: Boolean, val nameHit: Boolean)
+
+    /**
+     * Notlar ağacını Rust'ta gezer (Kotlin `Store.list` sırası ve süzgeci ile aynı): klasör içeriğinden ÖNCE gelir.
+     * [query] kelimeleri klasör adında geçiyorsa `nameHit` işaretlenir. Kütüphane yoksa/hata olursa null (Kotlin yürüyüşü).
+     */
+    fun walkForSearch(root: File, query: String): List<Walked>? = safe {
+        val a = nWalkForSearch(root.path, query) ?: return@safe null
+        val out = ArrayList<Walked>(a.size / 4)
+        var i = 0
+        while (i + 3 < a.size) {
+            out.add(Walked(a[i], a[i + 1] == "D", a[i + 2] == "1", a[i + 3] == "1"))
+            i += 4
+        }
+        out
+    }
 
     class NoteHit(val idx: Int, val titleMatch: Boolean, val isNote: Boolean, val detail: String)
 
@@ -114,6 +138,35 @@ object Native {
         bmp
     }
 
+    // ------------------------------------------------------------ küçük resim disk önbelleği (galeri)
+
+    /**
+     * Diskteki küçük resim (JPEG) varsa Bitmap olarak döner; yoksa, dosya değiştiyse ya da kütüphane yoksa null.
+     * [tag]: küçük resim türü (aynı dosyanın farklı boyut/türleri karışmasın).
+     */
+    fun thumbGet(f: File, cacheDir: File, tag: Int): Bitmap? = safe {
+        val b = nThumbGet(f.path, cacheDir.path, tag) ?: return@safe null
+        if (b.size < 8) return@safe null
+        val bb = ByteBuffer.wrap(b).order(ByteOrder.LITTLE_ENDIAN)
+        val w = bb.getInt(0); val h = bb.getInt(4)
+        if (w <= 0 || h <= 0 || b.size.toLong() != 8L + w.toLong() * h.toLong() * 4L) return@safe null
+        val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        bb.position(8)
+        bmp.copyPixelsFromBuffer(bb)
+        bmp
+    }
+
+    /** Küçük resmi diske yazar (yalnızca opak ARGB_8888; saydam olanlar yazılmaz). Başarılıysa true. */
+    fun thumbPut(f: File, cacheDir: File, tag: Int, bmp: Bitmap): Boolean = safe {
+        if (bmp.config != Bitmap.Config.ARGB_8888 || bmp.isRecycled || bmp.hasAlpha() && !bmp.isPremultiplied) return@safe false
+        val buf = ByteBuffer.allocate(bmp.byteCount)
+        bmp.copyPixelsToBuffer(buf)
+        nThumbPut(f.path, cacheDir.path, tag, bmp.width, bmp.height, buf.array())
+    } ?: false
+
+    /** Önbellek [maxBytes]'ı aşarsa en eski girdileri siler. */
+    fun thumbTrim(cacheDir: File, maxBytes: Long) { safe { nThumbTrim(cacheDir.path, maxBytes); true } }
+
     /**
      * Toplu dönüştürme. [format]: "jpg" | "png" | "webp" (kayıpsız). [maxDim] > 0 ise en büyük kenar buna sığdırılır.
      * Her giriş için oluşan dosyanın yolu; başarısızsa null.
@@ -121,6 +174,28 @@ object Native {
     fun convertImages(srcs: List<File>, destDir: File, format: String, quality: Int = 90, maxDim: Int = 0): List<String?>? = safe {
         nConvertImages(srcs.map { it.path }.toTypedArray(), destDir.path, format, quality, maxDim)?.map { it.ifEmpty { null } }
     }
+
+    // ------------------------------------------------------------ mDNS cihaz tarama (Rust, qshare_core::mdns)
+
+    class MdnsHit(val instance: String, val ip: String, val port: Int, val id: String, val name: String)
+
+    /**
+     * Tek seferlik mDNS taraması: bulunan tüm cihazlar tek soketle PARALEL çözülür (NsdManager sırayla çözer).
+     * Engelleyicidir (arka plan iş parçacığı); en çok [timeoutMs] sürer, cihaz bulunup sessizlik olunca daha erken biter.
+     * [token] ile [mdnsCancel] taramayı erken bitirir. [local]: çıkış arayüzünün IPv4'ü. Kütüphane yoksa/hata olursa null.
+     */
+    fun mdnsBrowse(token: Long, local: String?, skip: String?, timeoutMs: Int): List<MdnsHit>? = safe {
+        val a = nMdnsBrowse(token, "_qshare._tcp.local", local, skip, timeoutMs) ?: return@safe null
+        val out = ArrayList<MdnsHit>(a.size / 5)
+        var i = 0
+        while (i + 4 < a.size) {
+            out.add(MdnsHit(a[i], a[i + 1], a[i + 2].toIntOrNull() ?: 0, a[i + 3], a[i + 4]))
+            i += 5
+        }
+        out
+    }
+
+    fun mdnsCancel(token: Long) { safe { nMdnsCancel(token); true } }
 
     // ------------------------------------------------------------ Hızlı Paylaş / Link eşitlemesi (qs/)
 

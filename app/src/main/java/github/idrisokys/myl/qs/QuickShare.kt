@@ -140,6 +140,10 @@ class Discovery(c: Context) {
     private var busy = false
     private val tries = HashMap<String, Int>()
     private val myName get() = "QS" + Identity.id.take(10)
+    private val token = nextToken.incrementAndGet()
+    @Volatile private var stopped = false
+
+    private companion object { val nextToken = java.util.concurrent.atomic.AtomicLong() }
 
     fun register(port: Int) {
         val i = NsdServiceInfo().apply {
@@ -159,6 +163,7 @@ class Discovery(c: Context) {
     }
 
     fun browse() {
+        rustScan()   // NsdManager'a EK: cihazlar Rust'ta paralel çözülür; bulamazsa NsdManager sonuçları geçerli kalır
         dl = object : NsdManager.DiscoveryListener {
             override fun onStartDiscoveryFailed(t: String?, e: Int) {}
             override fun onStopDiscoveryFailed(t: String?, e: Int) {}
@@ -171,8 +176,36 @@ class Discovery(c: Context) {
     }
 
     fun stop() {
+        stopped = true
+        Native.mdnsCancel(token)
         try { rl?.let { nsd.unregisterService(it) } } catch (e: Exception) { }
         try { dl?.let { nsd.stopServiceDiscovery(it) } } catch (e: Exception) { }
+    }
+
+    /**
+     * Rust mDNS taraması (arka plan). Bulunanlar [Peers]'a eklenir; NsdManager aynı cihazı sonra bulursa kayıt aynı
+     * anahtarla (örnek adı) güncellenir. MulticastLock tarama boyunca tutulur.
+     */
+    private fun rustScan() {
+        if (!Native.ok) return
+        thread(isDaemon = true, name = "qs-mdns") {
+            var lock: WifiManager.MulticastLock? = null
+            try {
+                val wm = app.getSystemService(Context.WIFI_SERVICE) as WifiManager
+                lock = wm.createMulticastLock("qs-mdns").apply { setReferenceCounted(false); acquire() }
+                if (stopped) return@thread
+                val hits = Native.mdnsBrowse(token, localIpv4(), myName, 3500) ?: return@thread
+                if (stopped) return@thread
+                for (h in hits) {
+                    if (h.id.isEmpty() || h.id == Identity.id || h.port <= 0) continue
+                    val a = try { InetAddress.getByName(h.ip) } catch (e: Exception) { null } ?: continue
+                    Peers.put(h.instance, Peer(h.id, h.name.ifEmpty { "?" }, a, h.port, h.instance))
+                }
+            } catch (t: Throwable) {
+            } finally {
+                try { lock?.release() } catch (e: Exception) { }
+            }
+        }
     }
 
     @Synchronized private fun enqueue(s: NsdServiceInfo) { q.addLast(s); pump() }
@@ -430,6 +463,18 @@ class Receiver(private val ctx: Context) {
         }
     }
 }
+
+/**
+ * Wi-Fi / Ethernet arayüzünün özel (site-local) IPv4 adresi. Rust mDNS soketi bu adrese bağlanır; böylece çok noktaya
+ * yayın doğru arayüzden çıkar (mobil veri/VPN üzerinden değil). Bulunamazsa null: sistem seçer.
+ */
+internal fun localIpv4(): String? = try {
+    java.net.NetworkInterface.getNetworkInterfaces()?.toList().orEmpty()
+        .filter { it.isUp && !it.isLoopback && it.supportsMulticast() }
+        .sortedBy { if (it.name.startsWith("wlan") || it.name.startsWith("eth") || it.name.startsWith("ap")) 0 else 1 }
+        .flatMap { it.inetAddresses.toList() }
+        .firstOrNull { it is Inet4Address && it.isSiteLocalAddress }?.hostAddress
+} catch (e: Exception) { null }
 
 /** Rust'a verilen "ip:port" adresi (IPv6 için köşeli parantezli). */
 internal fun hostPort(p: Peer): String {

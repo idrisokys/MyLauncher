@@ -8,10 +8,12 @@ mod meta;
 mod scan;
 mod search;
 mod share_jni;
+mod thumbcache;
+mod tree;
 mod util;
 
-use jni::objects::{JClass, JObjectArray, JString};
-use jni::sys::{jboolean, jbyteArray, jint, jobjectArray};
+use jni::objects::{JByteArray, JClass, JObjectArray, JString};
+use jni::sys::{jboolean, jbyteArray, jint, jlong, jobjectArray};
 use jni::JNIEnv;
 use std::collections::HashSet;
 use std::ptr::null_mut;
@@ -93,6 +95,29 @@ pub extern "system" fn Java_github_idrisokys_myl_Native_nWalkNotes<'l>(
             flat.push(if n.dir { "D" } else { "F" }.to_string());
             flat.push(n.size.to_string());
             flat.push(n.mtime.to_string());
+        }
+        to_jstr_array(&mut env, &flat)
+    })
+}
+
+/// Not araması için klasör yürüyüşü (Kotlin `Store.search` içindeki dolaşım): her öğe için 4 alan
+/// [göreli yol ("/" ile), "D"/"F", sabitli "1"/"0", klasör adı sorguyla eşleşti "1"/"0"]. Klasör içeriğinden önce gelir.
+#[no_mangle]
+pub extern "system" fn Java_github_idrisokys_myl_Native_nWalkForSearch<'l>(
+    mut env: JNIEnv<'l>,
+    _c: JClass<'l>,
+    root: JString<'l>,
+    query: JString<'l>,
+) -> jobjectArray {
+    guard(null_mut(), || {
+        let (Some(r), Some(q)) = (jstr(&mut env, &root), jstr(&mut env, &query)) else { return null_mut() };
+        let nodes = tree::walk_for_search(std::path::Path::new(&r), &q);
+        let mut flat = Vec::with_capacity(nodes.len() * 4);
+        for n in nodes {
+            flat.push(n.rel);
+            flat.push(if n.is_dir { "D" } else { "F" }.to_string());
+            flat.push(if n.pinned { "1" } else { "0" }.to_string());
+            flat.push(if n.name_hit { "1" } else { "0" }.to_string());
         }
         to_jstr_array(&mut env, &flat)
     })
@@ -230,6 +255,63 @@ pub extern "system" fn Java_github_idrisokys_myl_Native_nDecodeImage<'l>(
         Some(b) => env.byte_array_from_slice(&b).map(|a| a.into_raw()).unwrap_or(null_mut()),
         None => null_mut(),
     }
+}
+
+/// Galeri küçük resim önbelleği (disk, JPEG): varsa [w:i32 LE][h:i32 LE] + RGBA, yoksa/bayatsa null.
+/// `tag`: küçük resim türü (Kotlin sabiti); anahtar yol + boyut + değişme zamanı + etiketten üretilir.
+#[no_mangle]
+pub extern "system" fn Java_github_idrisokys_myl_Native_nThumbGet<'l>(
+    mut env: JNIEnv<'l>,
+    _c: JClass<'l>,
+    path: JString<'l>,
+    cache_dir: JString<'l>,
+    tag: jint,
+) -> jbyteArray {
+    let r: Option<Vec<u8>> = guard(None, || {
+        let p = jstr(&mut env, &path)?;
+        let d = jstr(&mut env, &cache_dir)?;
+        thumbcache::get(&p, &d, tag)
+    });
+    match r {
+        Some(b) => env.byte_array_from_slice(&b).map(|a| a.into_raw()).unwrap_or(null_mut()),
+        None => null_mut(),
+    }
+}
+
+/// Küçük resmi (premultiplied RGBA, w×h) önbelleğe yazar. Saydam / tutarsız girdi yazılmaz: false.
+#[no_mangle]
+pub extern "system" fn Java_github_idrisokys_myl_Native_nThumbPut<'l>(
+    mut env: JNIEnv<'l>,
+    _c: JClass<'l>,
+    path: JString<'l>,
+    cache_dir: JString<'l>,
+    tag: jint,
+    w: jint,
+    h: jint,
+    rgba: JByteArray<'l>,
+) -> jboolean {
+    guard(0, || {
+        if w <= 0 || h <= 0 {
+            return 0;
+        }
+        let (Some(p), Some(d)) = (jstr(&mut env, &path), jstr(&mut env, &cache_dir)) else { return 0 };
+        let Ok(px) = env.convert_byte_array(&rgba) else { return 0 };
+        thumbcache::put(&p, &d, tag, w as u32, h as u32, &px) as jboolean
+    })
+}
+
+/// Önbellek boyutu `max_bytes`'ı aşarsa en eski girdileri siler; kalan toplam bayt.
+#[no_mangle]
+pub extern "system" fn Java_github_idrisokys_myl_Native_nThumbTrim<'l>(
+    mut env: JNIEnv<'l>,
+    _c: JClass<'l>,
+    cache_dir: JString<'l>,
+    max_bytes: jlong,
+) -> jlong {
+    guard(0, || match jstr(&mut env, &cache_dir) {
+        Some(d) => thumbcache::trim(&d, max_bytes.max(0) as u64) as jlong,
+        None => 0,
+    })
 }
 
 /// Toplu resim dönüştürme (paralel, en çok 2 iş parçacığı). Her giriş için çıktı yolu, başarısızsa "".

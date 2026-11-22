@@ -27,3 +27,13 @@ Testler: `cd qshare_core && cargo test --release` (protokol + eşitleme, uçtan 
 
 `qshare_core` iki repoda aynı dizinde durur. Tek kaynaktan yönetmek için git submodule yapılabilir:
 `git submodule add <qshare_core-repo-adresi> qshare_core` (CI'da `actions/checkout` adımına `submodules: true` eklenir).
+
+## Rust hız çalışması (son eklemeler)
+
+- `qshare_core/mdns.rs` + `Native.mdnsBrowse`: cihaz bulma NsdManager'a EK olarak Rust'ta paralel yapılır (`Discovery.browse`); NsdManager yedek olarak çalışmaya devam eder.
+- `qshare_core/share/server.rs`: alma sunucusu bloklayan `accept` kullanır (40 ms yoklama kalktı).
+- `native/src/tree.rs` + `Native.walkForSearch`: `Store.search` klasör yürüyüşü Rust'ta (sıra, sabitleme, klasör adı eşleşmesi); Rust yoksa Kotlin yürüyüşü.
+- `native/src/thumbcache.rs` + `Native.thumbGet/thumbPut/thumbTrim`: galeri küçük resimleri ve video kareleri `cacheDir/thumbs` altında JPEG olarak saklanır (96 MB sınır; saydam görüntüler önbelleğe yazılmaz).
+- `GalleryActivity`: sıralama karşılaştırmasında dosya başına tek `lastModified()`; `CropWallpaperActivity.render()` arka plan iş parçacığında.
+
+Bu değişiklikler Rust derleyicisi / Android SDK olmayan bir ortamda yazıldı: ilk CI çalıştırmasında derleme hatası çıkabilir.

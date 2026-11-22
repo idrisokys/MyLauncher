@@ -436,7 +436,30 @@ object Store {
                 } else files.add(e to path)
             }
         }
-        walk(root, emptyList())
+        // Rust: tüm ağaç tek çağrıyla gezilir (sıralama, sabitleme ve klasör adı eşleşmesi dahil). Olmazsa Kotlin yürüyüşü.
+        val rootFile = file(root)
+        val walked = if (Native.ok) Native.walkForSearch(rootFile, query) else null
+        if (walked != null) {
+            val dirs = HashMap<String, Entry>()
+            for (w in walked) {
+                val f = File(rootFile, w.rel)
+                val e = Entry(f.name, uriOf(f), w.isDir).also { it.pinned = w.pinned }
+                val slash = w.rel.lastIndexOf('/')
+                val chain = ArrayList<Entry>()
+                if (slash >= 0) {
+                    // üst klasörler: yürüyüşte her klasör içeriğinden önce geldiği için hepsi `dirs` içinde vardır
+                    var acc = ""
+                    for (part in w.rel.substring(0, slash).split('/')) {
+                        acc = if (acc.isEmpty()) part else "$acc/$part"
+                        dirs[acc]?.let(chain::add)
+                    }
+                }
+                if (w.isDir) {
+                    dirs[w.rel] = e
+                    if (w.nameHit) folderHits.add(Hit(e, chain, "", false, true))
+                } else files.add(e to chain)
+            }
+        } else walk(root, emptyList())
 
         // Rust: dosyalar 64'lük gruplar halinde paralel okunup eşleştirilir; her grup arasında iptal denetlenir.
         if (Native.ok) {

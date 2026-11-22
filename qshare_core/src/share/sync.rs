@@ -1,4 +1,4 @@
-//! Notlarım eşitleme istemcisi: `~/Link` içindeki .url/.txt dosyaları ve klasörleri karşı cihazla karşılaştırır.
+//! Klasör eşitleme istemcisi: Link (`.url`/`.txt`) ya da Download (her dosya) klasörünü karşı cihazla karşılaştırır.
 //!
 //! Hız tasarımı:
 //! 1. Yerel tarama ile karşı manifesto indirmesi aynı anda yapılır.
@@ -9,12 +9,12 @@
 //!
 //! Modlar: 0 = iki cihaz aynı olsun (birleştirir; yeni değişiklik tarihi kazanır), 1 = bu cihaza göre
 //! (karşıdaki bu cihazın aynısı olur), 2 = karşıdaki cihaza göre (bu cihaz karşıdakinin aynısı olur).
-//! Silmeler KALICIDIR (Çöp Kutusu yok).
+//! Silmeler `Scope::trash` boşsa KALICIDIR (macOS Plan), doluysa geri alınabilir bir klasöre taşınır (Android `.onemsiz`).
 
 use super::bundle;
 use super::client::Conn;
 use super::proto::*;
-use unicode_normalization::UnicodeNormalization;
+use crate::unicode::nfc;
 use std::collections::{HashMap, HashSet};
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufWriter, Write};
@@ -86,14 +86,21 @@ impl Outcome {
 /// * Link (`dl == false`): `<ana dizin>/Link`, yalnızca `.url`/`.txt`.
 /// * Download (`dl == true`): İndirilenler, gizli/geçici olmayan her dosya; istekler `X-Root: dl` taşır.
 /// * `trash`: dolu ise silinen öğeler buraya taşınır (Android `.onemsiz`, geri alınabilir); boş ise kalıcı silinir.
+/// * `skip_hidden_dirs`: `.` ile başlayan klasörler taranmaz. macOS Plan: her zaman; Android: yalnızca Download.
 #[derive(Clone, Debug)]
 pub struct Scope {
     pub root: PathBuf,
     pub dl: bool,
     pub trash: Option<PathBuf>,
+    pub skip_hidden_dirs: bool,
 }
 
 impl Scope {
+    /// macOS Plan'ın Link kapsamı: yalnızca `.url`/`.txt`, gizli klasörler atlanır, silme kalıcıdır.
+    pub fn link(root: impl Into<PathBuf>) -> Scope {
+        Scope { root: root.into(), dl: false, trash: None, skip_hidden_dirs: true }
+    }
+
     pub fn resolve(&self, rel: &str, dir: bool) -> Option<PathBuf> {
         resolve_scoped(rel, &self.root, dir, self.dl)
     }
@@ -159,11 +166,6 @@ fn copy_dir(from: &Path, to: &Path) -> io::Result<()> {
     Ok(())
 }
 
-/// NFC (macOS dosya adları ayrışık/NFD olabilir; Android'dekiyle eşleşsin diye birleşik biçime çevrilir).
-fn nfc(s: &str) -> String {
-    s.nfc().collect()
-}
-
 /// Karşı taraf zamanı saniye olarak bildirirse (1e11'den küçük) milisaniyeye çevirir.
 pub fn ms(t: i64) -> i64 {
     if t > 0 && t < 100_000_000_000 { t * 1000 } else { t }
@@ -171,14 +173,14 @@ pub fn ms(t: i64) -> i64 {
 
 // ---------- Yerel ağaç ----------
 
-/// Yerel not ağacı: göreli yol → öğe (yollar NFC; Android ile aynı yazım). Gizli klasörler atlanır.
+/// Yerel ağaç: göreli yol → öğe (yollar NFC; iki platformda aynı yazım). Gizli klasörler `skip_hidden_dirs`'e göre atlanır.
 pub fn local(sc: &Scope) -> HashMap<String, Item> {
     let mut out = HashMap::new();
-    walk(&sc.root, "", 0, sc.dl, &mut out);
+    walk(&sc.root, "", 0, sc, &mut out);
     out
 }
 
-fn walk(d: &Path, prefix: &str, depth: usize, dl: bool, out: &mut HashMap<String, Item>) {
+fn walk(d: &Path, prefix: &str, depth: usize, sc: &Scope, out: &mut HashMap<String, Item>) {
     if depth > MAX_DEPTH {
         return;
     }
@@ -189,13 +191,12 @@ fn walk(d: &Path, prefix: &str, depth: usize, dl: bool, out: &mut HashMap<String
         let Ok(ft) = e.file_type() else { continue };
         let rel = format!("{prefix}{name}");
         if ft.is_dir() {
-            // Android (Kotlin `NoteSync.local`): gizli klasörler yalnızca Download kipinde atlanır
-            if dl && name.starts_with('.') {
+            if sc.skip_hidden_dirs && name.starts_with('.') {
                 continue;
             }
             out.insert(rel.clone(), Item { rel: rel.clone(), dir: true, size: 0, mtime: 0 });
-            walk(&e.path(), &format!("{rel}/"), depth + 1, dl, out);
-        } else if is_sync_name(&name, dl) {
+            walk(&e.path(), &format!("{rel}/"), depth + 1, sc, out);
+        } else if is_sync_name(&name, sc.dl) {
             let (size, mtime) = fs::metadata(e.path()).map(|m| (m.len() as i64, mtime_ms(&m))).unwrap_or((0, 0));
             out.insert(rel.clone(), Item { rel, dir: false, size, mtime });
         }

@@ -1,8 +1,8 @@
 //! Sunucu ve istemci aynı süreçte, 127.0.0.1 üzerinden uçtan uca denenir.
 
-use mylnative::share::client;
-use mylnative::share::server::{Config, Event, Server};
-use mylnative::share::sync;
+use qshare_core::share::client;
+use qshare_core::share::server::{Config, Event, Server};
+use qshare_core::share::sync;
 use std::fs;
 use std::io::{Read, Write};
 use std::net::TcpStream;
@@ -10,9 +10,9 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 
-/// Link kapsamı (kalıcı silme).
+/// Link kapsamı, Plan (macOS) davranışı: kalıcı silme, gizli klasörler atlanır.
 fn sc(p: &Path) -> sync::Scope {
-    sync::Scope { root: p.to_path_buf(), dl: false, trash: None }
+    sync::Scope::link(p)
 }
 
 fn tmp(tag: &str) -> PathBuf {
@@ -276,11 +276,11 @@ fn download_scope_syncs_any_type_and_deletes_go_to_trash() {
             ..Default::default()
         },
         0,
-        Arc::new(|_| {}),
+        Arc::new(|_: Event| {}),
     )
     .unwrap();
     let peer = sync::Peer { name: "B".into(), addr: format!("127.0.0.1:{}", srv.port()) };
-    let dl = sync::Scope { root: a.clone(), dl: true, trash: Some(trash.clone()) };
+    let dl = sync::Scope { root: a.clone(), dl: true, trash: Some(trash.clone()), skip_hidden_dirs: true };
 
     let r = sync::run(0, Some(&dl), &[peer.clone()]);
     assert!(r.error.is_none() && r.errors.is_empty(), "{r:?}");
@@ -300,4 +300,75 @@ fn download_scope_syncs_any_type_and_deletes_go_to_trash() {
     let r = sync::run(0, Some(&sc(&a)), &[peer]);
     assert_eq!(r.peers, 0);
     assert!(!r.errors.is_empty());
+}
+
+#[test]
+fn plan_defaults_use_paren_names_and_skip_hidden_dirs() {
+    // Varsayılan Config (Plan): aynı ad "ad (2).uzantı" olur; Link'te gizli klasör eşitlenmez
+    let base = tmp("plandef");
+    let recv = base.join("in");
+    let src = base.join("Rapor.pdf");
+    fs::write(&src, b"abc").unwrap();
+    let (srv, _ev) = start(&recv, None);
+    let addr = format!("127.0.0.1:{}", srv.port());
+    assert!(client::send_file(&addr, &src, &mut |_, _| {}));
+    assert!(client::send_file(&addr, &src, &mut |_, _| {}));
+    assert!(recv.join("Rapor.pdf").exists());
+    assert!(recv.join("Rapor (2).pdf").exists());
+    assert!(!recv.join("Rapor_1.pdf").exists());
+
+    let (a, b) = (base.join("A"), base.join("B"));
+    write(&a, "not.txt", "N");
+    write(&a, ".gizli/ic.txt", "G");
+    fs::create_dir_all(&b).unwrap();
+    let (srv2, _ev2) = start(&base.join("in2"), Some(b.clone()));
+    let peer = sync::Peer { name: "B".into(), addr: format!("127.0.0.1:{}", srv2.port()) };
+    let r = sync::run(0, Some(&sc(&a)), &[peer]);
+    assert!(r.error.is_none() && r.errors.is_empty(), "{r:?}");
+    assert_eq!(fs::read_to_string(b.join("not.txt")).unwrap(), "N");
+    assert!(!b.join(".gizli").exists());
+}
+
+#[test]
+fn android_link_scope_syncs_hidden_dirs_when_enabled() {
+    // Android: Link kapsamında gizli klasörler de eşitlenir (Config::link_hidden_dirs + Scope::skip_hidden_dirs = false)
+    let base = tmp("hidlink");
+    let (a, b) = (base.join("A"), base.join("B"));
+    write(&a, ".klasor/ic.txt", "H");
+    fs::create_dir_all(&b).unwrap();
+    let srv = Server::start(
+        Config {
+            recv_dir: base.join("in"),
+            link_root: Some(b.clone()),
+            legacy_only: true,
+            android_names: true,
+            link_hidden_dirs: true,
+            ..Default::default()
+        },
+        0,
+        Arc::new(|_: Event| {}),
+    )
+    .unwrap();
+    let peer = sync::Peer { name: "B".into(), addr: format!("127.0.0.1:{}", srv.port()) };
+    let scope = sync::Scope { root: a.clone(), dl: false, trash: None, skip_hidden_dirs: false };
+    let r = sync::run(0, Some(&scope), &[peer]);
+    assert!(r.error.is_none() && r.errors.is_empty(), "{r:?}");
+    assert_eq!(fs::read_to_string(b.join(".klasor").join("ic.txt")).unwrap(), "H");
+}
+
+#[test]
+fn download_request_is_refused_when_server_has_no_download_root() {
+    // Plan sunucusu (dl_root yok) bir Download isteğini Link klasörüyle KARIŞTIRMAZ: hata döner, dosya akmaz
+    let base = tmp("nodl");
+    let (a, b) = (base.join("A"), base.join("B"));
+    write(&a, "foto.jpg", "J");
+    write(&b, "not.txt", "N");
+    let (srv, _ev) = start(&base.join("in"), Some(b.clone()));
+    let peer = sync::Peer { name: "B".into(), addr: format!("127.0.0.1:{}", srv.port()) };
+    let dl = sync::Scope { root: a.clone(), dl: true, trash: None, skip_hidden_dirs: true };
+    let r = sync::run(0, Some(&dl), &[peer]);
+    assert_eq!(r.peers, 0);
+    assert!(!r.errors.is_empty(), "{r:?}");
+    assert!(!b.join("foto.jpg").exists());
+    assert!(!a.join("not.txt").exists());
 }

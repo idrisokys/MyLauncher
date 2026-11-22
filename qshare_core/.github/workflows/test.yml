@@ -1,0 +1,19 @@
+name: qshare_core testleri
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]   # Android (Linux) ve Plan (macOS) davranışı aynı kodla denenir
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Testler (sunucu + istemci 127.0.0.1 üzerinden uçtan uca)
+        run: cargo test --release

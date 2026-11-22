@@ -10,4 +10,5 @@ keystore.properties
 
 # Rust
 native/target/
+qshare_core/target/
 app/src/main/jniLibs/

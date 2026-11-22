@@ -1,14 +1,15 @@
 //! Hızlı Paylaş (alma sunucusu, gönderme) ve Link/Download eşitlemesi için JNI girişleri.
+//! Protokol, sunucu, istemci ve eşitleme mantığı Plan (macOS) ile ORTAK `qshare_core` crate'indedir; burası yalnızca JNI köprüsüdür.
 //! Kotlin tarafı: `github.idrisokys.myl.Native` (`serverStart`, `serverPoll`, `serverStop`, `send`, `sync`).
 //!
 //! * Sunucu olayları Kotlin'e geri çağrıyla DEĞİL, kuyruk + `serverPoll` ile iletilir: Rust iş parçacıklarının
 //!   JVM'e bağlanması gerekmez, Kotlin tarafı tek bir arka plan iş parçacığında bekler.
 //! * Her giriş noktası panikleri yakalar; hata durumunda null / -1 / 4 döner.
 
-use crate::share::client::{self, SendStatus};
-use crate::share::proto;
-use crate::share::server::{Config, Event, Server, Sink};
-use crate::share::sync::{self, Peer, Scope};
+use qshare_core::share::client::{self, SendStatus};
+use qshare_core::share::proto;
+use qshare_core::share::server::{Config, Event, Server, Sink};
+use qshare_core::share::sync::{self, Peer, Scope};
 use crate::util::{guard, jstr, jstr_array, to_jstr_array};
 use jni::objects::{JClass, JObjectArray, JString};
 use jni::sys::{jboolean, jint, jlong, jobjectArray};
@@ -101,7 +102,15 @@ pub extern "system" fn Java_github_idrisokys_myl_Native_nServerStart<'l>(
         if !(0..=65535).contains(&port) {
             return -1;
         }
-        let cfg = Config { recv_dir: recv, link_root: link, legacy_only: true, dl_root: dl, trash, android_names: true };
+        let cfg = Config {
+            recv_dir: recv,
+            link_root: link,
+            legacy_only: true,
+            dl_root: dl,
+            trash,
+            android_names: true,
+            link_hidden_dirs: true,
+        };
         let sh = Arc::new(Shared { q: Mutex::new(VecDeque::new()), cv: Condvar::new(), closed: AtomicBool::new(false) });
         let sh2 = sh.clone();
         let sink: Sink = Arc::new(move |e: Event| {
@@ -204,7 +213,9 @@ pub extern "system" fn Java_github_idrisokys_myl_Native_nSync<'l>(
         let flat = jstr_array(&mut env, &peers);
         let targets: Vec<Peer> =
             flat.chunks(2).filter(|c| c.len() == 2).map(|c| Peer { name: c[0].clone(), addr: c[1].clone() }).collect();
-        let sc = Scope { root: PathBuf::from(root), dl: download != 0, trash };
+        let dl = download != 0;
+        // Android: gizli klasörler yalnızca Download kapsamında atlanır (Kotlin `NoteSync.local` ile aynı)
+        let sc = Scope { root: PathBuf::from(root), dl, trash, skip_hidden_dirs: dl };
         let r = sync::run(mode.max(0) as u32, Some(&sc), &targets);
         let mut out: Vec<String> = vec![
             r.error.clone().unwrap_or_default(),

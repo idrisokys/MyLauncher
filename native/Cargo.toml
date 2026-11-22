@@ -8,6 +8,8 @@ publish = false
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+# Paylaşım/eşitleme protokolü: Plan (macOS) ile ORTAK çekirdek (bağımlılıksız, yalnızca std)
+qshare_core = { path = "../qshare_core" }
 jni = "0.21"
 zip = { version = "2.2", default-features = false, features = ["deflate"] }
 sha2 = "0.10"

@@ -7,7 +7,6 @@ mod imaging;
 mod meta;
 mod scan;
 mod search;
-pub mod share;
 mod share_jni;
 mod util;
 

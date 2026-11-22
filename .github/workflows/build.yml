@@ -32,7 +32,10 @@ jobs:
       - name: cargo-ndk kur
         run: cargo install cargo-ndk --locked
 
-      # Paylaşım/eşitleme protokolü: sunucu + istemci aynı süreçte 127.0.0.1 üzerinden uçtan uca denenir
+      # Paylaşım/eşitleme protokolü (Plan ile ORTAK çekirdek): sunucu + istemci aynı süreçte 127.0.0.1 üzerinden uçtan uca denenir
+      - name: Ortak çekirdek testleri (qshare_core/)
+        run: (cd qshare_core && cargo test --release)
+
       - name: Rust testleri (native/)
         run: (cd native && cargo test --release)
 

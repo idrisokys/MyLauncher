@@ -48,11 +48,14 @@ pub struct Config {
     pub trash: Option<PathBuf>,
     /// Android: aynı adlı alınan dosya `ad_1.uzantı` olarak kaydedilir (Plan'da `ad (2).uzantı`)
     pub android_names: bool,
+    /// Android: Link klasöründeki gizli (`.` ile başlayan) klasörler de eşitlenir. Plan'da (varsayılan `false`) atlanır.
+    /// Download kapsamında gizli klasörler her zaman atlanır.
+    pub link_hidden_dirs: bool,
 }
 
 fn scope_for(cfg: &Config, dl: bool) -> Option<Scope> {
     let root = if dl { cfg.dl_root.clone() } else { cfg.link_root.clone() }?;
-    Some(Scope { root, dl, trash: cfg.trash.clone() })
+    Some(Scope { root, dl, trash: cfg.trash.clone(), skip_hidden_dirs: dl || !cfg.link_hidden_dirs })
 }
 
 /// Bağlantı işlenirken `Event::Busy(true)` ... `Event::Busy(false)` çiftini her çıkış yolunda garanti eder.

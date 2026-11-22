@@ -28,6 +28,12 @@ object Native {
     @JvmStatic private external fun nHashFiles(paths: Array<String>, algo: String): Array<String>?
     @JvmStatic private external fun nDecodeImage(path: String, maxDim: Int, fit: Boolean): ByteArray?
     @JvmStatic private external fun nConvertImages(srcs: Array<String>, destDir: String, format: String, quality: Int, maxDim: Int): Array<String>?
+    @JvmStatic private external fun nSetLang(english: Boolean)
+    @JvmStatic private external fun nServerStart(recvDir: String, linkRoot: String?, dlRoot: String?, trash: String?, port: Int): Long
+    @JvmStatic private external fun nServerPoll(id: Long): Array<String>?
+    @JvmStatic private external fun nServerStop(id: Long)
+    @JvmStatic private external fun nSend(addr: String, name: String, fd: Int, len: Long): Int
+    @JvmStatic private external fun nSync(mode: Int, root: String, download: Boolean, trash: String?, peers: Array<String>): Array<String>?
 
     private inline fun <T> safe(block: () -> T?): T? =
         if (!ok) null else try { block() } catch (t: Throwable) { null }
@@ -114,5 +120,55 @@ object Native {
      */
     fun convertImages(srcs: List<File>, destDir: File, format: String, quality: Int = 90, maxDim: Int = 0): List<String?>? = safe {
         nConvertImages(srcs.map { it.path }.toTypedArray(), destDir.path, format, quality, maxDim)?.map { it.ifEmpty { null } }
+    }
+
+    // ------------------------------------------------------------ Hızlı Paylaş / Link eşitlemesi (qs/)
+
+    /** Rust alma sunucusu: [id] tutamaç, [port] dinlenen port. */
+    class Server(val id: Long, val port: Int)
+
+    /** Rust'tan dönen hata/özet metinlerinin dili (cihaz dili Türkçe değilse İngilizce). */
+    fun setLang() { safe { nSetLang(java.util.Locale.getDefault().language != "tr"); true } }
+
+    /**
+     * Alma sunucusunu başlatır (port 0: boş port). [linkRoot] / [dlRoot] null ise Link / Download eşitlemesi kapalıdır.
+     * [trash]: eşitlemede silinenlerin taşındığı klasör (.onemsiz). Başarısızsa ya da kütüphane yoksa null.
+     */
+    fun serverStart(recvDir: File, linkRoot: File?, dlRoot: File?, trash: File?): Server? = safe {
+        val v = nServerStart(recvDir.path, linkRoot?.path, dlRoot?.path, trash?.path, 0)
+        if (v < 0) null else Server(v ushr 16, (v and 0xFFFF).toInt())
+    }
+
+    /**
+     * Sunucu olayını bekler (en çok ~1,5 sn): [tür, ad, klasör]; zaman aşımında boş dizi; sunucu kapandıysa null.
+     * Türler: 1 alınıyor, 2 alındı (ad, klasör), 3 alma yarım kaldı, 4 eşitleme dosyaları değiştirdi, 5 bağlantı başladı, 6 bitti.
+     */
+    fun serverPoll(s: Server): Array<String>? = safe { nServerPoll(s.id) }
+
+    fun serverStop(s: Server) { safe { nServerStop(s.id); true } }
+
+    const val SEND_OK = 0
+    const val SEND_CONNECT = 1
+    const val SEND_SHORT = 2
+    const val SEND_REFUSED = 3
+
+    /**
+     * Açık bir dosya tanıtıcısından [len] bayt gönderir; tanıtıcıyı KAPATMAZ. Dönüş: SEND_* kodu
+     * (4 = G/Ç hatası); kütüphane yoksa null.
+     */
+    fun send(addr: String, name: String, fd: Int, len: Long): Int? = safe { nSend(addr, name, fd, len) }
+
+    class SyncOut(val peers: Int, val sent: Int, val got: Int, val deleted: Int, val errors: List<String>)
+
+    /**
+     * Link ya da Download klasörünü [peers] (ad → "ip:port") ile eşitler. [mode]: 0 birleştir, 1 bu cihaza göre,
+     * 2 karşıdakine göre. Engelleyicidir (arka plan iş parçacığı). Kütüphane yoksa null.
+     */
+    fun sync(mode: Int, root: File, download: Boolean, trash: File?, peers: List<Pair<String, String>>): SyncOut? = safe {
+        val flat = ArrayList<String>(peers.size * 2)
+        for ((name, addr) in peers) { flat.add(name); flat.add(addr) }
+        val a = nSync(mode, root.path, download, trash?.path, flat.toTypedArray()) ?: return@safe null
+        if (a.size < 5) return@safe null
+        SyncOut(a[1].toIntOrNull() ?: 0, a[2].toIntOrNull() ?: 0, a[3].toIntOrNull() ?: 0, a[4].toIntOrNull() ?: 0, a.drop(5))
     }
 }

@@ -386,6 +386,28 @@ object NoteSync {
         return sent to got
     }
 
+    /**
+     * Tek cihazı Rust ile eşitler (ağ + disk Rust'ta). Bağlanılamazsa mDNS'ten yeniden çözüp bir kez daha dener.
+     * Kütüphane yoksa ya da cihazın adresi Rust'a uygun değilse false döner (Kotlin yolu devreye girer).
+     */
+    private fun syncViaRust(c: Context, mode: Int, p0: Peer, download: Boolean, res: Result): Boolean {
+        if (!rustable(p0)) return false
+        val trash = File(android.os.Environment.getExternalStorageDirectory(), ".onemsiz")
+        fun once(p: Peer) = Native.sync(mode, root(), download, trash, listOf(p.name to hostPort(p)))
+        var out = once(p0) ?: return false
+        if (out.peers == 0) {
+            val np = try { reresolve(c, p0) } catch (e: Exception) { null }
+            if (np != null && rustable(np) && (np.host != p0.host || np.port != p0.port)) {
+                Peers.put(np.svc, np)
+                out = once(np) ?: return false
+            }
+        }
+        if (out.peers == 0) Peers.del(p0.svc)
+        res.peers += out.peers; res.sent += out.sent; res.got += out.got; res.deleted += out.deleted
+        res.errors.addAll(out.errors)
+        return true
+    }
+
     private fun reachable(p: Peer): Boolean = try {
         Socket().use { it.connect(InetSocketAddress(p.host, p.port), 1500) }; true
     } catch (e: Exception) { false }
@@ -433,6 +455,8 @@ object NoteSync {
             for (p0 in if (mode == 2) targets.take(1) else targets) {
                 var p = p0
                 try {
+                    Native.setLang()
+                    if (syncViaRust(c, mode, p0, download, res)) continue
                     fun go(x: Peer) = when (mode) { 1 -> mirrorPeer(x, res.errors); 2 -> pullMirror(x, res.errors); else -> syncPeer(x, res.errors) }
                     val (a, b) = try { go(p) } catch (e: java.io.IOException) {
                         // Bayat adres/port olabilir: mDNS'ten yeniden çözüp bir kez daha dene.

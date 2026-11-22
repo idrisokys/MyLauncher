@@ -3,6 +3,7 @@ package github.idrisokys.myl.qs
 import android.content.ClipData
 import android.content.Context
 import android.content.Intent
+import android.content.res.AssetFileDescriptor
 import android.media.MediaScannerConnection
 import android.net.Uri
 import android.net.nsd.NsdManager
@@ -13,6 +14,7 @@ import android.os.PowerManager
 import android.provider.OpenableColumns
 import android.provider.Settings
 import github.idrisokys.myl.L
+import github.idrisokys.myl.Native
 import java.io.BufferedInputStream
 import java.io.BufferedReader
 import java.io.File
@@ -219,9 +221,51 @@ class Discovery(c: Context) {
 /** TCP sunucu: ağdaki cihazlardan gelen dosyaları kabul eder. */
 class Receiver(private val ctx: Context) {
     private var ss: ServerSocket? = null
-    val port get() = ss!!.localPort
+    /** Rust sunucusu (libmylnative.so varsa); yoksa [ss] ile Kotlin sunucusu çalışır. */
+    private var rs: Native.Server? = null
+    val port get() = rs?.port ?: ss!!.localPort
+
+    /**
+     * Rust alma sunucusunu başlatır: Download'a alma + Link/Download eşitleme uç noktaları (Kotlin sunucusuyla aynı tel biçimi).
+     * Başlatılamazsa false döner ve Kotlin sunucusuna düşülür.
+     */
+    private fun startRust(): Boolean {
+        if (!Native.ok) return false
+        Native.setLang()
+        val direct = SaveDir.direct(ctx)
+        val trash = File(android.os.Environment.getExternalStorageDirectory(), ".onemsiz")
+        val srv = Native.serverStart(SaveDir.dir(), if (direct) github.idrisokys.myl.Store.dataDir() else null, if (direct) SaveDir.dir() else null, trash)
+            ?: return false
+        rs = srv
+        thread(isDaemon = true, name = "qs-events") { pump(srv) }
+        return true
+    }
+
+    /** Rust sunucusunun olaylarını işler: kilitler (Hold), medya taraması ve durum mesajları. Sunucu kapanınca biter. */
+    private fun pump(srv: Native.Server) {
+        var held = 0
+        try {
+            while (true) {
+                val ev = Native.serverPoll(srv) ?: break
+                if (ev.size < 3) continue
+                when (ev[0]) {
+                    "5" -> { Hold.acquire(ctx); held++ }
+                    "6" -> if (held > 0) { held--; Hold.release() }
+                    "2" -> {
+                        MediaScannerConnection.scanFile(ctx, arrayOf(File(ev[2], ev[1]).absolutePath), null, null)
+                        Bus.set(L("Dosya alındı", "File received"))
+                    }
+                    "3" -> Bus.set(L("Alma yarım kaldı", "Transfer incomplete"))
+                }
+            }
+        } finally {
+            // Sunucu kapandıktan sonra biten bağlantıların "bitti" olayı gelmez: tutulan kilitler burada bırakılır.
+            while (held > 0) { held--; Hold.release() }
+        }
+    }
 
     fun start() {
+        if (startRust()) return
         // Tampon, bind'dan ÖNCE ayarlanmalı; yoksa büyük TCP penceresi (hız) devreye girmez.
         val s = ServerSocket().apply {
             reuseAddress = true
@@ -237,7 +281,11 @@ class Receiver(private val ctx: Context) {
         }
     }
 
-    fun stop() { try { ss?.close() } catch (e: Exception) { } }
+    fun stop() {
+        rs?.let { Native.serverStop(it) }
+        rs = null
+        try { ss?.close() } catch (e: Exception) { }
+    }
 
     /** Başlık satırı okur (en fazla 8 KB; sonsuz satıra karşı korumalı). */
     private fun line(i: InputStream): String {
@@ -383,6 +431,15 @@ class Receiver(private val ctx: Context) {
     }
 }
 
+/** Rust'a verilen "ip:port" adresi (IPv6 için köşeli parantezli). */
+internal fun hostPort(p: Peer): String {
+    val h = p.host
+    return if (h is java.net.Inet6Address) "[${h.hostAddress}]:${p.port}" else "${h.hostAddress}:${p.port}"
+}
+
+/** Kapsam kimlikli (fe80::…%wlan0) IPv6 adresleri Rust'ın adres çözümleyicisinde çalışmaz; bunlar Kotlin yolunda kalır. */
+internal fun rustable(p: Peer): Boolean = Native.ok && !(p.host is java.net.Inet6Address && p.host.hostAddress?.contains('%') == true)
+
 /** Bağlantı kurma aşamasında oluşan hata (veri henüz gönderilmedi; yeniden denemek güvenli). */
 private class ConnectFail(cause: Exception) : Exception(cause.message, cause)
 
@@ -510,7 +567,9 @@ object Sender {
             }
         }
         var spool: File? = null
-        val src: InputStream
+        // Rust yolu: boyut biliniyor ve veri dosyanın başında başlıyorsa tanıtıcı doğrudan Rust'a verilir (src = null).
+        val viaRust = len >= 0 && afd.startOffset == 0L && Native.ok
+        val src: InputStream?
         if (len < 0) {
             // Boyut hiç bilinmiyorsa önce geçici dosyaya al, sonra boyutuyla gönder.
             afd.close()
@@ -520,16 +579,16 @@ object Sender {
             } catch (e: Exception) { t.delete(); throw e }
             len = t.length()
             src = t.inputStream()
-        } else src = afd.createInputStream()
+        } else src = if (viaRust) null else afd.createInputStream()
         try {
             try {
-                transfer(p, name, len, src, errOpen)
+                xfer(p, name, len, src, afd, errOpen)
             } catch (e: ConnectFail) {
                 // Bağlanılamadı: büyük olasılıkla bayat adres/port. Yeniden çözüp bir kez daha dene.
                 val np = reresolve(c, p)
                 if (np != null && (np.port != p.port || np.host != p.host)) {
                     Peers.put(np.svc, np)
-                    try { transfer(np, name, len, src, errOpen) }
+                    try { xfer(np, name, len, src, afd, errOpen) }
                     catch (e2: ConnectFail) {
                         Peers.del(np.svc)
                         throw Exception("${np.host.hostAddress}:${np.port} → ${e2.message}")
@@ -540,9 +599,23 @@ object Sender {
                 }
             }
         } finally {
-            try { src.close() } catch (e: Exception) { }
+            try { src?.close() } catch (e: Exception) { }
             try { afd.close() } catch (e: Exception) { }
             spool?.delete()
+        }
+    }
+
+    /** [src] null ise (Rust yolu) veri [afd] tanıtıcısından Rust ile gider; Rust yoksa/başarısızsa Kotlin akışına düşer. */
+    private fun xfer(p: Peer, name: String, len: Long, src: InputStream?, afd: AssetFileDescriptor, errOpen: String) {
+        if (src != null) { transfer(p, name, len, src, errOpen); return }
+        val r = if (rustable(p)) Native.send(hostPort(p), name, afd.parcelFileDescriptor.fd, len) else null
+        when (r) {
+            null -> transfer(p, name, len, afd.createInputStream(), errOpen)
+            Native.SEND_OK -> {}
+            Native.SEND_CONNECT -> throw ConnectFail(java.io.IOException(L("bağlanılamadı", "could not connect")))
+            Native.SEND_SHORT -> throw Exception(errOpen)
+            Native.SEND_REFUSED -> throw Exception(L("Karşı cihaz aktarımı kabul etmedi", "The other device refused the transfer"))
+            else -> throw Exception(L("bağlantı hatası", "connection error"))
         }
     }
 

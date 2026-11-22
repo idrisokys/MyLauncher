@@ -11,3 +11,10 @@ gradle assembleRelease      # buildRust görevi .so'yu otomatik üretir (ANDROID
 ```
 
 `cargo-ndk` yoksa uygulama yine derlenir ve eski Kotlin koduyla çalışır.
+
+### Hızlı Paylaş / Link eşitlemesi (Rust)
+
+Alma sunucusu, dosya gönderme ve Link/Download eşitlemesi de `native/src/share/` altındaki Rust kodunda
+(Plan'ın `plan_core::share` modülünün Android uyarlaması; tel protokolü Kotlin sürümüyle aynıdır).
+Kotlin tarafı `Native.serverStart / serverPoll / send / sync` köprüsünü kullanır; `libmylnative.so` yoksa ya da
+çağrı başarısız olursa eski Kotlin kodu devreye girer. Testler: `cd native && cargo test --release`.

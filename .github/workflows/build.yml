@@ -32,6 +32,10 @@ jobs:
       - name: cargo-ndk kur
         run: cargo install cargo-ndk --locked
 
+      # Paylaşım/eşitleme protokolü: sunucu + istemci aynı süreçte 127.0.0.1 üzerinden uçtan uca denenir
+      - name: Rust testleri (native/)
+        run: (cd native && cargo test --release)
+
       - name: Release APK derle
         run: |
           set -o pipefail

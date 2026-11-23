@@ -100,7 +100,7 @@ class MainActivity : Activity() {
     )
 
     /** Arama satırının sağındaki düğmelerin eylemleri (Google · Yandex · Play Store). */
-    class WebActions(val google: () -> Unit, val yandex: () -> Unit, val play: () -> Unit)
+    class WebActions(val google: () -> Unit, val yandex: () -> Unit, val play: () -> Unit, val notes: () -> Unit)
 
     /** Arka planda hazırlanan, ana thread'e hazır halde teslim edilen uygulama listesi. */
     private class Snapshot(
@@ -131,8 +131,6 @@ class MainActivity : Activity() {
     private val main = Handler(Looper.getMainLooper())
     private val worker: ExecutorService = Executors.newSingleThreadExecutor()
     private val searchExec: ExecutorService = Executors.newSingleThreadExecutor()
-    private val notesExec: ExecutorService = Executors.newSingleThreadExecutor()   // Notlarım araması (uzun sürebilir; kişi aramasını bekletmesin)
-    @Volatile private var noteRows: List<Row> = emptyList()      // geçerli sorgunun Notlarım sonuçları (en fazla MAX_NOTES)
     @Volatile private var curContacts: List<Row> = emptyList()   // geçerli sorgunun kişi sonuçları
     // Simgeleri çok çekirdekte paralel hazırlamak için (soğuk açılışı hızlandırır); boşta kalınca thread'ler kapanır.
     private val iconPool: ExecutorService =
@@ -245,7 +243,6 @@ class MainActivity : Activity() {
         main.removeCallbacksAndMessages(null)
         worker.shutdown()
         searchExec.shutdown()
-        notesExec.shutdownNow()
         iconPool.shutdown()
         folderDialog?.dismiss()
         super.onDestroy()
@@ -391,15 +388,15 @@ class MainActivity : Activity() {
             setOnLongClickListener { setEditMode(!editMode); true }
         }
         actionBtn = ImageView(this).apply {
-            setImageResource(R.drawable.ic_settings)
+            setImageResource(R.drawable.ic_menu_folder)
             setPadding(dp(10), dp(10), dp(10), dp(10))
             background = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
                 setColor(0x66000000)
             }
-            setOnClickListener { if (editMode) showFolderPicker() else showSettingsMenu(this) }
-            // Basılı tut (düzenleme modu kapalıyken): Download klasörünü aç
-            setOnLongClickListener { if (editMode) false else { openDownloads(); true } }
+            // Dokun: Dosyalarım açılır (düzenleme modunda klasör seçici). Basılı tut: ayarlar menüsü
+            setOnClickListener { if (editMode) showFolderPicker() else openFiles() }
+            setOnLongClickListener { if (editMode) false else { showSettingsMenu(this); true } }
         }
         bar.addView(actionBtn, LinearLayout.LayoutParams(dp(46), dp(46)).apply { marginStart = dp(8) })
         bar.addView(moveBtn, LinearLayout.LayoutParams(dp(46), dp(46)).apply { marginStart = dp(8) })
@@ -593,7 +590,7 @@ class MainActivity : Activity() {
         if (editMode == on) return
         editMode = on
         (moveBtn.background as GradientDrawable).setColor(if (on) ACTIVE_RED else IDLE_BG)
-        actionBtn.setImageResource(if (on) R.drawable.ic_folder_add else R.drawable.ic_settings)
+        actionBtn.setImageResource(if (on) R.drawable.ic_folder_add else R.drawable.ic_menu_folder)
     }
 
     private fun showSettingsMenu(anchor: View) {
@@ -843,7 +840,16 @@ class MainActivity : Activity() {
         }
     }
 
-    /** Ayarlar simgesine basılı tutunca: Download klasörünü kendi Dosyalarım bölümünde açar. */
+    /** Klasör simgesine dokununca: Dosyalarım bölümünü açar. */
+    private fun openFiles() {
+        try {
+            startActivity(Intent(this, github.idrisokys.myl.files.FilesActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (e: Exception) {
+            toast("Dosyalarım açılamadı")
+        }
+    }
+
+    /** Download klasörünü kendi Dosyalarım bölümünde açar. */
     private fun openDownloads() {
         val dir = try { Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS) } catch (e: Exception) { null }
             ?: java.io.File(Environment.getExternalStorageDirectory(), "Download")
@@ -884,14 +890,13 @@ class MainActivity : Activity() {
         val q = q0.trim()
         val gen = ++searchGen
         if (q.isEmpty()) {
-            noteRows = emptyList(); curContacts = emptyList()
+            curContacts = emptyList()
             results.visibility = View.GONE
             return
         }
         // Uygulamalar anında gelir; kişi ve Notlarım sorguları arka planda yapılıp sonra eklenir.
-        noteRows = emptyList(); curContacts = emptyList()
+        curContacts = emptyList()
         showRows(q, emptyList())
-        searchNotes(q, gen)
         if (checkSelfPermission(Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED) {
             searchExec.execute {
                 if (gen != searchGen) return@execute
@@ -920,14 +925,13 @@ class MainActivity : Activity() {
             val label = labels[k] ?: continue
             rows.add(Row(label, "Uygulama", iconCache[k], key = k) { launch(k) })
         }
-        // Notlarım sonuçları doğrudan burada görünür (en fazla MAX_NOTES)
-        rows.addAll(noteRows.take(MAX_NOTES))
         val enc = Uri.encode(q)
-        // Tek satır: solda aranan metin, sağda Google · Yandex · Play Store düğmeleri
+        // Tek satır: solda aranan metin, sağda Google · Yandex · Play Store · Notlarım düğmeleri
         rows.add(Row(q, null, null, web = WebActions(
             google = { openUrl("https://www.google.com/search?q=$enc") },
             yandex = { openUrl("https://yandex.com/search/?text=$enc") },
-            play = { openPlayStore(q) }
+            play = { openPlayStore(q) },
+            notes = { openNotes(q) }   // yazılanı Notlarım uygulamasında arar
         )) {})
         // Yanlış dokunmayı önlemek için her sonucun altına dokunulmaz boş satır
         val withGaps = ArrayList<Row>(rows.size * 2)
@@ -936,51 +940,6 @@ class MainActivity : Activity() {
         rows.addAll(withGaps)
         resultsAdapter.notifyDataSetChanged()
         results.visibility = View.VISIBLE
-    }
-
-    /** Notlarım'da arar (link, not, .txt, klasör); ilk [MAX_NOTES] sonucu listeye ekler. İzin yoksa sessizce atlanır. */
-    private fun searchNotes(q: String, gen: Int) {
-        notesExec.execute {
-            if (gen != searchGen) return@execute
-            try { Thread.sleep(200) } catch (e: InterruptedException) { return@execute }
-            if (gen != searchGen) return@execute
-            val root: Uri = Store.root(this) ?: return@execute   // izin yoksa Notlarım sonucu gösterilmez
-            val hits = try { Store.search(applicationContext, root, q) { gen == searchGen } } catch (e: Exception) { emptyList() }
-            if (gen != searchGen) return@execute
-            val rowsFound = hits.take(MAX_NOTES).map { h ->
-                Row(h.entry.title, if (h.entry.isDir) "Notlarım · klasör" else "Notlarım", null) { openNoteHit(h, q) }
-            }
-            main.post {
-                if (gen == searchGen && !isDestroyed) { noteRows = rowsFound; showRows(q, curContacts) }
-            }
-        }
-    }
-
-    /** Link: tarayıcıda açar. Kısa not: panoya kopyalar. .txt ve klasör: Notlarım'da bu aramayı gösterir. */
-    private fun openNoteHit(h: Hit, q: String) {
-        val e = h.entry
-        if (e.isDir || e.isTxt) { openNotes(q); return }
-        Thread {
-            val (u, t) = Store.readLink(applicationContext, e.uri)
-            main.post {
-                if (isDestroyed) return@post
-                when {
-                    u != null -> {
-                        val uri = Uri.parse(u)
-                        val sc = uri.scheme?.lowercase()
-                        if (sc == null || sc in setOf("file", "content", "intent", "javascript", "android-app")) toast("Link açılamadı")
-                        else { closeSearch(); safeStart(Intent(Intent.ACTION_VIEW, uri)) }
-                    }
-                    t != null -> {
-                        (getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager)
-                            .setPrimaryClip(android.content.ClipData.newPlainText("not", t))
-                        toast("Kopyalandı")
-                        closeSearch()
-                    }
-                    else -> toast("Okunamadı")
-                }
-            }
-        }.start()
     }
 
     /** Arka plan thread'inde çalışır. */
@@ -1094,7 +1053,6 @@ class MainActivity : Activity() {
         const val REQ_SEND = 5
         const val MAX_CONTACTS = 2  // kişi ve uygulamalardan en fazla 2 sonuç
         const val MAX_APPS = 2
-        const val MAX_NOTES = 3     // Notlarım sonuçları en fazla 3
         const val ACTIVE_RED = 0xCC8B0000.toInt()   // koyu kırmızı: düzenleme modu ve Hızlı Paylaş açıkken
         const val IDLE_BG = 0x66000000
         const val QS_COOLDOWN_MS = 2000L   // Hızlı Paylaş açma/kapama arası en az bekleme
@@ -1111,7 +1069,7 @@ class MainActivity : Activity() {
         }
     }
 
-    /** Aranan metin solda; sağda Google · Yandex · Play Store düğmeleri (üstteki ikonlarla aynı boyut ve yuvarlak biçim). */
+    /** Aranan metin solda; sağda Google · Yandex · Play Store · Notlarım düğmeleri (üstteki ikonlarla aynı boyut ve yuvarlak biçim). */
     private fun webRow(): LinearLayout {
         val line = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -1134,7 +1092,8 @@ class MainActivity : Activity() {
         for ((res, desc) in listOf(
             R.drawable.ic_search_google to "Google'da ara",
             R.drawable.ic_search_yandex to "Yandex'te ara",
-            R.drawable.ic_search_play to "Play Store'da ara"
+            R.drawable.ic_search_play to "Play Store'da ara",
+            R.drawable.ic_search_notes to "Notlarım'da ara"
         )) line.addView(btn(res, desc), LinearLayout.LayoutParams(dp(42), dp(42)).apply { marginStart = dp(8) })
         return line
     }
@@ -1160,6 +1119,7 @@ class MainActivity : Activity() {
                 line.getChildAt(1).setOnClickListener { web.google() }
                 line.getChildAt(2).setOnClickListener { web.yandex() }
                 line.getChildAt(3).setOnClickListener { web.play() }
+                line.getChildAt(4).setOnClickListener { web.notes() }
                 return line
             }
             val h: RowHolder

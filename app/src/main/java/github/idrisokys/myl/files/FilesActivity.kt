@@ -297,7 +297,7 @@ class FilesActivity : Activity() {
             override fun getItemId(p: Int) = p.toLong()
             override fun getView(p: Int, v: View?, parent: android.view.ViewGroup?): View {
                 val f = l[p]
-                val row = LinearLayout(this@FilesActivity).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(dp(12), dp(5), dp(12), dp(5)); if (f in sel) setBackgroundColor(0xFF2C3E50.toInt()) }
+                val row = LinearLayout(this@FilesActivity).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(dp(12), dp(5), dp(12), dp(5)); if (f in sel) setBackgroundColor(bar) }
                 if (editMode) {
                     // Soldaki boş alan: sadece seç/kaldır
                     val hit = android.widget.FrameLayout(this@FilesActivity).apply {

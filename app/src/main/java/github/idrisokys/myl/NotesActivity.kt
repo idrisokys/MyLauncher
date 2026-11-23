@@ -467,7 +467,7 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
                             },
                             onLongClick = { copyEntry(e) }),
                         colors = ListItemDefaults.colors(containerColor = when {
-                            sel -> MaterialTheme.colorScheme.secondaryContainer
+                            sel -> NotesBar
                             else -> Color.Transparent
                         }),
                         leadingContent = {

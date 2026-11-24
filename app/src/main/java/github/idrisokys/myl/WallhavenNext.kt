@@ -9,13 +9,13 @@ import java.net.URL
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * Wallhaven'dan yalnızca 1080x1920, en popüler (toplist) görselleri sırayla uygular.
+ * Wallhaven'dan yalnızca 1080x1920, doğa temalı (genel + çizim/anime, insan kategorisi yok) en beğenilen (favorites) görselleri sırayla uygular.
  * Her çağrı bir sonraki görsele geçer; sıra ve sayfa SharedPreferences'ta saklanır.
  */
 object WallhavenNext {
     private val busy = AtomicBoolean(false)
     private const val API = "https://wallhaven.cc/api/v1/search" +
-        "?sorting=toplist&topRange=1y&resolutions=1080x1920&categories=111&purity=100&page="
+        "?q=nature&sorting=favorites&resolutions=1080x1920&categories=110&purity=100&page="
 
     /** Ağ ve duvar kağıdı işi arka planda yapılır; [onStatus] ana thread dışından çağrılır. */
     fun next(ctx: Context, onStatus: (String) -> Unit) {
@@ -29,7 +29,7 @@ object WallhavenNext {
     }
 
     private fun run(app: Context): String {
-        val p = app.getSharedPreferences("wallhaven", 0)
+        val p = app.getSharedPreferences("wallhaven_fav", 0)
         var page = p.getInt("page", 1)
         var idx = p.getInt("idx", 0)
         var list = (p.getString("list", "") ?: "").split("\n").filter { it.isNotEmpty() }

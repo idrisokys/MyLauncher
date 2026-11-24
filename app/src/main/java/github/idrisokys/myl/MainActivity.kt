@@ -10,7 +10,10 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.app.Dialog
 import android.content.ContentUris
+import android.content.BroadcastReceiver
 import android.content.ContentValues
+import android.content.Context
+import android.content.IntentFilter
 import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.LauncherActivityInfo
@@ -194,6 +197,11 @@ class MainActivity : Activity() {
         cleanOldShareTargets()
         startReload()
         launcherApps.registerCallback(callback)
+        registerReceiver(dateReceiver, IntentFilter().apply {
+            addAction(Intent.ACTION_DATE_CHANGED)
+            addAction(Intent.ACTION_TIME_CHANGED)
+            addAction(Intent.ACTION_TIMEZONE_CHANGED)
+        })
         handleIntent(intent)
         if (savedInstanceState == null) promptDefaultIfNeeded(intent)
     }
@@ -219,6 +227,7 @@ class MainActivity : Activity() {
         if (skipNextResumeReload) skipNextResumeReload = false else startReload()
         root.post { refreshWindow() }
         updateQsBtn()
+        updateDateHint()
         tryAutoRestore()          // izin sonradan verildiyse yeni kurulumdaki düzen şimdi geri gelir
     }
 
@@ -240,6 +249,7 @@ class MainActivity : Activity() {
         ReceiverService.eventListener = null
         sendPopup?.dispose()
         launcherApps.unregisterCallback(callback)
+        try { unregisterReceiver(dateReceiver) } catch (_: Exception) {}
         main.removeCallbacksAndMessages(null)
         worker.shutdown()
         searchExec.shutdown()
@@ -339,6 +349,8 @@ class MainActivity : Activity() {
         }
         search = EditText(this).apply {
             setTextColor(Color.WHITE)
+            setHintTextColor(0xAAFFFFFF.toInt())
+            hint = todayHint()
             textSize = 20f
             setSingleLine()
             imeOptions = EditorInfo.IME_ACTION_SEND
@@ -494,6 +506,19 @@ class MainActivity : Activity() {
             val ok = Store.submit(applicationContext, root, text)
             main.post { if (!isDestroyed) toast(if (ok) "Eklendi" else "Eklenemedi") }
         }.start()
+    }
+
+    /** Arama kutusunda "24 Salı" gibi bugünün gün ve ayın kaçı olduğunu gösterir (yazmaya başlayınca kaybolur). */
+    private fun todayHint(): String =
+        SimpleDateFormat("d EEEE", Locale("tr", "TR")).format(Date())
+
+    private fun updateDateHint() {
+        if (::search.isInitialized) search.hint = todayHint()
+    }
+
+    // Gece yarısı gün değişince veya saat/saat dilimi değişince ipucunu yeniler
+    private val dateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(c: Context?, i: Intent?) = updateDateHint()
     }
 
     private fun closeSearch() {

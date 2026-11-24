@@ -538,7 +538,17 @@ class FilesActivity : Activity() {
 
     private fun openAny(f: File) {
         if (f.extension.lowercase() == "zip") unzip(f) else if (f.extension.lowercase() == "apk") installApk(f)
-        else if (f.extension.lowercase() in IMG) openInGallery(f) else open(f)
+        else if (f.extension.lowercase() in IMG) openInGallery(f)
+        else if (f.extension.lowercase() == "txt") openInNotes(f) else open(f)
+    }
+
+    /** .txt dosyaları varsayılan olarak Notlarım'ın metin görüntüleme ekranında açılır. */
+    private fun openInNotes(f: File) {
+        try {
+            startActivity(Intent(this, github.idrisokys.myl.NotesActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                .putExtra(github.idrisokys.myl.EXTRA_OPEN_TXT, f.absolutePath))
+        } catch (e: Exception) { open(f) }
     }
 
     /** Resimler varsayılan olarak Galerim'in tam ekran gezgininde açılır. */

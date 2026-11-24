@@ -72,6 +72,8 @@ private val blockedSchemes = setOf("file", "content", "intent", "javascript", "a
 
 /** Launcher arama sonucundan (.txt / klasör) gelen sorgu (Intent extra'sı). */
 const val EXTRA_QUERY = "query"
+/** Dosyalarım'dan gelen .txt dosyasının mutlak yolu: Notlarım'ın metin görüntüleme ekranında doğrudan açılır. */
+const val EXTRA_OPEN_TXT = "open_txt"
 
 /** Eski adıyla LinkCepte: linkleri ve notları <ana dizin>/Link klasöründe .url / .txt olarak tutar. */
 class NotesActivity : ComponentActivity() {
@@ -79,20 +81,27 @@ class NotesActivity : ComponentActivity() {
     // Launcher'dan gelen arama sorgusu; NotesApp tüketince null yapılır
     private val externalQuery = mutableStateOf<String?>(null)
 
+    private val externalTxt = mutableStateOf<String?>(null)
+    private fun readTxt(i: Intent?) {
+        i?.getStringExtra(EXTRA_OPEN_TXT)?.takeIf { it.isNotEmpty() }?.let { externalTxt.value = it }
+    }
+
     private fun readQuery(i: Intent?) {
         i?.getStringExtra(EXTRA_QUERY)?.trim()?.takeIf { it.isNotEmpty() }?.let { externalQuery.value = it }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        if (savedInstanceState == null) readQuery(intent)
+        if (savedInstanceState == null) { readQuery(intent); readTxt(intent) }
         setContent {
             MaterialTheme(colorScheme = DarkScheme, typography = AppTypography) {
                 // Arka plan: Dosyalarım ile aynı resim; içerik şeffaf zemin üstünde
                 Box(Modifier.fillMaxSize()) {
                     Image(painterResource(R.drawable.files_bg), null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
                     Surface(Modifier.fillMaxSize(), color = Color.Transparent, contentColor = MaterialTheme.colorScheme.onSurface) {
-                        NotesApp(resumes.intValue, externalQuery.value) { externalQuery.value = null }
+                        val xt = externalTxt.value
+                        if (xt != null) ExternalTxt(xt) { externalTxt.value = null; finish() }
+                        else NotesApp(resumes.intValue, externalQuery.value) { externalQuery.value = null }
                     }
                 }
             }
@@ -102,6 +111,7 @@ class NotesActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         readQuery(intent)
+        readTxt(intent)
     }
     override fun onResume() {
         super.onResume()
@@ -563,6 +573,54 @@ fun MoveButtons(canUp: Boolean, canDown: Boolean, onMove: (Int) -> Unit) {
     IconButton({ onMove(2) }, enabled = canDown) { Icon(Icons.Default.VerticalAlignBottom, L("Sona al", "Move to bottom")) }
 }
 
+/** Dosyalarım'dan açılan .txt: dosyayı okur ve Notlarım'ın metin ekranında (okuma / düzenleme) gösterir; kapatınca etkinlikten çıkar. */
+@Composable
+fun ExternalTxt(path: String, onClose: () -> Unit) {
+    val ctx = LocalContext.current
+    val clipboard = LocalClipboardManager.current
+    val lock = remember { Mutex() }
+    val f = remember(path) { java.io.File(path) }
+    val uri = remember(path) { Uri.fromFile(f) }
+    var text by remember(path) { mutableStateOf<String?>(null) }
+    LaunchedEffect(path) {
+        val t = withContext(Dispatchers.IO) { Store.readPlain(ctx, uri) }
+        if (t == null) { Notice.show(ctx, L("Dosya okunamadı", "Could not read file"), false); onClose() } else text = t
+    }
+    val t = text ?: return
+    TxtScreen(
+        title = f.nameWithoutExtension, initial = t,
+        onSave = { x -> lock.withLock { withContext(Dispatchers.IO) { Store.writePlain(ctx, uri, x) } } },
+        onCopy = { x -> clipboard.setText(AnnotatedString(x)); Notice.show(ctx, L("Kopyalandı", "Copied"), true) },
+        onClose = onClose)
+}
+
+/**
+ * Seçilebilir salt-okunur metin için sistemin kendi TextView'ı. Compose SelectionContainer'ın seçim tutamaçları/araç çubuğu
+ * bu cihazda bir satır yukarıda çıkıyordu; TextView'ın seçim arayüzünü Android çizdiği için doğru yerde çıkar ([NativeEdit] ile aynı neden).
+ * [onLayout]: metin yerleşimi hazır olunca satır üstü hesaplamak için çağrılır.
+ */
+@Composable
+fun NativeText(text: CharSequence, modifier: Modifier = Modifier, onLayout: (android.text.Layout) -> Unit = {}) {
+    val cs = MaterialTheme.colorScheme
+    val textColor = cs.onSurface.toArgb()
+    val hl = cs.primary.copy(alpha = 0.35f).toArgb()
+    val cb = rememberUpdatedState(onLayout)
+    androidx.compose.ui.viewinterop.AndroidView(modifier = modifier, factory = { c ->
+        android.widget.TextView(c).apply {
+            textSize = 16f
+            setTextColor(textColor); highlightColor = hl
+            letterSpacing = 0.03f
+            setLineSpacing(0f, 1.25f)
+            runCatching { typeface = androidx.core.content.res.ResourcesCompat.getFont(c, R.font.figtree_medium) }
+            setTextIsSelectable(true)
+            setPadding(0, 0, 0, 0)
+            addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ -> (v as android.widget.TextView).layout?.let { cb.value(it) } }
+        }
+    }, update = { tv ->
+        if (tv.text.toString() != text.toString() || text is android.text.Spanned) tv.setText(text, android.widget.TextView.BufferType.SPANNABLE)
+    })
+}
+
 /** .txt dosyasını tam ekranda gösterir; sağ üstteki kalemle düzenlenir, kaydet ikonuyla kaydedilip okuma görünümüne dönülür. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -588,7 +646,7 @@ fun TxtScreen(
     var searching by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
     var cur by remember { mutableIntStateOf(0) }
-    var layout by remember { mutableStateOf<androidx.compose.ui.text.TextLayoutResult?>(null) }
+    var layout by remember { mutableStateOf<android.text.Layout?>(null) }
     val searchFocus = remember { FocusRequester() }
     // Türkçe harfleri sadeleştirir (ı/İ→i, ş→s ...); uzunluğu korur, böylece indeksler metinle aynı kalır
     fun fk(t: String) = String(CharArray(t.length) { i ->
@@ -605,11 +663,10 @@ fun TxtScreen(
     LaunchedEffect(matches) { cur = 0 }
     val qLen = query.trim().length
     val hiAll = Color(0x55FFC107); val hiCur = Color(0xCCFF9800)
-    val shown = remember(saved, matches, cur, qLen) {
-        if (matches.isEmpty()) AnnotatedString(saved) else buildAnnotatedString {
-            append(saved)
+    val shown: CharSequence = remember(saved, matches, cur, qLen) {
+        if (matches.isEmpty()) saved else android.text.SpannableString(saved).also { sp ->
             matches.forEachIndexed { k, st ->
-                addStyle(androidx.compose.ui.text.SpanStyle(background = if (k == cur) hiCur else hiAll), st, minOf(saved.length, st + qLen))
+                sp.setSpan(android.text.style.BackgroundColorSpan((if (k == cur) hiCur else hiAll).toArgb()), st, minOf(saved.length, st + qLen), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             }
         }
     }
@@ -618,7 +675,7 @@ fun TxtScreen(
     LaunchedEffect(cur, matches, layout) {
         val l = layout ?: return@LaunchedEffect
         val st = matches.getOrNull(cur) ?: return@LaunchedEffect
-        val top = l.getLineTop(l.getLineForOffset(st.coerceAtMost(saved.length)))
+        val top = l.getLineTop(l.getLineForOffset(st.coerceAtMost(saved.length))).toFloat()
         readScroll.animateScrollTo((top - 160f).toInt().coerceAtLeast(0))
     }
     fun closeSearch() { searching = false; query = "" }
@@ -698,11 +755,9 @@ fun TxtScreen(
                         Spacer(Modifier.height(screenH * 0.5f))
                     }
                 } else {
-                    // SelectionContainer kaydırılan sütunun İÇİNDE: seçim tutamaçları kayan metinle birlikte doğru konumda kalır
+                    // NativeText kaydırılan sütunun İÇİNDE: seçim tutamaçları kayan metinle birlikte doğru konumda kalır
                     Column(Modifier.padding(pad).fillMaxSize().verticalScroll(readScroll).padding(16.dp)) {
-                        SelectionContainer {
-                            Text(shown, Modifier.fillMaxWidth(), onTextLayout = { layout = it })
-                        }
+                        NativeText(shown, Modifier.fillMaxWidth(), onLayout = { layout = it })
                     }
                 }
             }

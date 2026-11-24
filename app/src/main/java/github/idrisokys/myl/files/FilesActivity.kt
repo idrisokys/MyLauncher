@@ -377,17 +377,19 @@ class FilesActivity : Activity() {
     private fun itemMenu(f: File, anchor: View) {
         val targets = if (f in sel && sel.size > 1) sel.toList() else listOf(f)
         val pm = PopupMenu(this, anchor)
-        // Sıra: Yeni klasör, Sil, Taşı, Paylaş, Sabitle, İğnele
+        // Sıra: Yeni klasör, Sil, Taşı, Paylaş, Ziple, Sabitle, İğnele
         pm.menu.add(0, 4, 0, "Yeni klasör")
         pm.menu.add(0, 3, 1, "Sil")
         pm.menu.add(0, 1, 2, "Taşı")
         pm.menu.add(0, 2, 3, "Paylaş")
-        pm.menu.add(0, 5, 4, if (targets.all { it.path in topPins() }) "Sabiti kaldır" else "Sabitle")
-        pm.menu.add(0, 6, 5, "İğnele")
+        pm.menu.add(0, 7, 4, "Ziple")
+        pm.menu.add(0, 5, 5, if (targets.all { it.path in topPins() }) "Sabiti kaldır" else "Sabitle")
+        pm.menu.add(0, 6, 6, "İğnele")
         pm.setOnMenuItemClickListener {
             when (it.itemId) {
                 5 -> toggleTopPin(targets)
                 6 -> pinToHome(targets)
+                7 -> zipItems(targets)
                 1 -> moveItems(targets); 2 -> shareFiles(targets)
                 // Arama/özel listedeyken öğenin bulunduğu klasörde oluşturulur
                 4 -> newFolder(if (list != null) f.parentFile else null)
@@ -483,9 +485,51 @@ class FilesActivity : Activity() {
         }.start()
     }
 
-    private fun zipDialog(f: File) {
-        AlertDialog.Builder(this).setTitle(f.name).setItems(arrayOf("Buraya çıkar", "Başka uygulamayla aç")) { _, w -> if (w == 0) unzip(f) else open(f) }
-            .setNegativeButton("İptal", null).show()
+    /** "Ziple": seçilen dosya/klasörleri anında ZIP'e paketler (aynı klasöre; tek öğede onun adıyla, çoklu seçimde klasör adıyla). */
+    private fun zipItems(x: List<File>) {
+        if (x.isEmpty()) return
+        val parent = x[0].parentFile ?: return
+        if (!parent.canWrite()) { Notice.show(this, "Bu klasöre yazılamıyor", false); return }
+        val base = when {
+            x.size == 1 -> if (x[0].isDirectory) x[0].name else x[0].nameWithoutExtension
+            x.all { it.parentFile == parent } && parent.path != root.path -> parent.name
+            else -> "Arsiv"
+        }.ifEmpty { "Arsiv" }
+        val dest = uniqueFile(parent, "$base.zip")
+        sel.clear(); editMode = false; refresh(true)
+        Notice.show(this, "Ziplenyor…", false)
+        Thread {
+            var ok = true
+            try {
+                val n = Native.zip(x, dest)   // Rust; null = kütüphane yok → eski yol
+                if (n != null) { if (n < 0) throw IOException("zip") }
+                else {
+                    java.util.zip.ZipOutputStream(BufferedOutputStream(FileOutputStream(dest))).use { zo ->
+                        val skip = dest.canonicalPath
+                        fun add(f: File, name: String) {
+                            if (f.canonicalPath == skip) return
+                            if (f.isDirectory) {
+                                zo.putNextEntry(java.util.zip.ZipEntry("$name/")); zo.closeEntry()
+                                f.listFiles()?.sortedBy { it.name }?.forEach { add(it, "$name/${it.name}") }
+                            } else if (f.isFile) {
+                                zo.putNextEntry(java.util.zip.ZipEntry(name))
+                                FileInputStream(f).use { it.copyTo(zo) }
+                                zo.closeEntry()
+                            }
+                        }
+                        x.forEach { add(it, it.name) }
+                    }
+                }
+            } catch (e: Exception) { ok = false; try { dest.delete() } catch (t: Exception) {} }
+            runOnUiThread {
+                Notice.show(this, if (ok) "Ziplendi: ${dest.name}" else "Zip oluşturulamadı", true)
+                if (ok) {
+                    if (list != null) list = list!! + dest
+                    try { MediaScannerConnection.scanFile(this, arrayOf(dest.path), null, null) } catch (e: Exception) {}
+                }
+                refresh(true)
+            }
+        }.start()
     }
 
     private fun toggle(f: File) { if (!sel.remove(f)) sel.add(f); selectionChanged() }
@@ -493,7 +537,7 @@ class FilesActivity : Activity() {
     private fun uri(f: File) = KFileProvider.uriFor(this, f)
 
     private fun openAny(f: File) {
-        if (f.extension.lowercase() == "zip") zipDialog(f) else if (f.extension.lowercase() == "apk") installApk(f)
+        if (f.extension.lowercase() == "zip") unzip(f) else if (f.extension.lowercase() == "apk") installApk(f)
         else if (f.extension.lowercase() in IMG) openInGallery(f) else open(f)
     }
 

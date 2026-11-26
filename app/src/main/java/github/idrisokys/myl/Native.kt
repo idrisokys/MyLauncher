@@ -112,14 +112,6 @@ object Native {
 
     // ------------------------------------------------------------ dosya analizi
 
-    /** Dosya özeti (hex). [algo]: "sha256", "md5" ya da "crc32". Hata/yok: null. */
-    fun hashFile(f: File, algo: String = "sha256"): String? = safe { nHashFile(f.path, algo)?.firstOrNull() }
-
-    /** Birden çok dosyanın özeti (paralel); okunamayanlar için null. */
-    fun hashFiles(files: List<File>, algo: String = "sha256"): List<String?>? = safe {
-        nHashFiles(files.map { it.path }.toTypedArray(), algo)?.map { it.ifEmpty { null } }
-    }
-
     // ------------------------------------------------------------ görsel işleme
 
     /**
@@ -166,14 +158,6 @@ object Native {
 
     /** Önbellek [maxBytes]'ı aşarsa en eski girdileri siler. */
     fun thumbTrim(cacheDir: File, maxBytes: Long) { safe { nThumbTrim(cacheDir.path, maxBytes); true } }
-
-    /**
-     * Toplu dönüştürme. [format]: "jpg" | "png" | "webp" (kayıpsız). [maxDim] > 0 ise en büyük kenar buna sığdırılır.
-     * Her giriş için oluşan dosyanın yolu; başarısızsa null.
-     */
-    fun convertImages(srcs: List<File>, destDir: File, format: String, quality: Int = 90, maxDim: Int = 0): List<String?>? = safe {
-        nConvertImages(srcs.map { it.path }.toTypedArray(), destDir.path, format, quality, maxDim)?.map { it.ifEmpty { null } }
-    }
 
     // ------------------------------------------------------------ mDNS cihaz tarama (Rust, qshare_core::mdns)
 

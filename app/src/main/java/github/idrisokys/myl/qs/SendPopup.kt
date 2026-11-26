@@ -14,13 +14,11 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.CheckBox
-import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.PopupWindow
 import android.widget.TextView
 import android.widget.Toast
 import github.idrisokys.myl.L
-import github.idrisokys.myl.R
 
 /**
  * Hızlı Paylaş düğmesine basılı tutunca düğmenin hemen altında açılan küçük pencere.

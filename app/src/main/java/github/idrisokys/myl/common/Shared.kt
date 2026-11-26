@@ -13,7 +13,6 @@ import android.widget.EditText
 import android.content.Context
 import android.content.ContextWrapper
 import android.graphics.Color
-import android.graphics.Typeface
 import android.os.Handler
 import android.os.Looper
 import android.view.Gravity

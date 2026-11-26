@@ -11,7 +11,6 @@ import android.app.AlertDialog
 import android.app.Dialog
 import android.content.ContentUris
 import android.content.BroadcastReceiver
-import android.content.ContentValues
 import android.content.Context
 import android.content.IntentFilter
 import android.content.Intent
@@ -36,7 +35,6 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.SystemClock
-import android.os.Environment
 import android.os.Handler
 import android.os.Looper
 import android.os.Process
@@ -878,21 +876,6 @@ class MainActivity : Activity() {
         }
     }
 
-    /** Download klasörünü kendi Dosyalarım bölümünde açar. */
-    private fun openDownloads() {
-        val dir = try { Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS) } catch (e: Exception) { null }
-            ?: java.io.File(Environment.getExternalStorageDirectory(), "Download")
-        try {
-            startActivity(
-                Intent(this, github.idrisokys.myl.files.FilesActivity::class.java)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    .putExtra(github.idrisokys.myl.files.FilesActivity.EXTRA_PATH, dir.absolutePath)
-            )
-        } catch (e: Exception) {
-            toast("Dosyalarım açılamadı")
-        }
-    }
-
     private fun safeStart(i: Intent) {
         try { startActivity(i) } catch (e: Exception) { toast("Açılamadı") }
     }
@@ -1076,7 +1059,6 @@ class MainActivity : Activity() {
 
     private companion object {
         const val REQ_CALL = 2
-        const val REQ_RESTORE = 3
         const val LAYOUT_FILE = "myl-duzen.json"   // <ana dizin>/Link içinde sabit ad: kaydet hep bunun üzerine yazar
         const val REQ_WALLPAPER = 4
         const val REQ_SEND = 5

@@ -11,7 +11,6 @@ import android.graphics.BitmapFactory
 import github.idrisokys.myl.Native
 import android.graphics.Color
 import android.graphics.Matrix
-import android.graphics.Typeface
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable

@@ -44,7 +44,6 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.ui.platform.LocalConfiguration
@@ -146,7 +145,6 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
     val focus = LocalFocusManager.current
 
     val maxChars = Store.ADD_MAX   // ad değiştirme sınırı: aşılırsa .url → .txt
-    val addMax = Store.ADD_MAX   // alttaki ekleme alanı sınırı
     fun toast(s: String) = Notice.show(ctx, s, false)
     fun run(reload: Boolean = true, block: () -> Unit) {
         scope.launch { lock.withLock { withContext(Dispatchers.IO) { block() } }; if (reload) tick++ }
@@ -227,10 +225,6 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
                 listState.animateScrollToItem((idx - 1).coerceAtLeast(0))
         }
     }
-    // Seçililer zaten en üstte/en altta toplanmışsa ilgili düğme pasif olur
-    val selIdx = list.indices.filter { list[it].key in selected }
-    val canUp = selIdx.withIndex().any { (n, i) -> i != n }
-    val canDown = selIdx.withIndex().any { (n, i) -> i != list.size - selIdx.size + n }
     fun open(e: Entry) {
         scope.launch {
             if (e.isTxt) {
@@ -410,8 +404,8 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
             Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(L("${selected.size} seçili", "${selected.size} selected"), style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(start = 8.dp))
                 EditModeButton(editMode) { editMode = false; selected = emptySet() }
-                IconButton({ refreshAll() }) { Icon(Icons.Default.Refresh, L("Yenile", "Refresh")) }
                 IconButton({ syncPopup = true }) { Icon(Icons.Default.Sync, L("Cihazlarla eşitle", "Sync with devices")) }
+                IconButton({ refreshAll() }) { Icon(Icons.Default.Refresh, L("Yenile", "Refresh")) }
                 Spacer(Modifier.weight(1f))
             }
         } else Surface(color = NotesBar, tonalElevation = 0.dp) {
@@ -422,8 +416,8 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
                     minLines = 2, maxLines = 8, send = true, onSend = { submit() })
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     EditModeButton(editMode) { editMode = !editMode; selected = emptySet() }
+                    IconButton({ syncPopup = true }) { Icon(Icons.Default.Sync, L("Cihazlarla eşitle", "Sync with devices")) }
                     IconButton({ refreshAll() }) { Icon(Icons.Default.Refresh, L("Yenile", "Refresh")) }
-                IconButton({ syncPopup = true }) { Icon(Icons.Default.Sync, L("Cihazlarla eşitle", "Sync with devices")) }
                     if (editMode && selected.isNotEmpty()) Text(L("${selected.size} seçili", "${selected.size} selected"), style = MaterialTheme.typography.labelSmall, maxLines = 1, modifier = Modifier.padding(start = 4.dp))
                     Spacer(Modifier.weight(1f))
                     IconButton({ clipboard.getText()?.text?.let { linkText = it } }) { Icon(Icons.Default.ContentPaste, L("Yapıştır", "Paste")) }
@@ -552,15 +546,6 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
             onDispose { p?.dispose() }
         }
     }
-}
-
-/** Düzenleme modunda seçili öğeler için: başa al, yukarı, aşağı, sona al. */
-@Composable
-fun MoveButtons(canUp: Boolean, canDown: Boolean, onMove: (Int) -> Unit) {
-    IconButton({ onMove(-2) }, enabled = canUp) { Icon(Icons.Default.VerticalAlignTop, L("Başa al", "Move to top")) }
-    IconButton({ onMove(-1) }, enabled = canUp) { Icon(Icons.Default.KeyboardArrowUp, L("Yukarı taşı", "Move up")) }
-    IconButton({ onMove(1) }, enabled = canDown) { Icon(Icons.Default.KeyboardArrowDown, L("Aşağı taşı", "Move down")) }
-    IconButton({ onMove(2) }, enabled = canDown) { Icon(Icons.Default.VerticalAlignBottom, L("Sona al", "Move to bottom")) }
 }
 
 /** Dosyalarım'dan açılan .txt: dosyayı okur ve Notlarım'ın metin ekranında (okuma / düzenleme) gösterir; kapatınca etkinlikten çıkar. */

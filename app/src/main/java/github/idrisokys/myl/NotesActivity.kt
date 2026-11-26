@@ -403,10 +403,6 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
                     EditModeButton(editMode) { editMode = !editMode; selected = emptySet() }
                     Spacer(Modifier.weight(1f))
                     IconButton({ clipboard.getText()?.text?.let { renameText = it.take(editCap) } }) { Icon(Icons.Default.ContentPaste, L("Yapıştır", "Paste")) }
-                    IconButton({ saveRename() }, enabled = renameText.isNotBlank()) {
-                        Icon(Icons.Default.Save, L("Kaydet", "Save"),
-                            tint = if (renameText.isNotBlank()) MaterialTheme.colorScheme.primary else LocalContentColor.current.copy(alpha = 0.38f))
-                    }
                 }
             }
         } else if (editMode && selected.size > 1) Surface(color = NotesBar, tonalElevation = 0.dp) {

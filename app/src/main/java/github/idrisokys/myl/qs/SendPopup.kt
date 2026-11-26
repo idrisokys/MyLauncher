@@ -329,7 +329,7 @@ class SendPopup(
             o.addView(TextView(act).apply { text = label; setTextColor(Color.WHITE); setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f) })
             return o
         }
-        row.addView(opt("Download", false), LinearLayout.LayoutParams(0, dp(40), 1f))
+        row.addView(opt(L("İndir", "Download"), false), LinearLayout.LayoutParams(0, dp(40), 1f))
         row.addView(opt("Link", true), LinearLayout.LayoutParams(0, dp(40), 1f))
         return row
     }

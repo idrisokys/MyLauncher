@@ -1,8 +1,10 @@
 package github.idrisokys.myl.ocr
 
 import android.app.Activity
+import android.content.ClipData
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.RectF
@@ -23,12 +25,20 @@ import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.FrameLayout
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import github.idrisokys.myl.L
+import github.idrisokys.myl.common.KFileProvider
+import java.io.File
+import java.io.FileOutputStream
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import kotlin.math.roundToInt
 
 /**
  * Ekran görüntüsü tam ekran gösterilir; OCR ile okunan her paragraf, görüntünün üstüne tam yerine
@@ -40,6 +50,10 @@ class TextSelectActivity : Activity() {
     private lateinit var root: FrameLayout
     private lateinit var hint: TextView
     private val tvs = ArrayList<SelTv>()
+    private lateinit var closeBtn: View
+    private lateinit var cropBtn: View
+    private var crop: CropOverlayView? = null
+    private var cropBar: View? = null
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
@@ -89,12 +103,23 @@ class TextSelectActivity : Activity() {
         root.addView(hint, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, android.view.Gravity.BOTTOM or android.view.Gravity.CENTER_HORIZONTAL).apply { bottomMargin = dp(48); marginStart = dp(16); marginEnd = dp(16) })
         hint.postDelayed({ hint.animate().alpha(0f).setDuration(400).withEndAction { hint.visibility = View.GONE }.start() }, 4000)
 
-        // Kapat
-        root.addView(TextView(this).apply {
+        // Kapat (alan seçme modundayken önce o moddan çıkar)
+        closeBtn = TextView(this).apply {
             text = "✕"; setTextColor(Color.WHITE); setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f); gravity = android.view.Gravity.CENTER
             background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(0xAA222222.toInt()) }
-            setOnClickListener { finish() }
-        }, FrameLayout.LayoutParams(dp(40), dp(40), android.view.Gravity.TOP or android.view.Gravity.END).apply { topMargin = dp(36); marginEnd = dp(14) })
+            setOnClickListener { if (crop != null) exitCrop() else finish() }
+        }
+        root.addView(closeBtn, FrameLayout.LayoutParams(dp(40), dp(40), android.view.Gravity.TOP or android.view.Gravity.END).apply { topMargin = dp(36); marginEnd = dp(14) })
+
+        // Alan seç → resim olarak paylaş (✕'in soluna)
+        cropBtn = ImageView(this).apply {
+            setImageResource(github.idrisokys.myl.R.drawable.ic_crop)
+            setPadding(dp(9), dp(9), dp(9), dp(9))
+            background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(0xAA222222.toInt()) }
+            contentDescription = L("Alanı seç ve resim olarak paylaş", "Select an area and share as image")
+            setOnClickListener { enterCrop() }
+        }
+        root.addView(cropBtn, FrameLayout.LayoutParams(dp(40), dp(40), android.view.Gravity.TOP or android.view.Gravity.END).apply { topMargin = dp(36); marginEnd = dp(14 + 40 + 10) })
 
         setContentView(root)
     }
@@ -170,8 +195,95 @@ class TextSelectActivity : Activity() {
             })
         }
         // Kapat düğmesi ve ipucu metinlerin üstünde kalsın
-        for (i in 0 until root.childCount) { val v = root.getChildAt(i); if (v !is SelTv && v !is ImageView) v.bringToFront() }
+        for (i in 0 until root.childCount) { val v = root.getChildAt(i); if (v !is SelTv && (v !is ImageView || v === cropBtn)) v.bringToFront() }
     }
+
+    // ---------- Alan seç → resim olarak paylaş ----------
+
+    /** Görüntünün ekrandaki ölçeği ve kayması: [sc, ox, oy]. */
+    private fun fit(bmp: Bitmap): FloatArray {
+        val sc = minOf(root.width.toFloat() / bmp.width, root.height.toFloat() / bmp.height)
+        return floatArrayOf(sc, (root.width - bmp.width * sc) / 2f, (root.height - bmp.height * sc) / 2f)
+    }
+
+    private fun pill(label: String, filled: Boolean, onClick: () -> Unit) = TextView(this).apply {
+        text = label; setTextColor(Color.WHITE); setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+        gravity = android.view.Gravity.CENTER
+        setPadding(dp(22), dp(11), dp(22), dp(11))
+        background = GradientDrawable().apply { setColor(if (filled) 0xFFEC4E6A.toInt() else 0xCC222222.toInt()); cornerRadius = dp(24).toFloat() }
+        setOnClickListener { onClick() }
+    }
+
+    private fun enterCrop() {
+        if (crop != null) return
+        val bmp = OcrHolder.bmp ?: return
+        if (root.width == 0 || root.height == 0) return
+        clearSelections()
+        hint.visibility = View.GONE
+        val (sc, ox, oy) = fit(bmp).let { Triple(it[0], it[1], it[2]) }
+        val v = CropOverlayView(this, RectF(ox, oy, ox + bmp.width * sc, oy + bmp.height * sc))
+        crop = v
+        root.addView(v, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+
+        val bar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER
+            addView(pill(L("İptal", "Cancel"), false) { exitCrop() })
+            addView(View(context), LinearLayout.LayoutParams(dp(12), 1))
+            addView(pill(L("Paylaş", "Share"), true) { shareCrop() })
+        }
+        cropBar = bar
+        root.addView(bar, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+            android.view.Gravity.BOTTOM or android.view.Gravity.CENTER_HORIZONTAL).apply { bottomMargin = dp(40) })
+
+        cropBtn.visibility = View.GONE
+        closeBtn.bringToFront()
+    }
+
+    private fun exitCrop() {
+        crop?.let { root.removeView(it) }; crop = null
+        cropBar?.let { root.removeView(it) }; cropBar = null
+        cropBtn.visibility = View.VISIBLE
+    }
+
+    /** Seçili alanı ekran görüntüsünden keser, PNG olarak kaydeder ve paylaşma menüsünü açar. */
+    private fun shareCrop() {
+        val v = crop ?: return
+        val bmp = OcrHolder.bmp ?: return
+        val (sc, ox, oy) = fit(bmp).let { Triple(it[0], it[1], it[2]) }
+        val r = v.rect
+        val l = ((r.left - ox) / sc).roundToInt().coerceIn(0, bmp.width - 1)
+        val t = ((r.top - oy) / sc).roundToInt().coerceIn(0, bmp.height - 1)
+        val w = ((r.right - ox) / sc).roundToInt().coerceIn(l + 1, bmp.width) - l
+        val h = ((r.bottom - oy) / sc).roundToInt().coerceIn(t + 1, bmp.height) - t
+        if (w < 8 || h < 8) { Toast.makeText(this, L("Seçilen alan çok küçük", "Selected area is too small"), Toast.LENGTH_SHORT).show(); return }
+
+        val cache = cacheDir
+        Thread {
+            val f: File? = try {
+                val dir = File(cache, "shared").apply { mkdirs(); listFiles()?.forEach { it.delete() } }   // eski paylaşımları temizle
+                val out = File(dir, "ekran_" + SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date()) + ".png")
+                val piece = Bitmap.createBitmap(bmp, l, t, w, h)
+                FileOutputStream(out).use { piece.compress(Bitmap.CompressFormat.PNG, 100, it) }
+                piece.recycle()
+                out
+            } catch (e: Throwable) { null }
+            runOnUiThread {
+                if (isDestroyed) return@runOnUiThread
+                if (f == null) { Toast.makeText(this, L("Resim hazırlanamadı", "Could not prepare the image"), Toast.LENGTH_SHORT).show(); return@runOnUiThread }
+                val uri = KFileProvider.uriFor(this, f)
+                val send = Intent(Intent.ACTION_SEND).setType("image/png")
+                    .putExtra(Intent.EXTRA_STREAM, uri)
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                send.clipData = ClipData.newRawUri("", uri)
+                try { startActivity(Intent.createChooser(send, null)); exitCrop() }
+                catch (e: Exception) { Toast.makeText(this, L("Paylaşılamadı", "Could not share"), Toast.LENGTH_SHORT).show() }
+            }
+        }.start()
+    }
+
+    @Suppress("DEPRECATION")
+    override fun onBackPressed() { if (crop != null) exitCrop() else super.onBackPressed() }
 
     private val ID_GOOGLE = 0x6001
     private val ID_SHARE = 0x6002

@@ -5,36 +5,97 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.Rect
 import android.graphics.RectF
+import android.view.ActionMode
 import android.view.GestureDetector
 import android.view.HapticFeedbackConstants
+import android.view.Menu
+import android.view.MenuItem
 import android.view.MotionEvent
 import android.view.View
+import github.idrisokys.myl.L
+import kotlin.math.abs
+import kotlin.math.sqrt
 
 /**
- * Ekran görüntüsünü çizer; üstüne OCR kelimeleriyle sistemdeki gibi seçim yapılır:
- * kelimeye basılı tut → seç, parmağı sürükle → genişlet, iki ucundaki damlalarla ayarla, çift dokun → paragrafı seç.
+ * Ekran görüntüsünü çizer ve TÜM sayfada, paragraf sınırı olmadan, karakter karakter serbest seçim sağlar.
+ *  - Bir kelimeye basılı tut → kelime seçilir; parmağı sürüklemeye devam edersen seçim kelime kelime genişler.
+ *  - İki ucundaki damlaları sürükle → karakter hassasiyetinde, sayfanın herhangi bir yerine kadar genişlet.
+ *  - Çift dokun → paragrafı seç; boş yere dokun → seçimi kaldır.
+ *  - Üstte, Android'in kendi yüzen paneli çıkar: Kopyala / Paylaş / Google / Tümünü seç.
+ * OCR yalnızca kelime kutuları verdiği için, kelime içindeki karakter konumları kutunun genişliği
+ * karakter genişliklerine orantılanarak hesaplanır.
  */
 class TextSelectView(ctx: Context) : View(ctx) {
-    /** (seçim var mı, seçimin ekrandaki dikdörtgeni, sürükleniyor mu) */
-    var onSelection: ((Boolean, RectF?, Boolean) -> Unit)? = null
+    companion object {
+        const val ACT_COPY = 1
+        const val ACT_SHARE = 2
+        const val ACT_GOOGLE = 3
+        private const val ACT_ALL = 4
+    }
+
+    /** Panelden Kopyala / Paylaş / Google seçilince (işlem kimliği, seçili metin). */
+    var onAction: ((Int, String) -> Unit)? = null
+    /** Seçim oluştu / kalktı. */
+    var onSelState: ((Boolean) -> Unit)? = null
+
+    /** Bir OCR satırı: metin, görüntüdeki kutusu ve her imlecin (0..uzunluk) görüntü x konumu. */
+    private class Ln(val text: String, val box: RectF, val cx: FloatArray, val block: Int)
 
     private var bmp: Bitmap? = null
-    private var words: List<OcrEngine.W> = emptyList()
-    private var vb: Array<RectF> = emptyArray()      // kelimelerin görünüm koordinatları
+    private var lines: List<Ln> = emptyList()
     private var sc = 1f; private var ox = 0f; private var oy = 0f
-    private var a = -1; private var b = -1           // seçim aralığı (dahil)
-    private var drag = 0                              // 0 yok, 1 baş damla, 2 son damla, 3 uzatma
-    private var anchor = -1
+
+    // Konum = (satır no shl 20) or imleç no. Seçim [ss, se) ; ss < se. -1 = seçim yok.
+    private var ss = -1L; private var se = -1L
+    private var drag = 0                 // 0 yok, 1 baş damla, 2 son damla, 3 basılı tutup genişletme
+    private var aS = 0L; private var aE = 0L   // genişletmede başlangıç kelimesi
+    private var offX = 0f; private var offY = 0f
+    private var mode: ActionMode? = null
+
     private val d = resources.displayMetrics.density
-    private val hs = 22 * d                           // damla boyutu
+    private val hs = 22 * d
     private val pImg = Paint(Paint.FILTER_BITMAP_FLAG)
     private val pHi = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x66EC4E6A }
-    private val pHandle = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFEC4E6A.toInt() }
+    private val pHandle = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF8CE01F.toInt() }
 
-    val hasSelection get() = a >= 0
+    val hasSelection get() = ss >= 0
 
-    fun set(bitmap: Bitmap, w: List<OcrEngine.W>) { bmp = bitmap; words = w; relayout(); invalidate() }
+    private fun pos(line: Int, ch: Int) = (line.toLong() shl 20) or ch.toLong()
+    private fun pl(p: Long) = (p shr 20).toInt()
+    private fun pc(p: Long) = (p and 0xFFFFF).toInt()
+
+    // ---------- veri ----------
+    fun set(bitmap: Bitmap, words: List<OcrEngine.W>) {
+        bmp = bitmap
+        val probe = Paint().apply { textSize = 100f }
+        val groups = LinkedHashMap<Long, ArrayList<OcrEngine.W>>()
+        for (w in words) if (w.text.isNotBlank()) groups.getOrPut(w.block * 100000L + w.line) { ArrayList() }.add(w)
+        lines = groups.values.map { buildLine(it, probe) }
+        relayout(); invalidate()
+    }
+
+    private fun buildLine(ws0: List<OcrEngine.W>, probe: Paint): Ln {
+        val ws = ws0.sortedBy { it.box.left }
+        val sb = StringBuilder(); val offs = IntArray(ws.size)
+        val box = RectF(ws[0].box)
+        ws.forEachIndexed { i, w ->
+            if (i > 0) sb.append(' ')
+            offs[i] = sb.length; sb.append(w.text.trim()); box.union(w.box)
+        }
+        val cx = FloatArray(sb.length + 1)
+        ws.forEachIndexed { i, w ->
+            val t = w.text.trim(); val m = t.length; val tot = probe.measureText(t)
+            val l = w.box.left; val r = w.box.right
+            for (k in 0..m) {
+                val f = if (tot > 0f) probe.measureText(t, 0, k) / tot else k.toFloat() / m
+                cx[offs[i] + k] = l + (r - l) * f
+            }
+        }
+        for (i in 1 until cx.size) if (cx[i] < cx[i - 1]) cx[i] = cx[i - 1]
+        return Ln(sb.toString(), box, cx, ws[0].block)
+    }
 
     override fun onSizeChanged(w: Int, h: Int, ow: Int, oh: Int) { relayout() }
 
@@ -43,32 +104,153 @@ class TextSelectView(ctx: Context) : View(ctx) {
         if (width == 0 || height == 0) return
         sc = minOf(width.toFloat() / bm.width, height.toFloat() / bm.height)
         ox = (width - bm.width * sc) / 2f; oy = (height - bm.height * sc) / 2f
-        vb = Array(words.size) { i -> val r = words[i].box; RectF(r.left * sc + ox, r.top * sc + oy, r.right * sc + ox, r.bottom * sc + oy) }
     }
 
-    fun clear() { a = -1; b = -1; invalidate(); notifySel(false) }
-    fun selectAll() { if (words.isNotEmpty()) { a = 0; b = words.size - 1; invalidate(); notifySel(false) } }
+    // görüntü → ekran
+    private fun vx(l: Ln, c: Int) = ox + sc * l.cx[c]
+    private fun vTop(l: Ln) = oy + sc * l.box.top
+    private fun vBot(l: Ln) = oy + sc * l.box.bottom
+
+    // ---------- seçim işlemleri ----------
+    fun clear() {
+        ss = -1L; se = -1L; drag = 0
+        mode?.finish(); mode = null
+        invalidate(); onSelState?.invoke(false)
+    }
+
+    fun selectAll() {
+        if (lines.isEmpty()) return
+        ss = pos(0, 0); se = pos(lines.size - 1, lines.last().text.length)
+        changed()
+    }
 
     fun selectedText(): String {
-        if (a < 0) return ""
-        val sb = StringBuilder()
-        for (i in a..b) {
-            if (i > a) sb.append(if (words[i].block != words[i - 1].block) "\n" else " ")
-            sb.append(words[i].text)
+        if (ss < 0) return ""
+        val sb = StringBuilder(); var prevBlock = -1
+        for (i in pl(ss)..pl(se)) {
+            val l = lines[i]
+            val a = if (i == pl(ss)) pc(ss) else 0
+            val b = if (i == pl(se)) pc(se) else l.text.length
+            if (a >= b) continue
+            if (sb.isNotEmpty()) sb.append(if (l.block != prevBlock) '\n' else ' ')
+            sb.append(l.text, a, b); prevBlock = l.block
         }
-        return sb.toString()
+        return sb.toString().trim()
     }
+
+    private fun changed() {
+        invalidate()
+        onSelState?.invoke(ss >= 0)
+        if (drag != 0) mode?.hide(ActionMode.DEFAULT_HIDE_DURATION)
+        else if (ss >= 0) { ensureMode(); mode?.invalidateContentRect(); mode?.hide(0) }
+    }
+
+    // ---------- konum bulma ----------
+    /** (en yakın satır, satıra gerçek uzaklık px). Dikey yakınlık öncelikli: sütunlar arasında karışmasın. */
+    private fun nearestLine(x: Float, y: Float): Pair<Int, Float> {
+        var best = -1; var bd = Float.MAX_VALUE; var real = 0f
+        for (i in lines.indices) {
+            val l = lines[i]
+            val dy = maxOf(vTop(l) - y, 0f, y - vBot(l))
+            val dx = maxOf(vx(l, 0) - x, 0f, x - vx(l, l.text.length))
+            val dd = dy * dy * 4f + dx * dx
+            if (dd < bd) { bd = dd; best = i; real = sqrt(dy * dy + dx * dx) }
+        }
+        return Pair(best, real)
+    }
+
+    /** Ekrandaki (x, y) noktasına en yakın imleç konumu; sayfanın her yerinden çalışır. */
+    private fun posAt(x: Float, y: Float): Long {
+        val li = nearestLine(x, y).first
+        if (li < 0) return -1L
+        val l = lines[li]
+        var bc = 0; var bd = Float.MAX_VALUE
+        for (i in l.cx.indices) { val dd = abs(vx(l, i) - x); if (dd < bd) { bd = dd; bc = i } }
+        return pos(li, bc)
+    }
+
+    /** x'in altındaki karakterin indeksi. */
+    private fun charAt(li: Int, x: Float): Int {
+        val l = lines[li]; var ci = 0
+        for (i in 0 until l.text.length) if (vx(l, i) <= x) ci = i
+        return ci
+    }
+
+    /** Karakterin içinde bulunduğu kelimenin [başlangıç, bitiş) konumları. */
+    private fun wordAt(li: Int, ci0: Int): LongArray? {
+        val t = lines[li].text
+        var c = ci0.coerceIn(0, t.length - 1)
+        if (t[c] == ' ') {
+            c = if (c > 0 && t[c - 1] != ' ') c - 1 else if (c + 1 < t.length && t[c + 1] != ' ') c + 1 else return null
+        }
+        var a = c; var b = c + 1
+        while (a > 0 && t[a - 1] != ' ') a--
+        while (b < t.length && t[b] != ' ') b++
+        return longArrayOf(pos(li, a), pos(li, b))
+    }
+
+    private fun selUnion(): RectF {
+        val u = RectF(); var first = true
+        for (i in pl(ss)..pl(se)) {
+            val l = lines[i]
+            val a = if (i == pl(ss)) pc(ss) else 0
+            val b = if (i == pl(se)) pc(se) else l.text.length
+            if (a >= b) continue
+            val r = RectF(vx(l, a), vTop(l), vx(l, b), vBot(l))
+            if (first) { u.set(r); first = false } else u.union(r)
+        }
+        return u
+    }
+
+    // ---------- Android'in yüzen paneli ----------
+    private val cb = object : ActionMode.Callback2() {
+        override fun onCreateActionMode(m: ActionMode, menu: Menu): Boolean {
+            menu.add(0, ACT_COPY, 0, context.getString(android.R.string.copy)).setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
+            menu.add(0, ACT_SHARE, 1, L("Paylaş", "Share")).setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
+            menu.add(0, ACT_GOOGLE, 2, "Google").setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
+            menu.add(0, ACT_ALL, 3, context.getString(android.R.string.selectAll)).setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM)
+            return true
+        }
+        override fun onPrepareActionMode(m: ActionMode, menu: Menu) = false
+        override fun onActionItemClicked(m: ActionMode, item: MenuItem): Boolean {
+            when (item.itemId) {
+                ACT_COPY, ACT_SHARE, ACT_GOOGLE -> { val t = selectedText(); m.finish(); onAction?.invoke(item.itemId, t); return true }
+                ACT_ALL -> { selectAll(); return true }
+            }
+            return false
+        }
+        override fun onDestroyActionMode(m: ActionMode) { if (mode === m) mode = null }
+        override fun onGetContentRect(m: ActionMode, v: View, out: Rect) {
+            if (ss < 0) { out.set(0, 0, width, 1); return }
+            val u = selUnion()
+            out.set(u.left.toInt(), u.top.toInt(), u.right.toInt(), u.bottom.toInt())
+            if (!out.intersect(0, 0, width, height)) out.set(0, 0, width, 1)
+        }
+    }
+
+    private fun ensureMode() {
+        if (mode != null || ss < 0) return
+        mode = startActionMode(cb, ActionMode.TYPE_FLOATING)
+    }
+
+    override fun onDetachedFromWindow() { mode?.finish(); mode = null; super.onDetachedFromWindow() }
 
     // ---------- çizim ----------
     override fun onDraw(c: Canvas) {
         val bm = bmp ?: return
         c.save(); c.translate(ox, oy); c.scale(sc, sc); c.drawBitmap(bm, 0f, 0f, pImg); c.restore()
-        if (a < 0) return
-        val rs = lineRects()
-        for (r in rs) { val q = RectF(r); q.inset(-2 * d, -2 * d); c.drawRoundRect(q, 3 * d, 3 * d, pHi) }
-        val f = rs.first(); val l = rs.last()
-        handle(c, f.left, f.bottom + 2 * d, true)
-        handle(c, l.right, l.bottom + 2 * d, false)
+        if (ss < 0) return
+        for (i in pl(ss)..pl(se)) {
+            val l = lines[i]
+            val a = if (i == pl(ss)) pc(ss) else 0
+            val b = if (i == pl(se)) pc(se) else l.text.length
+            if (a >= b) continue
+            val r = RectF(vx(l, a), vTop(l), vx(l, b), vBot(l)); r.inset(-2 * d, -2 * d)
+            c.drawRoundRect(r, 3 * d, 3 * d, pHi)
+        }
+        val ls = lines[pl(ss)]; val le = lines[pl(se)]
+        handle(c, vx(ls, pc(ss)), vBot(ls) + 2 * d, true)
+        handle(c, vx(le, pc(se)), vBot(le) + 2 * d, false)
     }
 
     private fun handle(c: Canvas, x: Float, y: Float, start: Boolean) {
@@ -79,96 +261,84 @@ class TextSelectView(ctx: Context) : View(ctx) {
         c.drawPath(p, pHandle)
     }
 
-    /** Seçili kelimeleri satır satır birleştirir (aynı paragraf + satır = tek dikdörtgen). */
-    private fun lineRects(): List<RectF> {
-        val out = ArrayList<RectF>()
-        var cur: RectF? = null; var key = -1L
-        for (i in a..b) {
-            val w = words[i]; val k = w.block * 100000L + w.line
-            if (cur == null || k != key) { cur = RectF(vb[i]); key = k; out.add(cur) } else cur.union(vb[i])
-        }
-        return out
-    }
-
-    private fun notifySel(dragging: Boolean) {
-        if (a < 0) { onSelection?.invoke(false, null, false); return }
-        val rs = lineRects(); val u = RectF(rs[0]); for (r in rs) u.union(r)
-        onSelection?.invoke(true, u, dragging)
-    }
-
     // ---------- dokunma ----------
-    private fun nearest(x: Float, y: Float, maxDist: Float = Float.MAX_VALUE): Int {
-        var best = -1; var bd = Float.MAX_VALUE
-        for (i in vb.indices) {
-            val r = vb[i]
-            val dx = maxOf(r.left - x, 0f, x - r.right); val dy = maxOf(r.top - y, 0f, y - r.bottom)
-            val dd = dx * dx + dy * dy
-            if (dd < bd) { bd = dd; best = i }
-        }
-        return if (best >= 0 && bd <= maxDist * maxDist) best else -1
-    }
-
     private fun near(px: Float, py: Float, x: Float, y: Float) = (px - x) * (px - x) + (py - y) * (py - y) <= (32 * d) * (32 * d)
 
     private val gd = GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
-        override fun onDown(e: MotionEvent) = true
-        override fun onLongPress(e: MotionEvent) {
-            val i = nearest(e.x, e.y, 22 * d)
-            if (i < 0) return
-            a = i; b = i; anchor = i; drag = 3
+        override fun onDown(ev: MotionEvent) = true
+
+        override fun onLongPress(ev: MotionEvent) {
+            val (li, dist) = nearestLine(ev.x, ev.y)
+            if (li < 0 || dist > 24 * d) return
+            val w = wordAt(li, charAt(li, ev.x)) ?: return
+            aS = w[0]; aE = w[1]; ss = aS; se = aE; drag = 3
             performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
             parent?.requestDisallowInterceptTouchEvent(true)
-            invalidate(); notifySel(true)
+            changed()
         }
-        override fun onDoubleTap(e: MotionEvent): Boolean {
-            val i = nearest(e.x, e.y, 22 * d)
-            if (i < 0) return false
-            val blk = words[i].block
-            var s = i; var t = i
-            while (s > 0 && words[s - 1].block == blk) s--
-            while (t < words.size - 1 && words[t + 1].block == blk) t++
-            a = s; b = t; drag = 0
-            invalidate(); notifySel(false)
+
+        override fun onDoubleTap(ev: MotionEvent): Boolean {
+            val (li, dist) = nearestLine(ev.x, ev.y)
+            if (li < 0 || dist > 24 * d) return false
+            val blk = lines[li].block
+            var a = li; var b = li
+            while (a > 0 && lines[a - 1].block == blk) a--
+            while (b < lines.size - 1 && lines[b + 1].block == blk) b++
+            ss = pos(a, 0); se = pos(b, lines[b].text.length); drag = 0
+            changed()
             return true
         }
-        override fun onSingleTapConfirmed(e: MotionEvent): Boolean { if (a >= 0) clear(); return true }
+
+        override fun onSingleTapConfirmed(ev: MotionEvent): Boolean { if (ss >= 0) clear(); return true }
     })
 
-    override fun onTouchEvent(e: MotionEvent): Boolean {
-        when (e.actionMasked) {
+    override fun onTouchEvent(ev: MotionEvent): Boolean {
+        when (ev.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 drag = 0
-                if (a >= 0) {
-                    val rs = lineRects(); val f = rs.first(); val l = rs.last()
-                    if (near(e.x, e.y, f.left - hs / 2, f.bottom + hs / 2 + 2 * d)) drag = 1
-                    else if (near(e.x, e.y, l.right + hs / 2, l.bottom + hs / 2 + 2 * d)) drag = 2
+                if (ss >= 0) {
+                    val ls = lines[pl(ss)]; val le = lines[pl(se)]
+                    val sx = vx(ls, pc(ss)); val sy = vBot(ls) + 2 * d
+                    val ex = vx(le, pc(se)); val ey = vBot(le) + 2 * d
+                    if (near(ev.x, ev.y, sx - hs / 2, sy + hs / 2)) { drag = 1; offX = ev.x - sx; offY = ev.y - (vTop(ls) + vBot(ls)) / 2 }
+                    else if (near(ev.x, ev.y, ex + hs / 2, ey + hs / 2)) { drag = 2; offX = ev.x - ex; offY = ev.y - (vTop(le) + vBot(le)) / 2 }
                     if (drag != 0) {
                         parent?.requestDisallowInterceptTouchEvent(true)
-                        notifySel(true); return true
+                        mode?.hide(ActionMode.DEFAULT_HIDE_DURATION)
+                        return true
                     }
                 }
             }
             MotionEvent.ACTION_MOVE -> if (drag != 0) {
                 if (drag == 3) {
-                    val i = nearest(e.x, e.y)
-                    if (i >= 0) { a = minOf(anchor, i); b = maxOf(anchor, i) }
+                    // Basılı tutup sürükle: başlangıç kelimesi ile parmağın altındaki kelime arası (kelime kelime)
+                    val li = nearestLine(ev.x, ev.y).first
+                    if (li >= 0) {
+                        val w = wordAt(li, charAt(li, ev.x))
+                        val ws = w?.get(0) ?: posAt(ev.x, ev.y)
+                        val we = w?.get(1) ?: ws
+                        ss = minOf(aS, ws); se = maxOf(aE, we)
+                    }
                 } else {
-                    // Damla satırın altında durur; parmağın üstündeki kelimeyi hedefle
-                    val i = nearest(e.x, e.y - 26 * d)
-                    if (i >= 0) {
-                        if (drag == 1) { a = i; if (a > b) { val t = a; a = b; b = t; drag = 2 } }
-                        else { b = i; if (b < a) { val t = a; a = b; b = t; drag = 1 } }
+                    // Damlayı karakter hassasiyetinde, sayfanın herhangi bir yerine sürükle
+                    val p = posAt(ev.x - offX, ev.y - offY)
+                    if (p >= 0) {
+                        if (drag == 1) {
+                            if (p < se) ss = p else if (p > se) { ss = se; se = p; drag = 2 }
+                        } else {
+                            if (p > ss) se = p else if (p < ss) { se = ss; ss = p; drag = 1 }
+                        }
                     }
                 }
-                invalidate(); notifySel(true)
+                changed()
                 return true
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> if (drag != 0) {
                 val was = drag; drag = 0
-                notifySel(false)
+                changed()
                 if (was != 3) return true
             }
         }
-        return gd.onTouchEvent(e)
+        return gd.onTouchEvent(ev)
     }
 }

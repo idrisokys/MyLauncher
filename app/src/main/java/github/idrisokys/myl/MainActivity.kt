@@ -655,10 +655,6 @@ class MainActivity : Activity() {
         row("Düzeni yedekle", R.drawable.ic_menu_backup) { backupLayout() }
         row("Düzeni geri al", R.drawable.ic_menu_restore) { confirmRestore() }
         row("Duvar kağıdı", R.drawable.ic_menu_wallpaper) { pickWallpaper() }
-        row("Sonraki duvar kağıdı", R.drawable.ic_menu_next) {
-            toast("Yükleniyor…")
-            WallhavenNext.next(this) { m -> runOnUiThread { toast(m) } }
-        }
         row("Ayarlar", R.drawable.ic_settings) { safeStart(Intent(Settings.ACTION_SETTINGS)) }
 
 

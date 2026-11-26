@@ -14,6 +14,7 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.MotionEvent
 import android.view.View
+import android.widget.Magnifier
 import github.idrisokys.myl.L
 import kotlin.math.abs
 import kotlin.math.sqrt
@@ -53,6 +54,8 @@ class TextSelectView(ctx: Context) : View(ctx) {
     private var aS = 0L; private var aE = 0L   // genişletmede başlangıç kelimesi
     private var offX = 0f; private var offY = 0f
     private var mode: ActionMode? = null
+    private var mag: Magnifier? = null
+    private var lastHas = false
 
     private val d = resources.displayMetrics.density
     private val hs = 22 * d
@@ -128,11 +131,44 @@ class TextSelectView(ctx: Context) : View(ctx) {
             when {
                 useV -> { rec(v.third.subList(0, v.second)); rec(v.third.subList(v.second, v.third.size)) }
                 h.second > 0 -> { rec(h.third.subList(0, h.second)); rec(h.third.subList(h.second, h.third.size)) }
-                else -> out.addAll(g.sortedWith(compareBy({ it.box.top }, { it.box.left })))
+                else -> out.addAll(mergeRows(g, mh))
             }
         }
         rec(src)
         return out
+    }
+
+    /** Aynı görsel satırdaki parçaları (satır içi kod kutusu, ayrı okunan kelime grupları) tek satırda birleştirir. */
+    private fun mergeRows(g: List<Ln>, mh: Float): List<Ln> {
+        val rows = ArrayList<ArrayList<Ln>>(); val rb = ArrayList<RectF>()
+        for (l in g.sortedBy { it.box.centerY() }) {
+            val last = rb.lastOrNull()
+            val ov = if (last == null) -1f else minOf(l.box.bottom, last.bottom) - maxOf(l.box.top, last.top)
+            if (last != null && ov >= 0.5f * minOf(l.box.height(), last.height())) {
+                rows.last().add(l); last.union(l.box)
+            } else { rows.add(arrayListOf(l)); rb.add(RectF(l.box)) }
+        }
+        val res = ArrayList<Ln>()
+        for (r in rows) {
+            val s = r.sortedBy { it.box.left }
+            var cur = s[0]
+            for (i in 1 until s.size) {
+                val n = s[i]
+                if (n.box.left - cur.box.right <= 2f * mh) cur = joinLn(cur, n)
+                else { res.add(cur); cur = n }
+            }
+            res.add(cur)
+        }
+        return res
+    }
+
+    private fun joinLn(a: Ln, b: Ln): Ln {
+        val box = RectF(a.box); box.union(b.box)
+        val cx = FloatArray(a.cx.size + b.cx.size)
+        System.arraycopy(a.cx, 0, cx, 0, a.cx.size)
+        System.arraycopy(b.cx, 0, cx, a.cx.size, b.cx.size)
+        for (i in 1 until cx.size) if (cx[i] < cx[i - 1]) cx[i] = cx[i - 1]
+        return Ln(a.text + " " + b.text, box, cx, if (b.text.length > a.text.length) b.block else a.block)
     }
 
     override fun onSizeChanged(w: Int, h: Int, ow: Int, oh: Int) { relayout() }
@@ -153,7 +189,8 @@ class TextSelectView(ctx: Context) : View(ctx) {
     fun clear() {
         ss = -1L; se = -1L; drag = 0
         mode?.finish(); mode = null
-        invalidate(); onSelState?.invoke(false)
+        magHide()
+        invalidate(); lastHas = false; onSelState?.invoke(false)
     }
 
     fun selectAll() {
@@ -178,7 +215,8 @@ class TextSelectView(ctx: Context) : View(ctx) {
 
     private fun changed() {
         invalidate()
-        onSelState?.invoke(ss >= 0)
+        val has = ss >= 0
+        if (has != lastHas) { lastHas = has; onSelState?.invoke(has) }
         if (drag != 0) mode?.hide(ActionMode.DEFAULT_HIDE_DURATION.toLong())
         else if (ss >= 0) { ensureMode(); mode?.invalidateContentRect(); mode?.hide(0L) }
     }
@@ -276,7 +314,22 @@ class TextSelectView(ctx: Context) : View(ctx) {
         mode = startActionMode(cb, ActionMode.TYPE_FLOATING)
     }
 
-    override fun onDetachedFromWindow() { mode?.finish(); mode = null; super.onDetachedFromWindow() }
+    override fun onDetachedFromWindow() { mode?.finish(); mode = null; magHide(); super.onDetachedFromWindow() }
+
+    // ---------- büyüteç ve damla konumu ----------
+    private fun magAt(p: Long) {
+        if (p < 0 || pl(p) >= lines.size) return
+        val l = lines[pl(p)]
+        try {
+            val m = mag ?: Magnifier(this).also { mag = it }
+            m.show(vx(l, pc(p)).coerceIn(0f, width.toFloat()), ((vTop(l) + vBot(l)) / 2f).coerceIn(0f, height.toFloat()))
+        } catch (e: Throwable) { }
+    }
+
+    private fun magHide() { try { mag?.dismiss() } catch (e: Throwable) { } }
+
+    /** Damla, satırın hemen altında; satır ekranın dibindeyse damla ekranın içinde kalır. */
+    private fun handleY(l: Ln) = minOf(vBot(l) + 2 * d, height - hs - 2 * d).coerceAtLeast(0f)
 
     // ---------- çizim ----------
     override fun onDraw(c: Canvas) {
@@ -292,8 +345,8 @@ class TextSelectView(ctx: Context) : View(ctx) {
             c.drawRoundRect(r, 3 * d, 3 * d, pHi)
         }
         val ls = lines[pl(ss)]; val le = lines[pl(se)]
-        handle(c, vx(ls, pc(ss)), vBot(ls) + 2 * d, true)
-        handle(c, vx(le, pc(se)), vBot(le) + 2 * d, false)
+        handle(c, vx(ls, pc(ss)), handleY(ls), true)
+        handle(c, vx(le, pc(se)), handleY(le), false)
     }
 
     private fun handle(c: Canvas, x: Float, y: Float, start: Boolean) {
@@ -341,10 +394,14 @@ class TextSelectView(ctx: Context) : View(ctx) {
                 drag = 0
                 if (ss >= 0) {
                     val ls = lines[pl(ss)]; val le = lines[pl(se)]
-                    val sx = vx(ls, pc(ss)); val sy = vBot(ls) + 2 * d
-                    val ex = vx(le, pc(se)); val ey = vBot(le) + 2 * d
-                    if (near(ev.x, ev.y, sx - hs / 2, sy + hs / 2)) { drag = 1; offX = ev.x - sx; offY = ev.y - (vTop(ls) + vBot(ls)) / 2 }
-                    else if (near(ev.x, ev.y, ex + hs / 2, ey + hs / 2)) { drag = 2; offX = ev.x - ex; offY = ev.y - (vTop(le) + vBot(le)) / 2 }
+                    val sx = vx(ls, pc(ss)); val sy = handleY(ls)
+                    val ex = vx(le, pc(se)); val ey = handleY(le)
+                    val ds = (ev.x - (sx - hs / 2)).let { it * it } + (ev.y - (sy + hs / 2)).let { it * it }
+                    val de = (ev.x - (ex + hs / 2)).let { it * it } + (ev.y - (ey + hs / 2)).let { it * it }
+                    val tryStart = near(ev.x, ev.y, sx - hs / 2, sy + hs / 2)
+                    val tryEnd = near(ev.x, ev.y, ex + hs / 2, ey + hs / 2)
+                    if (tryStart && (!tryEnd || ds <= de)) { drag = 1; offX = ev.x - sx; offY = ev.y - (vTop(ls) + vBot(ls)) / 2 }
+                    else if (tryEnd) { drag = 2; offX = ev.x - ex; offY = ev.y - (vTop(le) + vBot(le)) / 2 }
                     if (drag != 0) {
                         parent?.requestDisallowInterceptTouchEvent(true)
                         mode?.hide(ActionMode.DEFAULT_HIDE_DURATION.toLong())
@@ -353,6 +410,7 @@ class TextSelectView(ctx: Context) : View(ctx) {
                 }
             }
             MotionEvent.ACTION_MOVE -> if (drag != 0) {
+                val os = ss; val oe = se
                 if (drag == 3) {
                     // Basılı tutup sürükle: başlangıç kelimesi ile parmağın altındaki kelime arası (kelime kelime)
                     val li = nearestLine(ev.x, ev.y).first
@@ -373,11 +431,16 @@ class TextSelectView(ctx: Context) : View(ctx) {
                         }
                     }
                 }
-                changed()
+                if (ss != os || se != oe) {
+                    performHapticFeedback(HapticFeedbackConstants.TEXT_HANDLE_MOVE)
+                    changed()
+                }
+                magAt(if (drag == 1) ss else if (drag == 2) se else posAt(ev.x, ev.y))
                 return true
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> if (drag != 0) {
                 val was = drag; drag = 0
+                magHide()
                 changed()
                 if (was != 3) return true
             }

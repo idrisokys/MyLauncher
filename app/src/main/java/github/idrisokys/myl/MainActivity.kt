@@ -658,6 +658,13 @@ class MainActivity : Activity() {
             toast("Yükleniyor…")
             WallhavenNext.next(this) { m -> runOnUiThread { toast(m) } }
         }
+        row("Ekran metni", R.drawable.ic_menu_text) {
+            if (TextGrabService.isEnabled(this)) toast("Sol kenardaki çizgiyi sağa çekin")
+            else {
+                toast("MyL Ekran metni'ni açın")
+                safeStart(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+            }
+        }
         row("Ayarlar", R.drawable.ic_settings) { safeStart(Intent(Settings.ACTION_SETTINGS)) }
 
 

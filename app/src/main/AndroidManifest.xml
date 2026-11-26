@@ -199,5 +199,18 @@
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
+        <!-- Ekran metni seçici: sol kenar çizgisini sağa çekince ekrandaki metni seçilebilir gösterir (Ayarlar > Erişilebilirlik'ten açılır) -->
+        <service
+            android:name=".TextGrabService"
+            android:exported="true"
+            android:label="@string/tg_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/text_grab_service" />
+        </service>
     </application>
 </manifest>

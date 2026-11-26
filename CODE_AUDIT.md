@@ -1,3 +1,10 @@
+# MyL — Ekran metni seçici (yeni)
+
+- `TextGrabService` (erişilebilirlik hizmeti): sol kenarda (geri hareketi bölgesinin ~28 dp içinde) saydam ince çizgi; sağa ~90 dp çekilince açık uygulama pencerelerinin metni okunur ve tam ekran panelde **tek, seçilebilir** metin olarak gösterilir (sistem "Kopyala" menüsü + "Tümünü kopyala"). Şifre alanları, klavye ve durum çubuğu okunmaz.
+- Açmak için: MyL ⚙ menüsü > "Ekran metni" simgesi → Erişilebilirlik ayarlarında "MyL Ekran metni"ni aç (Android 13+'ta yandan yüklenen uygulamalarda önce uygulama bilgisinden "Kısıtlı ayarlara izin ver" gerekir).
+- Yeni dosyalar: `TextGrabService.kt`, `res/xml/text_grab_service.xml`, `res/drawable/ic_menu_text.xml`; değişen: `AndroidManifest.xml`, `strings.xml`, `MainActivity.showSettingsMenu`.
+- Bu ortamda Android SDK olmadığından derleme/cihaz testi yapılmadı.
+
 # MyL 1.15 — ağır işlerin Rust'a taşınması (arayüz değişmedi)
 
 Yeni `native/` Rust crate'i (`libmylnative.so`, yalnızca arm64-v8a) ve Kotlin köprüsü `Native.kt`. **Hiçbir ekran/düzen/renk/metin değişmedi**; yalnızca arka plandaki iş yapan kod yer değiştirdi. Her çağrı `Native.ok` / `null` kontrolüyle korunur: `.so` yoksa ya da yerel kod hata verirse eski Kotlin kodu aynen çalışır.

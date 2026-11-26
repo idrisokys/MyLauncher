@@ -72,7 +72,7 @@ class TextSelectView(ctx: Context) : View(ctx) {
         val probe = Paint().apply { textSize = 100f }
         val groups = LinkedHashMap<Long, ArrayList<OcrEngine.W>>()
         for (w in words) if (w.text.isNotBlank()) groups.getOrPut(w.block * 100000L + w.line) { ArrayList() }.add(w)
-        lines = groups.values.map { buildLine(it, probe) }
+        lines = readingOrder(groups.values.map { buildLine(it, probe) })
         relayout(); invalidate()
     }
 
@@ -95,6 +95,44 @@ class TextSelectView(ctx: Context) : View(ctx) {
         }
         for (i in 1 until cx.size) if (cx[i] < cx[i - 1]) cx[i] = cx[i - 1]
         return Ln(sb.toString(), box, cx, ws[0].block)
+    }
+
+    /**
+     * ML Kit blokları görsel sırada vermez (tablo hücreleri, yan paneller, başlıklar karışır); seçim satır numarasına göre
+     * çalıştığı için seçim "zıplar". Satırları XY-kesim ile okuma sırasına dizeriz: önce geniş boşluklardan
+     * sütunlara / satırlara böl, sonra yukarıdan aşağı, soldan sağa.
+     */
+    private fun readingOrder(src: List<Ln>): List<Ln> {
+        if (src.size < 2) return src
+        val mh = src.map { it.box.height() }.sorted()[src.size / 2].coerceAtLeast(1f)
+        val out = ArrayList<Ln>(src.size)
+
+        // (en büyük boşluk, bölme indeksi, eksende sıralı liste)
+        fun gap(g: List<Ln>, vertical: Boolean): Triple<Float, Int, List<Ln>> {
+            val s = if (vertical) g.sortedBy { it.box.left } else g.sortedBy { it.box.top }
+            var maxEnd = if (vertical) s[0].box.right else s[0].box.bottom
+            var best = 0f; var at = -1
+            for (i in 1 until s.size) {
+                val st = if (vertical) s[i].box.left else s[i].box.top
+                if (st - maxEnd > best) { best = st - maxEnd; at = i }
+                val en = if (vertical) s[i].box.right else s[i].box.bottom
+                if (en > maxEnd) maxEnd = en
+            }
+            return Triple(best, at, s)
+        }
+
+        fun rec(g: List<Ln>) {
+            if (g.size <= 1) { out.addAll(g); return }
+            val h = gap(g, false); val v = gap(g, true)
+            val useV = (v.first >= mh * 0.5f && v.first >= h.first && v.second > 0) || (h.second <= 0 && v.second > 0)
+            when {
+                useV -> { rec(v.third.subList(0, v.second)); rec(v.third.subList(v.second, v.third.size)) }
+                h.second > 0 -> { rec(h.third.subList(0, h.second)); rec(h.third.subList(h.second, h.third.size)) }
+                else -> out.addAll(g.sortedWith(compareBy({ it.box.top }, { it.box.left })))
+            }
+        }
+        rec(src)
+        return out
     }
 
     override fun onSizeChanged(w: Int, h: Int, ow: Int, oh: Int) { relayout() }
@@ -223,6 +261,11 @@ class TextSelectView(ctx: Context) : View(ctx) {
         override fun onGetContentRect(m: ActionMode, v: View, out: Rect) {
             if (ss < 0) { out.set(0, 0, width, 1); return }
             val u = selUnion()
+            // Seçim ekranın büyük kısmını kaplıyorsa panel en üste atlamasın: seçimin başladığı satırın üstünde dursun.
+            if (u.height() > height * 0.35f) {
+                val ls = lines[pl(ss)]
+                u.set(vx(ls, pc(ss)), vTop(ls), maxOf(vx(ls, ls.text.length), vx(ls, pc(ss)) + 1f), vBot(ls))
+            }
             out.set(u.left.toInt(), u.top.toInt(), u.right.toInt(), u.bottom.toInt())
             if (!out.intersect(0, 0, width, height)) out.set(0, 0, width, 1)
         }

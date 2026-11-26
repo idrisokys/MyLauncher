@@ -7,6 +7,8 @@
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- Metin seç: ekran görüntüsü alma (MediaProjection) ön plan servisi ister; erişilebilirlik izni GEREKMEZ -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
@@ -151,6 +153,37 @@
             android:exported="false"
             android:grantUriPermissions="true" />
 
+        <!-- ===== Metin seç: ekranı okuyup metni seçilebilir yapar (erişilebilirlik izni yok; ekran yakalama onayı + cihaz içi OCR) ===== -->
+        <activity
+            android:name=".ocr.TextGrabActivity"
+            android:exported="false"
+            android:label="Metin seç"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@style/QsPerm" />
+        <activity
+            android:name=".ocr.TextSelectActivity"
+            android:exported="false"
+            android:label="Metin seç"
+            android:excludeFromRecents="true"
+            android:taskAffinity="github.idrisokys.myl.ocr"
+            android:theme="@style/BlackTheme" />
+        <service
+            android:name=".ocr.CaptureService"
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection" />
+        <!-- Hızlı Ayarlar kutucuğu: düzenleme listesinden "Metin seç"i ekle -->
+        <service
+            android:name=".ocr.GrabTileService"
+            android:exported="true"
+            android:label="Metin seç"
+            android:icon="@drawable/ic_text_select"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
         <!-- ===== Hızlı Paylaş (eski QuickShare) — arayüzsüz: ana ekrandaki düğme + Paylaş menüsü ===== -->
         <!-- Paylaş menüsünden kaldırıldı (intent-filter yok); Hızlı Paylaş yalnızca ana ekrandaki düğmeyle kullanılır -->
         <activity
@@ -199,18 +232,5 @@
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
-        <!-- Ekran metni seçici: sol kenar çizgisini sağa çekince ekrandaki metni seçilebilir gösterir (Ayarlar > Erişilebilirlik'ten açılır) -->
-        <service
-            android:name=".TextGrabService"
-            android:exported="true"
-            android:label="@string/tg_label"
-            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
-            <intent-filter>
-                <action android:name="android.accessibilityservice.AccessibilityService" />
-            </intent-filter>
-            <meta-data
-                android:name="android.accessibilityservice"
-                android:resource="@xml/text_grab_service" />
-        </service>
     </application>
 </manifest>

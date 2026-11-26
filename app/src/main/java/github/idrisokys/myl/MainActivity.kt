@@ -645,6 +645,7 @@ class MainActivity : Activity() {
 
         // En üstte Uygulamalar; sonra bilgi simgesi ve diğerleri
         row("Uygulamalar", R.drawable.ic_menu_apps) { openApps() }
+        row("Metin seç", R.drawable.ic_text_select) { grabText() }
 
         box.addView(View(this).apply { setBackgroundColor(0x33FFFFFF) },
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1)).apply {
@@ -657,13 +658,6 @@ class MainActivity : Activity() {
         row("Sonraki duvar kağıdı", R.drawable.ic_menu_next) {
             toast("Yükleniyor…")
             WallhavenNext.next(this) { m -> runOnUiThread { toast(m) } }
-        }
-        row("Ekran metni", R.drawable.ic_menu_text) {
-            if (TextGrabService.isEnabled(this)) toast("Sol kenardaki çizgiyi sağa çekin")
-            else {
-                toast("MyL Ekran metni'ni açın")
-                safeStart(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-            }
         }
         row("Ayarlar", R.drawable.ic_settings) { safeStart(Intent(Settings.ACTION_SETTINGS)) }
 
@@ -851,6 +845,14 @@ class MainActivity : Activity() {
     }
 
     /** Uygulamalar bölümünü açar. */
+    /** Ekrandaki metni seçilebilir yapar (menü kapanınca ekran alınsın diye kısa gecikme). */
+    private fun grabText() {
+        main.postDelayed({
+            try { startActivity(Intent(this, github.idrisokys.myl.ocr.TextGrabActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+            catch (e: Exception) { toast("Metin seç açılamadı") }
+        }, 250)
+    }
+
     private fun openApps() {
         try {
             startActivity(

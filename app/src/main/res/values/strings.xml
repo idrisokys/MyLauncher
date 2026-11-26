@@ -5,7 +5,4 @@
     <string name="sc_gallery">Galerim</string>
     <string name="sc_files">Dosyalarım</string>
     <string name="sc_notes">Notlarım</string>
-    <!-- Ekran metni seçici (erişilebilirlik hizmeti) -->
-    <string name="tg_label">MyL Ekran metni</string>
-    <string name="tg_desc">Ekranın sol kenarındaki ince çizgiyi sağa çekince o an ekrandaki tüm metni seçilip kopyalanabilir biçimde gösterir. Yalnızca ekrandaki metni okur; hiçbir veri kaydedilmez ya da gönderilmez.</string>
 </resources>

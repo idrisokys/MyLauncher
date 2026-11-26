@@ -7,3 +7,4 @@
 }
 # Rust köprüsü (JNI sembolleri sınıf/metot adlarına bağlıdır)
 -keep class github.idrisokys.myl.Native { *; }
+-keep class com.google.mlkit.** { *; }

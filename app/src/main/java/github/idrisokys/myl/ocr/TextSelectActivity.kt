@@ -100,26 +100,26 @@ class TextSelectActivity : Activity() {
             setPadding(dp(16), dp(10), dp(16), dp(10))
             background = GradientDrawable().apply { setColor(0xCC222222.toInt()); cornerRadius = dp(20).toFloat() }
         }
-        root.addView(hint, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, android.view.Gravity.BOTTOM or android.view.Gravity.CENTER_HORIZONTAL).apply { bottomMargin = dp(48); marginStart = dp(16); marginEnd = dp(16) })
+        root.addView(hint, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, android.view.Gravity.BOTTOM or android.view.Gravity.CENTER_HORIZONTAL).apply { bottomMargin = dp(104); marginStart = dp(16); marginEnd = dp(16) })
         hint.postDelayed({ hint.animate().alpha(0f).setDuration(400).withEndAction { hint.visibility = View.GONE }.start() }, 4000)
 
         // Kapat (alan seçme modundayken önce o moddan çıkar)
         closeBtn = TextView(this).apply {
-            text = "✕"; setTextColor(Color.WHITE); setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f); gravity = android.view.Gravity.CENTER
+            text = "✕"; setTextColor(Color.WHITE); setTextSize(TypedValue.COMPLEX_UNIT_SP, 22f); gravity = android.view.Gravity.CENTER
             background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(0xAA222222.toInt()) }
             setOnClickListener { if (crop != null) exitCrop() else finish() }
         }
-        root.addView(closeBtn, FrameLayout.LayoutParams(dp(40), dp(40), android.view.Gravity.TOP or android.view.Gravity.END).apply { topMargin = dp(36); marginEnd = dp(14) })
+        root.addView(closeBtn, FrameLayout.LayoutParams(dp(52), dp(52), android.view.Gravity.BOTTOM or android.view.Gravity.START).apply { bottomMargin = dp(36); marginStart = dp(20) })
 
         // Alan seç → resim olarak paylaş (✕'in soluna)
         cropBtn = ImageView(this).apply {
             setImageResource(github.idrisokys.myl.R.drawable.ic_crop)
-            setPadding(dp(9), dp(9), dp(9), dp(9))
+            setPadding(dp(12), dp(12), dp(12), dp(12))
             background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(0xAA222222.toInt()) }
             contentDescription = L("Alanı seç ve resim olarak paylaş", "Select an area and share as image")
             setOnClickListener { enterCrop() }
         }
-        root.addView(cropBtn, FrameLayout.LayoutParams(dp(40), dp(40), android.view.Gravity.TOP or android.view.Gravity.END).apply { topMargin = dp(36); marginEnd = dp(14 + 40 + 10) })
+        root.addView(cropBtn, FrameLayout.LayoutParams(dp(52), dp(52), android.view.Gravity.BOTTOM or android.view.Gravity.END).apply { bottomMargin = dp(36); marginEnd = dp(20) })
 
         setContentView(root)
     }
@@ -207,9 +207,9 @@ class TextSelectActivity : Activity() {
     }
 
     private fun pill(label: String, filled: Boolean, onClick: () -> Unit) = TextView(this).apply {
-        text = label; setTextColor(Color.WHITE); setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+        text = label; setTextColor(Color.WHITE); setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
         gravity = android.view.Gravity.CENTER
-        setPadding(dp(22), dp(11), dp(22), dp(11))
+        setPadding(dp(20), dp(14), dp(20), dp(14))
         background = GradientDrawable().apply { setColor(if (filled) 0xFFEC4E6A.toInt() else 0xCC222222.toInt()); cornerRadius = dp(24).toFloat() }
         setOnClickListener { onClick() }
     }
@@ -234,7 +234,7 @@ class TextSelectActivity : Activity() {
         }
         cropBar = bar
         root.addView(bar, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
-            android.view.Gravity.BOTTOM or android.view.Gravity.CENTER_HORIZONTAL).apply { bottomMargin = dp(40) })
+            android.view.Gravity.BOTTOM or android.view.Gravity.CENTER_HORIZONTAL).apply { bottomMargin = dp(36) })
 
         cropBtn.visibility = View.GONE
         closeBtn.bringToFront()

@@ -61,6 +61,7 @@ class CaptureService : Service() {
 
     private fun capture(code: Int, data: Intent) {
         val mp = getSystemService(MediaProjectionManager::class.java).getMediaProjection(code, data)
+            ?: run { fail(); return }
         val wm = getSystemService(WindowManager::class.java)
         val w: Int; val hgt: Int
         if (Build.VERSION.SDK_INT >= 30) { val b = wm.maximumWindowMetrics.bounds; w = b.width(); hgt = b.height() }

@@ -133,6 +133,7 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
     var selected by remember { mutableStateOf(setOf<String>()) } // düzenleme modunda işaretlenen öğeler
     var moving by remember { mutableStateOf<List<Entry>>(emptyList()) }   // taşınacak öğeler
     var dialog by remember { mutableStateOf<String?>(null) }
+    var syncPopup by remember { mutableStateOf(false) }          // Yenile'nin yanındaki eşitle simgesi: cihazlarla Link klasörü eşitleme penceresi
     var shareFiles by remember { mutableStateOf<List<java.io.File>?>(null) }   // Hızlı Paylaş ile gönderilecek dosyalar
     var renameText by remember { mutableStateOf("") }
     var txtDoc by remember { mutableStateOf<Pair<Entry, String>?>(null) }   // tam ekranda açık .txt (öğe, içerik)
@@ -410,6 +411,7 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
                 Text(L("${selected.size} seçili", "${selected.size} selected"), style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(start = 8.dp))
                 EditModeButton(editMode) { editMode = false; selected = emptySet() }
                 IconButton({ refreshAll() }) { Icon(Icons.Default.Refresh, L("Yenile", "Refresh")) }
+                IconButton({ syncPopup = true }) { Icon(Icons.Default.Sync, L("Cihazlarla eşitle", "Sync with devices")) }
                 Spacer(Modifier.weight(1f))
             }
         } else Surface(color = NotesBar, tonalElevation = 0.dp) {
@@ -421,6 +423,7 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     EditModeButton(editMode) { editMode = !editMode; selected = emptySet() }
                     IconButton({ refreshAll() }) { Icon(Icons.Default.Refresh, L("Yenile", "Refresh")) }
+                IconButton({ syncPopup = true }) { Icon(Icons.Default.Sync, L("Cihazlarla eşitle", "Sync with devices")) }
                     if (editMode && selected.isNotEmpty()) Text(L("${selected.size} seçili", "${selected.size} selected"), style = MaterialTheme.typography.labelSmall, maxLines = 1, modifier = Modifier.padding(start = 4.dp))
                     Spacer(Modifier.weight(1f))
                     IconButton({ clipboard.getText()?.text?.let { linkText = it } }) { Icon(Icons.Default.ContentPaste, L("Yapıştır", "Paste")) }
@@ -533,6 +536,19 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
             val p = act?.let { github.idrisokys.myl.qs.SendPopup(it, { view }, center = true) }
             p?.onClosed = { shareFiles = null }
             view.post { p?.showFor(fs) }        // Ana ekrandaki paylaşım penceresiyle aynı kod
+            onDispose { p?.dispose() }
+        }
+    }
+
+    if (syncPopup) {
+        val view = androidx.compose.ui.platform.LocalView.current
+        DisposableEffect(Unit) {
+            var a: android.content.Context = ctx
+            while (a is android.content.ContextWrapper && a !is android.app.Activity) a = a.baseContext
+            val act = a as? android.app.Activity
+            val p = act?.let { github.idrisokys.myl.qs.SendPopup(it, { view }, center = true) }
+            p?.onClosed = { syncPopup = false }
+            view.post { p?.showSync() }
             onDispose { p?.dispose() }
         }
     }

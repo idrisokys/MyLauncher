@@ -62,6 +62,7 @@ class SendPopup(
     private var line1: TextView? = null          // "Gönderiliyor…"
     private var line2: TextView? = null          // "Gönderilme tamamlandı" / hata
     private var hdrTitle: TextView? = null       // eşitleme görünümünde başlık
+    private var syncOnly = false                // true: pencere yalnızca eşitleme için açıldı ([showSync])
     private var syncView = false                 // true: cihaz listesi yerine eşitleme seçenekleri
     private var syncRunning = false
     private val picked = HashSet<String>()       // eşitlenmek üzere işaretlenen cihazlar
@@ -73,18 +74,31 @@ class SendPopup(
 
     // ---------- Dışarıya açık ----------
     fun show() {
-        preset = null
+        preset = null; syncOnly = false
         openFresh()
     }
 
     /** Dosyalarım / Notlarım: aynı pencere, ama gönderilecek dosyalar hazır; cihaza dokununca doğrudan gönderilir. */
     fun showFor(files: List<java.io.File>) {
-        preset = files.map { Uri.fromFile(it) }
+        preset = files.map { Uri.fromFile(it) }; syncOnly = false
+        openFresh()
+    }
+
+    /** Paylaş menüsündeki "Myl ile paylaş": başka uygulamadan gelen content:// / file:// adresleri hazır gönderilir. */
+    fun showForUris(uris: List<Uri>) {
+        preset = uris; syncOnly = false
+        openFresh()
+    }
+
+    /** Notlarım > Yenile'nin yanındaki eşitle simgesi: doğrudan "Nasıl eşitlensin?" görünümüyle açılır (Link klasörü eşitlemesi). */
+    fun showSync() {
+        preset = null; syncOnly = true
         openFresh()
     }
 
     private fun openFresh() {
         closeNow(false)
+        syncView = syncOnly
         statusMode = false
         live = null
         Peers.clear()                         // önceki taramadan kalan (kapanmış olabilecek) cihazlar atılır
@@ -159,23 +173,15 @@ class SendPopup(
             setPadding(dp(6), dp(8), dp(6), dp(6))
             background = GradientDrawable().apply { setColor(0xFF2A2A2A.toInt()); cornerRadius = dp(14).toFloat() }
         }
-        if (!statusMode) {
-            val hdr = LinearLayout(act).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        if (!statusMode && syncView) {
+            // Eşitleme yalnızca Notlarım'daki eşitle simgesinden ([showSync]) açılır; paylaşım pencerelerinde eşitle simgesi yoktur
             val title = TextView(act).apply {
                 setTextColor(Color.WHITE); setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-                setPadding(dp(12), 0, 0, 0)
-                text = if (syncView) L("Nasıl eşitlensin?", "How to sync?") else ""
+                setPadding(dp(12), dp(8), 0, dp(4))
+                text = L("Nasıl eşitlensin?", "How to sync?")
             }
             hdrTitle = title
-            hdr.addView(title, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            val ic = ImageView(act).apply {
-                setImageResource(R.drawable.ic_sync); setColorFilter(Color.WHITE)
-                contentDescription = L("Cihazlarla eşitle", "Sync with devices")
-                setPadding(dp(8), dp(8), dp(8), dp(8)); selectable(this)
-                setOnClickListener { toggleSync() }
-            }
-            hdr.addView(ic, LinearLayout.LayoutParams(dp(40), dp(40)))
-            box.addView(hdr, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            box.addView(title, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         } else hdrTitle = null
         val lst = LinearLayout(act).apply { orientation = LinearLayout.VERTICAL }
         list = lst
@@ -224,15 +230,6 @@ class SendPopup(
         if (!p.isShowing) return
         if (center) p.update(0, 0, dp(240), ViewGroup.LayoutParams.WRAP_CONTENT)
         else p.update(anchor(), 0, dp(6), dp(240), ViewGroup.LayoutParams.WRAP_CONTENT)
-    }
-
-    private fun toggleSync() {
-        if (syncRunning || statusMode) return
-        syncView = !syncView
-        picked.clear()
-        hdrTitle?.text = if (syncView) L("Nasıl eşitlensin?", "How to sync?") else ""
-        shownKey = ""
-        refreshList()
     }
 
     /** Eşitleme görünümü: cihaz kutucukları + üç yöntem düğmesi (Notlarım'daki eski eşitleme penceresiyle aynı). */

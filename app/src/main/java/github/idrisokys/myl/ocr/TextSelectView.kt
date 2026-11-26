@@ -141,8 +141,8 @@ class TextSelectView(ctx: Context) : View(ctx) {
     private fun changed() {
         invalidate()
         onSelState?.invoke(ss >= 0)
-        if (drag != 0) mode?.hide(ActionMode.DEFAULT_HIDE_DURATION)
-        else if (ss >= 0) { ensureMode(); mode?.invalidateContentRect(); mode?.hide(0) }
+        if (drag != 0) mode?.hide(ActionMode.DEFAULT_HIDE_DURATION.toLong())
+        else if (ss >= 0) { ensureMode(); mode?.invalidateContentRect(); mode?.hide(0L) }
     }
 
     // ---------- konum bulma ----------
@@ -304,7 +304,7 @@ class TextSelectView(ctx: Context) : View(ctx) {
                     else if (near(ev.x, ev.y, ex + hs / 2, ey + hs / 2)) { drag = 2; offX = ev.x - ex; offY = ev.y - (vTop(le) + vBot(le)) / 2 }
                     if (drag != 0) {
                         parent?.requestDisallowInterceptTouchEvent(true)
-                        mode?.hide(ActionMode.DEFAULT_HIDE_DURATION)
+                        mode?.hide(ActionMode.DEFAULT_HIDE_DURATION.toLong())
                         return true
                     }
                 }

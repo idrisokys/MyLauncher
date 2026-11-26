@@ -1,4 +1,4 @@
-
+appops set github.idrisokys.myl PROJECT_MEDIA allow
 
 ## Rust yerel kütüphanesi
 

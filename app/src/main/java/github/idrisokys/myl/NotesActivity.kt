@@ -407,15 +407,14 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
                         Icon(Icons.Default.Save, L("Kaydet", "Save"),
                             tint = if (renameText.isNotBlank()) MaterialTheme.colorScheme.primary else LocalContentColor.current.copy(alpha = 0.38f))
                     }
-                    MoveButtons(canUp, canDown) { moveSelected(it) }
                 }
             }
         } else if (editMode && selected.size > 1) Surface(color = NotesBar, tonalElevation = 0.dp) {
             Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(L("${selected.size} seçili", "${selected.size} selected"), style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(start = 8.dp))
                 EditModeButton(editMode) { editMode = false; selected = emptySet() }
+                IconButton({ refreshAll() }) { Icon(Icons.Default.Refresh, L("Yenile", "Refresh")) }
                 Spacer(Modifier.weight(1f))
-                MoveButtons(canUp, canDown) { moveSelected(it) }
             }
         } else Surface(color = NotesBar, tonalElevation = 0.dp) {
             Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 8.dp, vertical = 6.dp)) {
@@ -425,36 +424,15 @@ fun NotesApp(resume: Int = 0, extQuery: String? = null, onExtQueryConsumed: () -
                     minLines = 2, maxLines = 8, send = true, onSend = { submit() })
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     EditModeButton(editMode) { editMode = !editMode; selected = emptySet() }
+                    IconButton({ refreshAll() }) { Icon(Icons.Default.Refresh, L("Yenile", "Refresh")) }
+                    if (editMode && selected.isNotEmpty()) Text(L("${selected.size} seçili", "${selected.size} selected"), style = MaterialTheme.typography.labelSmall, maxLines = 1, modifier = Modifier.padding(start = 4.dp))
                     Spacer(Modifier.weight(1f))
-                    IconButton({ startSearch() }, enabled = linkText.isNotBlank()) { Icon(Icons.Default.Search, L("Ara", "Search")) }
-                    IconButton({ linkText = "" }, enabled = linkText.isNotEmpty()) { Icon(Icons.Default.Clear, L("Temizle", "Clear")) }
                     IconButton({ clipboard.getText()?.text?.let { linkText = it } }) { Icon(Icons.Default.ContentPaste, L("Yapıştır", "Paste")) }
+                    IconButton({ linkText = "" }, enabled = linkText.isNotEmpty()) { Icon(Icons.Default.Clear, L("Temizle", "Clear")) }
+                    IconButton({ startSearch() }, enabled = linkText.isNotBlank()) { Icon(Icons.Default.Search, L("Ara", "Search")) }
                 }
             }
         }
-    }, topBar = {
-        if (searchQuery != null) TopAppBar(
-            colors = TopAppBarDefaults.topAppBarColors(containerColor = NotesBar, scrolledContainerColor = NotesBar),
-            title = {
-                Text("“$searchQuery”" + (hits?.let { " · ${it.size} " + L("sonuç", "results") } ?: ""), maxLines = 1, overflow = TextOverflow.Ellipsis)
-            },
-            navigationIcon = { IconButton({ exitSearch(true) }) { Icon(Icons.Default.ArrowBack, L("Aramadan çık", "Exit search")) } })
-        else TopAppBar(
-            colors = TopAppBarDefaults.topAppBarColors(containerColor = NotesBar, scrolledContainerColor = NotesBar),
-            // Tüm simgeler solda, geri okunun hemen yanında; başlık metni yok (yalnızca seçili sayısı gösterilir)
-            title = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton({ dialog = "folder" }) { Icon(Icons.Default.CreateNewFolder, L("Klasör", "Folder")) }
-                    IconButton({ refreshAll() }) { Icon(Icons.Default.Refresh, L("Yenile", "Refresh")) }
-                    // Çöp: seçilenleri hızlıca .onemsiz klasörüne taşır
-                    IconButton({
-                        val items = list.filter { it.key in selected }
-                        if (items.isEmpty()) toast(L("Önce öğe seçin", "Select items first")) else deleteNow(items)
-                    }) { Icon(Icons.Default.Delete, L("Seçilenleri .onemsiz klasörüne taşı", "Move selected to .onemsiz")) }
-                    if (editMode && selected.isNotEmpty()) Text(L("${selected.size} seçili", "${selected.size} selected"), style = MaterialTheme.typography.titleSmall, maxLines = 1, modifier = Modifier.padding(start = 4.dp))
-                }
-            },
-            navigationIcon = { if (stack.isNotEmpty()) IconButton({ stack = stack.dropLast(1) }) { Icon(Icons.Default.ArrowBack, L("Geri", "Back")) } })
     }) { pad ->
         if (searchQuery != null) SearchResults(pad, hits, { open(it) }) { path ->
             exitSearch(true); stack = path

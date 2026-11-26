@@ -1,6 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Hızlı Paylaş (kapalı): birbirine geçen iki yuvarlak uçlu şerit -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="24dp" android:height="24dp" android:viewportWidth="50" android:viewportHeight="50">
-    <group android:translateX="-29" android:translateY="-29">
-        <path android:fillColor="#FFFFFFFF" android:pathData="M40.52,29.58 L51.52,42.78 L44.38,42.78 L44.38,74.68 L36.67,74.68 L36.67,42.78 L29.52,42.78 z M67.36,78.42 L78.47,65.22 L71.22,65.22 L71.22,33.32 L63.52,33.32 L63.52,65.22 L56.37,65.22 z" />
-    </group>
+    android:width="24dp" android:height="24dp"
+    android:viewportWidth="24" android:viewportHeight="24">
+    <path android:strokeColor="#FFFFFFFF" android:strokeWidth="2.5" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M4.5,15.5 C6.7,11.8 9.5,9.3 13,9.3 C15,9.3 16.6,10 17.8,11.6 L19.6,14" />
+    <path android:strokeColor="#FFFFFFFF" android:strokeWidth="2.5" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M19.5,8.5 C17.3,12.2 14.5,14.7 11,14.7 C9,14.7 7.4,14 6.2,12.4 L4.4,10" />
 </vector>

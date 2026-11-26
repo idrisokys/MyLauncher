@@ -65,7 +65,8 @@ class SendPopup(
     private var syncView = false                 // true: cihaz listesi yerine eşitleme seçenekleri
     private var syncRunning = false
     private val picked = HashSet<String>()       // eşitlenmek üzere işaretlenen cihazlar
-    private var syncDownload = false            // eşitlenecek klasör: false = Link, true = Download (eşitleme görünümünün en üstünden seçilir)
+    private var toLink = false                   // gönderim/eşitleme klasörü: false = Download (varsayılan), true = Link; sol baştaki dolu daire seçili olanı gösterir
+    private val syncDownload get() = !toLink
 
     private var live: List<Peer>? = null         // null = tarama sürüyor; liste = doğrulanmış açık cihazlar
     private var scanGen = 0                      // eski taramanın sonucu yenisini ezmesin
@@ -228,7 +229,7 @@ class SendPopup(
     private fun toggleSync() {
         if (syncRunning || statusMode) return
         syncView = !syncView
-        picked.clear(); syncDownload = false
+        picked.clear()
         hdrTitle?.text = if (syncView) L("Nasıl eşitlensin?", "How to sync?") else ""
         shownKey = ""
         refreshList()
@@ -246,17 +247,8 @@ class SendPopup(
             }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(40)))
             resize(); return
         }
-        // En başta eşitlenecek klasör: Link ya da Download
-        val sel = LinearLayout(act).apply { orientation = LinearLayout.HORIZONTAL; setPadding(dp(8), 0, dp(8), dp(4)) }
-        fun chip(label: String, dl: Boolean) = TextView(act).apply {
-            text = label; setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f); gravity = Gravity.CENTER
-            setTextColor(if (syncDownload == dl) Color.BLACK else Color.WHITE)
-            background = GradientDrawable().apply { cornerRadius = dp(10).toFloat(); setColor(if (syncDownload == dl) Color.WHITE else 0x33FFFFFF) }
-            setOnClickListener { if (syncDownload != dl) { syncDownload = dl; renderSync(lst) } }
-        }
-        sel.addView(chip("Link", false), LinearLayout.LayoutParams(0, dp(36), 1f).apply { marginEnd = dp(4) })
-        sel.addView(chip("Download", true), LinearLayout.LayoutParams(0, dp(36), 1f).apply { marginStart = dp(4) })
-        lst.addView(sel, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        // En başta eşitlenecek klasör: Download (varsayılan) ya da Link
+        lst.addView(folderRow { renderSync(lst) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         val buttons = ArrayList<TextView>()
         fun upd() { buttons.forEach { it.isEnabled = picked.isNotEmpty(); it.alpha = if (picked.isNotEmpty()) 1f else 0.4f } }
         peers.forEach { p ->
@@ -318,14 +310,39 @@ class SendPopup(
         }
     }
 
+    /** "● Download   ○ Link": soldaki daire dolu olan klasöre gönderilir (varsayılan Download). */
+    private fun folderRow(onChange: () -> Unit): View {
+        val row = LinearLayout(act).apply { orientation = LinearLayout.HORIZONTAL; setPadding(dp(8), 0, dp(8), dp(4)) }
+        fun opt(label: String, link: Boolean): View {
+            val on = toLink == link
+            val o = LinearLayout(act).apply {
+                orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL
+                setPadding(dp(8), 0, dp(8), 0); selectable(this)
+                setOnClickListener { if (toLink != link) { toLink = link; shownKey = ""; onChange() } }
+            }
+            o.addView(View(act).apply {
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    if (on) setColor(Color.WHITE) else { setColor(Color.TRANSPARENT); setStroke(dp(2), Color.WHITE) }
+                }
+            }, LinearLayout.LayoutParams(dp(16), dp(16)).apply { marginEnd = dp(8) })
+            o.addView(TextView(act).apply { text = label; setTextColor(Color.WHITE); setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f) })
+            return o
+        }
+        row.addView(opt("Download", false), LinearLayout.LayoutParams(0, dp(40), 1f))
+        row.addView(opt("Link", true), LinearLayout.LayoutParams(0, dp(40), 1f))
+        return row
+    }
+
     private fun refreshList() {
         val lst = list ?: return
         if (syncView && !statusMode) { renderSync(lst); return }
         val peers = if (statusMode) listOfNotNull(target) else (live ?: emptyList())
-        val key = (if (live == null && !statusMode) "scan|" else "done|") + peers.joinToString("|") { it.id + ":" + it.name }
+        val key = (if (live == null && !statusMode) "scan|" else "done|") + (if (toLink) "L|" else "D|") + peers.joinToString("|") { it.id + ":" + it.name }
         if (key == shownKey && lst.childCount > 0) return
         shownKey = key
         lst.removeAllViews()
+        if (!statusMode) lst.addView(folderRow { refreshList() }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         if (peers.isEmpty()) {
             lst.addView(TextView(act).apply {
                 text = if (live == null && !statusMode) L("Cihazlar aranıyor…", "Searching for devices…")
@@ -408,7 +425,7 @@ class SendPopup(
         line1?.text = L("Gönderiliyor…", "Sending…")
         ReceiverService.sendListener = { st, msg -> h.post { onStatus(st, msg) } }
         try {
-            Sender.submit(act, uris, p.id)
+            Sender.submit(act, uris, p.id, toLink)
         } catch (e: Exception) {
             onStatus(2, L("Gönderilemedi", "Could not send"))
         }
@@ -451,7 +468,7 @@ class SendPopup(
         awaitingPick = false
         statusMode = false
         target = null
-        syncView = false; picked.clear(); hdrTitle = null; syncDownload = false
+        syncView = false; picked.clear(); hdrTitle = null; toLink = false
         list = null; line1 = null; line2 = null; live = null
     }
 }

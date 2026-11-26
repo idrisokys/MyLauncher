@@ -533,7 +533,7 @@ object Sender {
      * bildirimde ilerleme çubuğuyla sürer. Dosya okuma izni servise de verilir (ClipData + grant).
      * only verilirse sadece o cihaza, verilmezse bulunan tüm cihazlara sırayla gönderir.
      */
-    fun submit(c: Context, uris: List<Uri>, only: String?) {
+    fun submit(c: Context, uris: List<Uri>, only: String?, link: Boolean = false) {
         if (uris.isEmpty()) return
         val clip = ClipData.newRawUri(null, uris[0])
         for (i in 1 until uris.size) clip.addItem(ClipData.Item(uris[i]))
@@ -543,12 +543,13 @@ object Sender {
             clipData = clip
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             putExtra("only", only)
+            putExtra("link", link)
         }
         c.startForegroundService(i)
     }
 
     /** Servisin arka plan iş parçacığında çalışır. */
-    fun run(c: Context, only: String?, uris: List<Uri>) {
+    fun run(c: Context, only: String?, uris: List<Uri>, link: Boolean = false) {
         val ps = Peers.list().filter { only == null || it.id == only }
         if (ps.isEmpty()) {
             report(2, L("Cihaz bulunamadı", "No device found"))
@@ -564,7 +565,7 @@ object Sender {
             try {
                 tasks.map { (p, u) ->
                     pool.submit {
-                        try { one(c, p, u) }
+                        try { one(c, p, u, link) }
                         catch (e: Exception) {
                             val why = e.message ?: L("bağlantı hatası", "connection error")
                             errs.add(L("Hata: ${p.name}: $why", "Error: ${p.name}: $why"))
@@ -592,7 +593,7 @@ object Sender {
         else Bus.set(if (state == 1) L("Dosya gönderildi", "File sent") else msg)
     }
 
-    private fun one(c: Context, p: Peer, u: Uri) {
+    private fun one(c: Context, p: Peer, u: Uri, link: Boolean) {
         val errOpen = L("Dosya açılamadı", "Could not open file")
         val cr = c.contentResolver
         var name = "file"
@@ -603,6 +604,10 @@ object Sender {
                 if (i >= 0) it.getString(i)?.let { n -> name = n }
             }
         }
+        // Link klasörü yalnızca .url / .txt tutar (not eşitlemesi kuralı): başka dosyalar oraya gönderilemez
+        if (link && !(name.endsWith(".url", true) || name.endsWith(".txt", true)))
+            error(L("Link klasörüne yalnızca .url ve .txt gönderilebilir: $name", "Only .url and .txt files can be sent to Link: $name"))
+        val mtime = if (u.scheme == "file") (u.path?.let { File(it).lastModified() } ?: -1L) else -1L
         val afd = cr.openAssetFileDescriptor(u, "r") ?: error(errOpen)
         var len = afd.length
         if (len < 0) {
@@ -613,7 +618,7 @@ object Sender {
         }
         var spool: File? = null
         // Rust yolu: boyut biliniyor ve veri dosyanın başında başlıyorsa tanıtıcı doğrudan Rust'a verilir (src = null).
-        val viaRust = len >= 0 && afd.startOffset == 0L && Native.ok
+        val viaRust = !link && len >= 0 && afd.startOffset == 0L && Native.ok
         val src: InputStream?
         if (len < 0) {
             // Boyut hiç bilinmiyorsa önce geçici dosyaya al, sonra boyutuyla gönder.
@@ -627,13 +632,13 @@ object Sender {
         } else src = if (viaRust) null else afd.createInputStream()
         try {
             try {
-                xfer(p, name, len, src, afd, errOpen)
+                xfer(p, name, len, src, afd, errOpen, link, mtime)
             } catch (e: ConnectFail) {
                 // Bağlanılamadı: büyük olasılıkla bayat adres/port. Yeniden çözüp bir kez daha dene.
                 val np = reresolve(c, p)
                 if (np != null && (np.port != p.port || np.host != p.host)) {
                     Peers.put(np.svc, np)
-                    try { xfer(np, name, len, src, afd, errOpen) }
+                    try { xfer(np, name, len, src, afd, errOpen, link, mtime) }
                     catch (e2: ConnectFail) {
                         Peers.del(np.svc)
                         throw Exception("${np.host.hostAddress}:${np.port} → ${e2.message}")
@@ -651,11 +656,11 @@ object Sender {
     }
 
     /** [src] null ise (Rust yolu) veri [afd] tanıtıcısından Rust ile gider; Rust yoksa/başarısızsa Kotlin akışına düşer. */
-    private fun xfer(p: Peer, name: String, len: Long, src: InputStream?, afd: AssetFileDescriptor, errOpen: String) {
-        if (src != null) { transfer(p, name, len, src, errOpen); return }
+    private fun xfer(p: Peer, name: String, len: Long, src: InputStream?, afd: AssetFileDescriptor, errOpen: String, link: Boolean = false, mtime: Long = -1L) {
+        if (src != null) { transfer(p, name, len, src, errOpen, link, mtime); return }
         val r = if (rustable(p)) Native.send(hostPort(p), name, afd.parcelFileDescriptor.fd, len) else null
         when (r) {
-            null -> transfer(p, name, len, afd.createInputStream(), errOpen)
+            null -> transfer(p, name, len, afd.createInputStream(), errOpen, link, mtime)
             Native.SEND_OK -> {}
             Native.SEND_CONNECT -> throw ConnectFail(java.io.IOException(L("bağlanılamadı", "could not connect")))
             Native.SEND_SHORT -> throw Exception(errOpen)
@@ -664,7 +669,7 @@ object Sender {
         }
     }
 
-    private fun transfer(p: Peer, name: String, len: Long, ins: InputStream, errOpen: String) {
+    private fun transfer(p: Peer, name: String, len: Long, ins: InputStream, errOpen: String, link: Boolean = false, mtime: Long = -1L) {
         // Tampon, connect'ten ÖNCE ayarlanmalı (TCP pencere ölçekleme)
         val s = Socket().apply { sendBufferSize = SOCK_BUF; tcpNoDelay = true; soTimeout = 30000 }
         s.use {
@@ -672,6 +677,8 @@ object Sender {
             val out = s.outputStream
             out.write(
                 ("POST /u HTTP/1.1\r\nX-Name: ${URLEncoder.encode(name, "UTF-8")}\r\n" +
+                    // Link hedefi: Notlarım eşitleme biçimi (X-Sync) ile <ana dizin>/Link içine yazılır
+                    (if (link) "X-Sync: 1\r\n" + (if (mtime > 0) "X-Mtime: $mtime\r\n" else "") else "") +
                     "Content-Length: $len\r\nConnection: close\r\n\r\n").toByteArray()
             )
             val b = ByteArray(BUF)

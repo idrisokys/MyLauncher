@@ -85,10 +85,11 @@ class ReceiverService : Service() {
             val cd = it.clipData
             val uris = (0 until (cd?.itemCount ?: 0)).mapNotNull { n -> cd?.getItemAt(n)?.uri }
             val only = it.getStringExtra("only")
+            val link = it.getBooleanExtra("link", false)
             if (uris.isNotEmpty()) {
                 pending.incrementAndGet()
                 io.execute {
-                    try { Sender.run(this, only, uris) }
+                    try { Sender.run(this, only, uris, link) }
                     finally {
                         // Hızlı Paylaş kapalıysa (yalnızca gönderim için açılmış servis), gönderim bitince servis de kapanır.
                         if (pending.decrementAndGet() == 0 && !enabled(this)) stopSelf()

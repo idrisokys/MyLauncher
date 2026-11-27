@@ -365,6 +365,15 @@ class MainActivity : Activity() {
             imeOptions = EditorInfo.IME_ACTION_SEND
             setPadding(dp(4), 0, dp(4), 0)
             background = null
+            gravity = Gravity.CENTER   // boşken gün ismi ekranın ortasında; yazmaya başlayınca sola yaslanır
+            addTextChangedListener(object : TextWatcher {
+                override fun beforeTextChanged(c: CharSequence?, a: Int, b: Int, d: Int) {}
+                override fun onTextChanged(c: CharSequence?, a: Int, b: Int, d: Int) {}
+                override fun afterTextChanged(e: Editable?) {
+                    val g = if (e.isNullOrEmpty()) Gravity.CENTER else (Gravity.CENTER_VERTICAL or Gravity.START)
+                    if (gravity != g) gravity = g
+                }
+            })
         }
         // Kamera düğmesi (aramanın solunda): dokun = Galerim, basılı tut = varsayılan kamera
         val camBtn = ImageView(this).apply {

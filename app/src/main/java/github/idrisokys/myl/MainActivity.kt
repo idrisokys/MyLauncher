@@ -373,7 +373,7 @@ class MainActivity : Activity() {
         bar.addView(camBtn, LinearLayout.LayoutParams(dp(46), dp(46)).apply { marginEnd = dp(8) })
         // Hızlı Paylaş düğmesi (kameranın yanında): dokun = aç/kapat. Açıkken simge "ON" olur (renk değişmez).
         qsBtn = ImageView(this).apply {
-            setImageResource(if (ReceiverService.enabled(this@MainActivity)) R.drawable.ic_qs_on else R.drawable.ic_qs_tile)
+            setImageDrawable(DayDrawable(dayNumber(), ReceiverService.enabled(this@MainActivity)))
             contentDescription = "Hızlı Paylaş"
             setPadding(dp(10), dp(10), dp(10), dp(10))
             background = GradientDrawable().apply {
@@ -508,10 +508,38 @@ class MainActivity : Activity() {
 
     /** Arama kutusunda "24 Salı" gibi bugünün gün ve ayın kaçı olduğunu gösterir (yazmaya başlayınca kaybolur). */
     private fun todayHint(): String =
-        SimpleDateFormat("d EEEE", Locale("tr", "TR")).format(Date())
+        SimpleDateFormat("EEEE", Locale("tr", "TR")).format(Date())
+
+    /** Ayın günü (1-31) */
+    private fun dayNumber(): String =
+        SimpleDateFormat("d", Locale("tr", "TR")).format(Date())
+
+    /** Paylaşım simgesinin içine ayın gününü çizer. Açıkken yeşil, kapalıyken beyaz. */
+    private class DayDrawable(private val text: String, private val on: Boolean) : android.graphics.drawable.Drawable() {
+        private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = if (on) 0xFF4CE08A.toInt() else Color.WHITE
+            typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
+            textAlign = Paint.Align.CENTER
+        }
+        override fun draw(c: Canvas) {
+            val b = bounds
+            if (b.isEmpty) return
+            paint.textSize = b.height() * 0.78f
+            val w = paint.measureText(text)
+            val maxW = b.width() * 0.96f
+            if (w > maxW) paint.textSize = paint.textSize * maxW / w
+            val y = b.exactCenterY() - (paint.descent() + paint.ascent()) / 2f
+            c.drawText(text, b.exactCenterX(), y, paint)
+        }
+        override fun setAlpha(a: Int) { paint.alpha = a }
+        override fun setColorFilter(cf: android.graphics.ColorFilter?) { paint.colorFilter = cf }
+        @Suppress("OVERRIDE_DEPRECATION")
+        override fun getOpacity() = android.graphics.PixelFormat.TRANSLUCENT
+    }
 
     private fun updateDateHint() {
         if (::search.isInitialized) search.hint = todayHint()
+        updateQsBtn()
     }
 
     // Gece yarısı gün değişince veya saat/saat dilimi değişince ipucunu yeniler
@@ -552,8 +580,8 @@ class MainActivity : Activity() {
 
     private fun updateQsBtn() {
         if (!::qsBtn.isInitialized) return
-        // Renk hiç değişmez; açıkken simge "ON" olur
-        qsBtn.setImageResource(if (qsOn()) R.drawable.ic_qs_on else R.drawable.ic_qs_tile)
+        // Simgede ayın günü yazar; kapalıyken beyaz, açıkken yeşil
+        qsBtn.setImageDrawable(DayDrawable(dayNumber(), qsOn()))
     }
 
     /** Dokunuş: açıksa kapatır, kapalıysa açar. Önceki işlemin üzerinden QS_COOLDOWN_MS geçmeden yeni işlem yapılmaz. */

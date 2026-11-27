@@ -82,7 +82,7 @@ class SendPopup(
         openFresh()
     }
 
-    /** Paylaş menüsündeki "Myl ile paylaş": başka uygulamadan gelen content:// / file:// adresleri hazır gönderilir. */
+    /** Paylaş menüsündeki "MyL ile paylaş": başka uygulamadan gelen content:// / file:// adresleri hazır gönderilir. */
     fun showForUris(uris: List<Uri>) {
         preset = uris; syncOnly = false
         openFresh()

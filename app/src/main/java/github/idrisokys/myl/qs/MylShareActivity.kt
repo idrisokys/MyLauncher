@@ -10,7 +10,7 @@ import github.idrisokys.myl.L
 import java.io.File
 
 /**
- * Sistemin Paylaş menüsündeki "Myl ile paylaş" simgesi.
+ * Sistemin Paylaş menüsündeki "MyL ile paylaş" simgesi.
  * Paylaşılan dosyalar / metin, Notlarım ve Dosyalarım'daki cihaz seçme penceresiyle ([SendPopup]) aynı pencerede
  * gösterilir; cihaza dokununca içerik Hızlı Paylaş ile o cihaza gönderilir. Arka plan şeffaftır, pencere kapanınca etkinlik de kapanır.
  */

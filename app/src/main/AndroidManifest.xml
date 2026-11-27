@@ -195,12 +195,11 @@
             android:taskAffinity=""
             android:theme="@style/QsDialog">
         </activity>
-        <!-- Paylaş menüsünde "Myl ile paylaş": dosya / metin, cihaz seçme penceresiyle (Notlarım-Dosyalarım'daki ile aynı) seçilen cihaza gönderilir -->
+        <!-- Paylaş menüsünde "MyL ile paylaş": dosya / metin, cihaz seçme penceresiyle (Notlarım-Dosyalarım'daki ile aynı) seçilen cihaza gönderilir -->
         <activity
             android:name=".qs.MylShareActivity"
             android:exported="true"
-            android:label="Myl ile paylaş"
-            android:icon="@mipmap/ic_qs"
+            android:label="MyL ile paylaş"
             android:excludeFromRecents="true"
             android:taskAffinity=""
             android:theme="@style/ShareTheme">

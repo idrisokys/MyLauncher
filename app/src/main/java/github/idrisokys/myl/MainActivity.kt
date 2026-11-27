@@ -345,6 +345,17 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(14), dp(8), dp(14), dp(8))
         }
+        // Tüm düğmeler ve arama kutusu tek parça yarı saydam hap içinde
+        val pill = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(dp(2), dp(2), dp(2), dp(2))
+            background = GradientDrawable().apply {
+                cornerRadius = dp(25).toFloat()
+                setColor(0x66000000)
+            }
+        }
+        bar.addView(pill, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         search = EditText(this).apply {
             setTextColor(Color.WHITE)
             setHintTextColor(0xAAFFFFFF.toInt())
@@ -352,11 +363,8 @@ class MainActivity : Activity() {
             textSize = 20f
             setSingleLine()
             imeOptions = EditorInfo.IME_ACTION_SEND
-            setPadding(dp(16), 0, dp(16), 0)
-            background = GradientDrawable().apply {
-                cornerRadius = dp(25).toFloat()
-                setColor(0x66000000)
-            }
+            setPadding(dp(4), 0, dp(4), 0)
+            background = null
         }
         // Kamera düğmesi (aramanın solunda): dokun = Galerim, basılı tut = varsayılan kamera
         val camBtn = ImageView(this).apply {
@@ -365,12 +373,12 @@ class MainActivity : Activity() {
             setPadding(dp(10), dp(10), dp(10), dp(10))
             background = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
-                setColor(0x66000000)
+                setColor(0)
             }
             setOnClickListener { openGallery() }
             setOnLongClickListener { openCamera(); true }
         }
-        bar.addView(camBtn, LinearLayout.LayoutParams(dp(46), dp(46)).apply { marginEnd = dp(8) })
+        pill.addView(camBtn, LinearLayout.LayoutParams(dp(46), dp(46)).apply { marginEnd = dp(0) })
         // Hızlı Paylaş düğmesi (kameranın yanında): dokun = aç/kapat. Açıkken simge "ON" olur (renk değişmez).
         qsBtn = ImageView(this).apply {
             setImageDrawable(DayDrawable(dayNumber(), ReceiverService.enabled(this@MainActivity)))
@@ -378,20 +386,20 @@ class MainActivity : Activity() {
             setPadding(dp(10), dp(10), dp(10), dp(10))
             background = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
-                setColor(0x66000000)
+                setColor(0)
             }
             setOnClickListener { toggleQuickShare() }   // ilk basış aç, ikinci basış kapat (aralarında bekleme süresi var)
             setOnLongClickListener { openSendPopup(); true }                                          // basılı tut: açık cihazlar penceresi (her basışta yeniden taranır)
         }
-        bar.addView(qsBtn, LinearLayout.LayoutParams(dp(46), dp(46)).apply { marginEnd = dp(8) })
-        bar.addView(search, LinearLayout.LayoutParams(0, dp(50), 1f))
+        pill.addView(qsBtn, LinearLayout.LayoutParams(dp(46), dp(46)).apply { marginEnd = dp(0) })
+        pill.addView(search, LinearLayout.LayoutParams(0, dp(46), 1f))
 
         moveBtn = ImageView(this).apply {
             setImageResource(R.drawable.ic_edit)
             setPadding(dp(10), dp(10), dp(10), dp(10))
             background = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
-                setColor(0x66000000)
+                setColor(0)
             }
             // Dokun: Notlarım açılır (düzenleme modu açıksa önce modu kapatır). Basılı tut: düzenleme modu aç/kapat
             setOnClickListener { if (editMode) setEditMode(false) else openNotes() }
@@ -402,14 +410,14 @@ class MainActivity : Activity() {
             setPadding(dp(10), dp(10), dp(10), dp(10))
             background = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
-                setColor(0x66000000)
+                setColor(0)
             }
             // Dokun: Dosyalarım açılır (düzenleme modunda klasör seçici). Basılı tut: ayarlar menüsü
             setOnClickListener { if (editMode) showFolderPicker() else openFiles() }
             setOnLongClickListener { if (editMode) false else { showSettingsMenu(this); true } }
         }
-        bar.addView(actionBtn, LinearLayout.LayoutParams(dp(46), dp(46)).apply { marginStart = dp(8) })
-        bar.addView(moveBtn, LinearLayout.LayoutParams(dp(46), dp(46)).apply { marginStart = dp(8) })
+        pill.addView(actionBtn, LinearLayout.LayoutParams(dp(46), dp(46)).apply { marginStart = dp(0) })
+        pill.addView(moveBtn, LinearLayout.LayoutParams(dp(46), dp(46)).apply { marginStart = dp(0) })
 
         root.addView(bar, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
 
@@ -1098,7 +1106,7 @@ class MainActivity : Activity() {
         const val MAX_CONTACTS = 2  // kişi ve uygulamalardan en fazla 2 sonuç
         const val MAX_APPS = 2
         const val ACTIVE_RED = 0xCC8B0000.toInt()   // koyu kırmızı: düzenleme modu ve Hızlı Paylaş açıkken
-        const val IDLE_BG = 0x66000000
+        const val IDLE_BG = 0x00000000
         const val QS_COOLDOWN_MS = 2000L   // Hızlı Paylaş açma/kapama arası en az bekleme
         const val WA_PKG = "com.whatsapp"
         const val WA_BIZ_PKG = "com.whatsapp.w4b"

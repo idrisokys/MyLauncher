@@ -174,17 +174,6 @@
                 android:resource="@xml/provider_paths" />
         </provider>
         <!-- Dosyalarım ve Galerim'in ortak dosya sağlayıcısı (paylaşma / açma için) -->
-        <!-- Sistem dosya seçicisinde / Kaydet ekranında "Dosyalarım" olarak görünür (ana bellek) -->
-        <provider
-            android:name=".files.MylDocumentsProvider"
-            android:authorities="${applicationId}.documents"
-            android:exported="true"
-            android:grantUriPermissions="true"
-            android:permission="android.permission.MANAGE_DOCUMENTS">
-            <intent-filter>
-                <action android:name="android.content.action.DOCUMENTS_PROVIDER" />
-            </intent-filter>
-        </provider>
         <provider
             android:name=".common.KFileProvider"
             android:authorities="${applicationId}.fp"

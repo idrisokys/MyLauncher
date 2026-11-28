@@ -669,7 +669,14 @@ open class FilesActivity : Activity() {
             b.addView(tv("Galerim", 15f, 0xFF4FA3F0.toInt()).apply {
                 setPadding(dp(12), dp(8), dp(12), dp(8))
                 setOnClickListener {
-                    val gi = Intent(intent).setClass(this@FilesActivity, GalleryPickActivity::class.java)
+                    // Sistem seçicisinin intent'i FORWARD_RESULT gibi bayraklar taşır (startActivityForResult'ta hata verir): bayraksız yeni intent kur
+                    val gi = Intent(this@FilesActivity, GalleryPickActivity::class.java).apply {
+                        action = intent.action
+                        addCategory(Intent.CATEGORY_OPENABLE)
+                        type = intent.type ?: "*/*"
+                        putExtra(Intent.EXTRA_ALLOW_MULTIPLE, pickMulti)
+                        intent.getStringArrayExtra(Intent.EXTRA_MIME_TYPES)?.let { putExtra(Intent.EXTRA_MIME_TYPES, it) }
+                    }
                     try { startActivityForResult(gi, REQ_GALLERY_PICK) } catch (e: Exception) { Notice.show(this@FilesActivity, "Galerim açılamadı", false) }
                 }
             }, LinearLayout.LayoutParams(-2, -2).apply { marginEnd = dp(8) })

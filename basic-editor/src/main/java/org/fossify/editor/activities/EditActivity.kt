@@ -2,6 +2,7 @@ package org.fossify.editor.activities
 
 import android.content.Context
 import android.content.Intent
+import android.widget.Toast
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.Point
@@ -204,7 +205,7 @@ open class EditActivity : BaseCropActivity() {
             when (menuItem.itemId) {
                 R.id.save_as -> startSaveFlow(overwrite = false)
                 R.id.overwrite_original -> startSaveFlow(overwrite = true)
-                R.id.edit -> editWith()
+                R.id.set_wallpaper -> setAsWallpaper()
                 R.id.share -> shareImage()
                 else -> return@setOnMenuItemClickListener false
             }
@@ -1022,6 +1023,19 @@ open class EditActivity : BaseCropActivity() {
             } finally {
                 try { out?.close() } catch (_: Exception) {}
             }
+        }
+    }
+
+    /** "Arkaplan yap": MyL'nin duvar kağıdı ayarlama (kırpma) ekranını bu resimle açar. */
+    private fun setAsWallpaper() {
+        try {
+            startActivity(
+                Intent().setClassName(packageName, "github.idrisokys.myl.CropWallpaperActivity")
+                    .setData(uri)
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            )
+        } catch (e: Exception) {
+            Toast.makeText(this, "Açılamadı", Toast.LENGTH_SHORT).show()
         }
     }
 

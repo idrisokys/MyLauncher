@@ -12,9 +12,9 @@
         android:title="@string/overwrite_original"
         app:showAsAction="never" />
     <item
-        android:id="@+id/edit"
+        android:id="@+id/set_wallpaper"
         android:icon="@drawable/ic_edit_vector"
-        android:title="@string/edit_with"
+        android:title="@string/set_wallpaper"
         app:showAsAction="never" />
     <item
         android:id="@+id/share"

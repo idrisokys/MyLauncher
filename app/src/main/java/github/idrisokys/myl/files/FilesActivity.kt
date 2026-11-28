@@ -3,6 +3,7 @@ package github.idrisokys.myl.files
 import github.idrisokys.myl.L
 import github.idrisokys.myl.Native
 import github.idrisokys.myl.common.*
+import github.idrisokys.myl.gallery.GalleryPickActivity
 
 import android.app.Activity
 import android.app.AlertDialog
@@ -614,6 +615,13 @@ open class FilesActivity : Activity() {
     // ======================= DOSYA SEÇİCİ (sistem "Şuradan aç" listesinde Dosyalarım olarak görünür) =======================
     private var pickReq = false; private var pickMulti = false; private var pickMime: List<String> = emptyList()
     private var pickCountV: TextView? = null
+    private val REQ_GALLERY_PICK = 7001
+
+    @Suppress("DEPRECATION")
+    override fun onActivityResult(rc: Int, res: Int, data: Intent?) {
+        super.onActivityResult(rc, res, data)
+        if (rc == REQ_GALLERY_PICK && res == RESULT_OK && data != null) { setResult(RESULT_OK, data); finish() }
+    }
 
     private fun handlePick(i: Intent?) {
         if (i == null || (i.action != Intent.ACTION_GET_CONTENT && i.action != Intent.ACTION_OPEN_DOCUMENT)) return
@@ -657,6 +665,14 @@ open class FilesActivity : Activity() {
         val b = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setBackgroundColor(0xFF2A2A2A.toInt()); setPadding(dp(16), 0, dp(12), 0) }
         val t = tv(pickText(), 15f, Color.WHITE); pickCountV = t
         b.addView(t, LinearLayout.LayoutParams(0, -2, 1f))
+        if (pickMime.isEmpty() || pickMime.any { it.startsWith("image/") || it.startsWith("video/") })
+            b.addView(tv("Galerim", 15f, 0xFF4FA3F0.toInt()).apply {
+                setPadding(dp(12), dp(8), dp(12), dp(8))
+                setOnClickListener {
+                    val gi = Intent(intent).setClass(this@FilesActivity, GalleryPickActivity::class.java)
+                    try { startActivityForResult(gi, REQ_GALLERY_PICK) } catch (e: Exception) { Notice.show(this@FilesActivity, "Galerim açılamadı", false) }
+                }
+            }, LinearLayout.LayoutParams(-2, -2).apply { marginEnd = dp(8) })
         if (pickMulti) b.addView(NoticeIcon(this, true).apply { contentDescription = "Seç"; setOnClickListener { finishPick(sel.toList()) } }, LinearLayout.LayoutParams(dp(40), dp(40)).apply { marginEnd = dp(12) })
         b.addView(NoticeIcon(this, false).apply { contentDescription = "İptal"; setOnClickListener { setResult(RESULT_CANCELED); finish() } }, dp(40), dp(40))
         return b

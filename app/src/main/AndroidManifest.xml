@@ -130,27 +130,14 @@
                 <data android:mimeType="*/*" />
             </intent-filter>
         </activity>
+        <!-- Galerim seçicisi: sistem listesi uygulama başına tek satır gösterdiği için listede Dosyalarım görünür;
+             Galerim, Dosyalarım seçicisinin altındaki "Galerim" düğmesinden açılır. -->
         <activity
             android:name=".gallery.GalleryPickActivity"
-            android:exported="true"
+            android:exported="false"
             android:label="Galerim"
             android:theme="@style/DeviceTheme"
-            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|uiMode">
-            <intent-filter>
-                <action android:name="android.intent.action.GET_CONTENT" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.OPENABLE" />
-                <data android:mimeType="image/*" />
-                <data android:mimeType="video/*" />
-            </intent-filter>
-            <intent-filter>
-                <action android:name="android.intent.action.OPEN_DOCUMENT" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.OPENABLE" />
-                <data android:mimeType="image/*" />
-                <data android:mimeType="video/*" />
-            </intent-filter>
-        </activity>
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|uiMode" />
         <!-- Uygulamalar: yüklü uygulamalar listesi. Kendi görevinde çalışır; ana ekranda uygulama olarak görünmez (MyL menüsündeki kısayoldan açılır). -->
         <activity
             android:name=".apps.AppsActivity"
@@ -187,6 +174,17 @@
                 android:resource="@xml/provider_paths" />
         </provider>
         <!-- Dosyalarım ve Galerim'in ortak dosya sağlayıcısı (paylaşma / açma için) -->
+        <!-- Sistem dosya seçicisinde / Kaydet ekranında "Dosyalarım" olarak görünür (ana bellek) -->
+        <provider
+            android:name=".files.MylDocumentsProvider"
+            android:authorities="${applicationId}.documents"
+            android:exported="true"
+            android:grantUriPermissions="true"
+            android:permission="android.permission.MANAGE_DOCUMENTS">
+            <intent-filter>
+                <action android:name="android.content.action.DOCUMENTS_PROVIDER" />
+            </intent-filter>
+        </provider>
         <provider
             android:name=".common.KFileProvider"
             android:authorities="${applicationId}.fp"
@@ -239,7 +237,7 @@
         <activity
             android:name=".qs.MylShareActivity"
             android:exported="true"
-            android:label="MyL ile paylaş"
+            android:label="Paylaş"
             android:excludeFromRecents="true"
             android:taskAffinity=""
             android:theme="@style/ShareTheme">

@@ -1,22 +1,272 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- Needed to read/write images on API <= 32. On newer APIs the host app requests
-         READ_MEDIA_IMAGES (commons handles the prompt via handlePermission). -->
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
-    <uses-permission
-        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
-        android:maxSdkVersion="28" />
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <!-- Hızlı Paylaş: aynı Wi-Fi'deki cihazlarla TCP soketi açmak için INTERNET izni şarttır (MyL başka hiçbir yerde ağ kullanmaz) -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- Metin seç: ekran görüntüsü alma (MediaProjection) ön plan servisi ister; erişilebilirlik izni GEREKMEZ -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <uses-permission android:name="android.permission.CALL_PHONE" />
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+    <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <uses-permission android:name="android.permission.SET_WALLPAPER" />
+    <!-- Tüm dosyalara erişim: Notlarım (Link klasörü), Dosyalarım ve Galerim bu tek izni ortak kullanır (Uygulamalar depolama izni istemez) -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="29" tools:replace="android:maxSdkVersion" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" tools:replace="android:maxSdkVersion" />
 
-    <application>
-        <!-- No intent-filters on purpose: launch it with EditActivity.newIntent(...).
-             To also act as a system image editor, copy the EDIT / CROP filters from
-             the original Gallery manifest into your own app manifest (see README). -->
+    <!-- tools:replace: androidphotofilters (editör filtreleri) kendi manifest'inde allowBackup/label tanımlıyor; uygulamanınkiler geçerli olsun -->
+    <application
+        tools:replace="android:allowBackup,android:label,android:icon,android:roundIcon,android:theme"
+        android:allowBackup="false"
+        android:requestLegacyExternalStorage="true"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher"
+        android:label="MyL"
+        android:theme="@style/AppTheme">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:stateNotNeeded="true"
+            android:windowSoftInputMode="adjustResize">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.HOME" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <!-- Sohbet içinden "Ana ekrana ekle" denince sistem bu filtreyle varsayılan başlatıcıyı çağırır -->
+            <intent-filter>
+                <action android:name="android.content.pm.action.CONFIRM_PIN_SHORTCUT" />
+            </intent-filter>
+            <!-- Uygulamalar / Galerim / Dosyalarım / Notlarım: MyL simgesine basılı tutunca çıkan kısayollar -->
+            <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
+        </activity>
+        <!-- Notlarım (eski adıyla LinkCepte). Artık ana ekranda uygulama olarak görünmez (LAUNCHER girişi yok);
+             edit simgesine dokununca ya da MyL menüsündeki kısayoldan açılır. Kendi görevinde çalışır. -->
+        <activity
+            android:name=".NotesActivity"
+            android:exported="false"
+            android:label="Notlarım"
+            android:theme="@style/NotesTheme"
+            android:launchMode="singleTask"
+            android:taskAffinity="github.idrisokys.myl.notes"
+            android:windowSoftInputMode="adjustResize">
+        </activity>
+        <!-- Paylaş menüsünde "Notlarım": link ve metinler Store.submit ile kaydedilir (arayüzsüz) -->
+        <activity
+            android:name=".ShareActivity"
+            android:exported="true"
+            android:label="Notlarım"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@style/ShareTheme">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+            <!-- Kopyalama balonundaki "Cihaza gönder" (REMOTE_COPY) listesinde de "Notlarım": kopyalanan metin ClipData ile gelir -->
+            <intent-filter>
+                <action android:name="android.intent.action.REMOTE_COPY" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.REMOTE_COPY" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/*" />
+            </intent-filter>
+        </activity>
+        <!-- Paylaş menüsünde "Resmi Editle": resmi Galerim'deki sihirli değneğin açtığı düzenleyicide açar (arayüzsüz) -->
+        <activity
+            android:name=".EditShareActivity"
+            android:exported="true"
+            android:label="Resmi Editle"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@style/ShareTheme">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+            </intent-filter>
+        </activity>
+        <!-- Ayarlar > Duvar kağıdı: görseli ekran oranında kırpıp duvar kağıdı yapar -->
+        <activity
+            android:name=".CropWallpaperActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:theme="@style/BlackTheme" />
+        <!-- Dosyalarım: dosya yöneticisi bölümü. Notlarım gibi kendi görevinde çalışır; ana ekranda uygulama olarak görünmez (MyL menüsündeki kısayoldan açılır).
+             Paylaş menüsünde artık görünmez. -->
+        <activity
+            android:name=".files.FilesActivity"
+            android:exported="true"
+            android:label="Dosyalarım"
+            android:theme="@style/DeviceTheme"
+            android:launchMode="singleTask"
+            android:taskAffinity="github.idrisokys.myl.files">
+        </activity>
+        <!-- Sistem dosya seçicisinde ("Şuradan aç:") Dosyalarım ve Galerim'in görünmesi için: seçim sonucunu geri döndüren ayrı (standart) görevler -->
+        <activity
+            android:name=".files.FilesPickActivity"
+            android:exported="true"
+            android:label="Dosyalarım"
+            android:theme="@style/DeviceTheme">
+            <intent-filter>
+                <action android:name="android.intent.action.GET_CONTENT" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.OPENABLE" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.OPEN_DOCUMENT" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.OPENABLE" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+        </activity>
+        <!-- Galerim seçicisi: sistem listesi uygulama başına tek satır gösterdiği için listede Dosyalarım görünür;
+             Galerim, Dosyalarım seçicisinin altındaki "Galerim" düğmesinden açılır. -->
+        <activity
+            android:name=".gallery.GalleryPickActivity"
+            android:exported="false"
+            android:label="Galerim"
+            android:theme="@style/DeviceTheme"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|uiMode" />
+        <!-- Uygulamalar: yüklü uygulamalar listesi. Kendi görevinde çalışır; ana ekranda uygulama olarak görünmez (MyL menüsündeki kısayoldan açılır). -->
+        <activity
+            android:name=".apps.AppsActivity"
+            android:exported="false"
+            android:label="Uygulamalar"
+            android:theme="@style/DeviceTheme"
+            android:launchMode="singleTask"
+            android:taskAffinity="github.idrisokys.myl.apps">
+        </activity>
+        <!-- Galerim: resim/video galerisi bölümü (seçim modu, toplu silme, klasöre taşıma). Kendi görevinde çalışır. -->
+        <activity
+            android:name=".gallery.GalleryActivity"
+            android:exported="false"
+            android:label="Galerim"
+            android:theme="@style/DeviceTheme"
+            android:launchMode="singleTask"
+            android:taskAffinity="github.idrisokys.myl.gallery"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|uiMode">
+        </activity>
+        <!-- Galerim'deki sihirli değnekle açılan temel resim düzenleyicisi (basic-editor modülü).
+             Aynı görevde (Galerim'in üstünde) açılır; geri okuyla Galerim'e dönülür. -->
         <activity
             android:name="org.fossify.editor.activities.EditActivity"
-            android:configChanges="orientation"
             android:exported="false"
-            android:label="@string/basic_editor" />
+            android:theme="@style/EditorTheme" />
+        <!-- Düzenleyicinin Paylaş düğmesi için (commons: <applicationId>.provider) -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.provider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/provider_paths" />
+        </provider>
+        <!-- Dosyalarım ve Galerim'in ortak dosya sağlayıcısı (paylaşma / açma için) -->
+        <provider
+            android:name=".common.KFileProvider"
+            android:authorities="${applicationId}.fp"
+            android:exported="false"
+            android:grantUriPermissions="true" />
+
+        <!-- ===== Metin seç: ekranı okuyup metni seçilebilir yapar (erişilebilirlik izni yok; ekran yakalama onayı + cihaz içi OCR) ===== -->
+        <activity
+            android:name=".ocr.TextGrabActivity"
+            android:exported="false"
+            android:label="Metin seç"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@style/QsPerm" />
+        <activity
+            android:name=".ocr.TextSelectActivity"
+            android:exported="false"
+            android:label="Metin seç"
+            android:excludeFromRecents="true"
+            android:taskAffinity="github.idrisokys.myl.ocr"
+            android:theme="@style/BlackTheme" />
+        <service
+            android:name=".ocr.CaptureService"
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection" />
+        <!-- Hızlı Ayarlar kutucuğu: düzenleme listesinden "Metin seç"i ekle -->
+        <service
+            android:name=".ocr.GrabTileService"
+            android:exported="true"
+            android:label="Metin seç"
+            android:icon="@drawable/ic_text_select"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
+        <!-- ===== Hızlı Paylaş (eski QuickShare) — arayüzsüz: ana ekrandaki düğme + Paylaş menüsü ===== -->
+        <!-- Paylaş menüsünden kaldırıldı (intent-filter yok); Hızlı Paylaş yalnızca ana ekrandaki düğmeyle kullanılır -->
+        <activity
+            android:name=".qs.QsShareActivity"
+            android:exported="false"
+            android:label="Hızlı Paylaş"
+            android:icon="@mipmap/ic_qs"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@style/QsDialog">
+        </activity>
+        <!-- Paylaş menüsünde "MyL ile paylaş": dosya / metin, cihaz seçme penceresiyle (Notlarım-Dosyalarım'daki ile aynı) seçilen cihaza gönderilir -->
+        <activity
+            android:name=".qs.MylShareActivity"
+            android:exported="true"
+            android:label="Paylaş"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@style/ShareTheme">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+        </activity>
+        <!-- Hızlı Paylaş düğmesine ilk dokunuşta izin eksikse açılan arayüzsüz izin etkinliği -->
+        <activity
+            android:name=".qs.QsPermActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@style/QsPerm" />
+        <service
+            android:name=".qs.ReceiverService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
+        <receiver android:name=".qs.BootReceiver" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>

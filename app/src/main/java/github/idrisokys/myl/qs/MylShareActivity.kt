@@ -1,5 +1,6 @@
 package github.idrisokys.myl.qs
 
+import github.idrisokys.myl.common.Notice
 import android.app.Activity
 import android.content.Intent
 import android.net.Uri
@@ -22,8 +23,8 @@ class MylShareActivity : Activity() {
         Identity.init(this)
         val uris = collect()
         if (uris.isEmpty()) {
-            Toast.makeText(this, L("Paylaşılacak bir şey bulunamadı", "Nothing to share"), Toast.LENGTH_SHORT).show()
-            finish(); return
+            Notice.showThenFinish(this, L("Paylaşılacak bir şey bulunamadı", "Nothing to share"), false)
+            return
         }
         // Gönderim için "Tüm dosyalara erişim" gerekmez (içerik doğrudan okunur); alıcı servisi açık değilse
         // SendPopup kendi cihaz aramasını yapar.

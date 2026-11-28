@@ -1,5 +1,6 @@
 package github.idrisokys.myl.qs
 
+import github.idrisokys.myl.common.Notice
 import android.app.Activity
 import android.content.Intent
 import android.net.Uri
@@ -57,8 +58,8 @@ class QsShareActivity : Activity() {
     }
 
     private fun send() {
-        if (peers().isEmpty()) Toast.makeText(this, L("Cihaz bulunamadı", "No device found"), Toast.LENGTH_LONG).show()
-        else Sender.submit(this, uris, null)
+        if (peers().isEmpty()) { Notice.showThenFinish(this, L("Cihaz bulunamadı", "No device found"), true); return }
+        Sender.submit(this, uris, null)
         finish()
     }
 

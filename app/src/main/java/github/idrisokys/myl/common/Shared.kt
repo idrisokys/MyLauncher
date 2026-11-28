@@ -19,6 +19,10 @@ import android.view.Gravity
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.TextView
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Path
+import android.view.View
 import android.widget.Toast
 import java.io.File
 
@@ -75,13 +79,14 @@ fun Activity.promptText(title: String, init: String, ok: (String) -> Unit) {
 }
 
 /**
- * Tüm bildirim mesajları (eski Toast yerine): arka planı ŞEFFAF, sadece okunur kalması için gölgeli beyaz yazı.
- * Ekranın altında, açık olan bölümün (Activity) üstünde belirir ve kendiliğinden kaybolur.
+ * Tüm bildirimler (eski Toast yerine): yazı yok, sadece simge. Tamamlanan işlemde YEŞİL onay, hata/sorunda KIRMIZI çarpı.
+ * Simge ana ekrandaki simgelerle aynı boyutta (56dp); ekranın altında, açık olan bölümün (Activity) üstünde belirir
+ * ve kendiliğinden kaybolur. Devam eden işlem mesajları ("Taşınıyor…") simge göstermez.
  * Sistem Toast'ının arka planı değiştirilemediği için (Android 11+) kendi katmanımızı çiziyoruz.
  */
 object Notice {
     private val handler = Handler(Looper.getMainLooper())
-    private var shown: TextView? = null
+    private var shown: View? = null
     private var remove: Runnable? = null
 
     private fun activityOf(c: Context): Activity? {
@@ -94,6 +99,8 @@ object Notice {
     fun duration(long: Boolean) = if (long) 3500L else 2000L
 
     fun show(c: Context, msg: CharSequence, long: Boolean = false) {
+        val t = msg.toString().trimEnd()
+        if (t.endsWith("…") || t.endsWith("...")) return   // sürüyor: sonunda yeşil/kırmızı simge çıkacak
         val a = activityOf(c)
         val host = a?.takeIf { !it.isFinishing && !it.isDestroyed }?.findViewById<ViewGroup>(android.R.id.content)
         if (host == null) { // ekran yoksa son çare sistem Toast'ı
@@ -102,22 +109,29 @@ object Notice {
         val act: Activity = a!!
         val d = c.resources.displayMetrics.density
         clear()
-        val tv = TextView(act).apply {
-            text = msg; textSize = 17f; setTextColor(Color.WHITE); gravity = Gravity.CENTER
-            typeface = Fonts.bold(context)
-            setShadowLayer(8f * d, 0f, 1f * d, Color.BLACK)   // şeffaf zeminde her arka planda okunsun
-            setBackgroundColor(Color.TRANSPARENT)
-            setPadding((24 * d).toInt(), (8 * d).toInt(), (24 * d).toInt(), (8 * d).toInt())
-            maxWidth = (c.resources.displayMetrics.widthPixels * 0.92f).toInt()
+        val tv = NoticeIcon(act, !isError(msg.toString())).apply {
+            contentDescription = msg      // ekranda görünmez, erişilebilirlik için
             isClickable = false; isFocusable = false
             translationZ = 100f * d
         }
-        host.addView(tv, FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply { bottomMargin = (96 * d).toInt() })
+        host.addView(tv, FrameLayout.LayoutParams((56 * d).toInt(), (56 * d).toInt(), Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply { bottomMargin = (96 * d).toInt() })
         tv.bringToFront()
         shown = tv
         val r = Runnable { tv.animate().alpha(0f).setDuration(250).withEndAction { (tv.parent as? ViewGroup)?.removeView(tv); if (shown === tv) shown = null }.start() }
         remove = r
         handler.postDelayed(r, duration(long))
+    }
+
+    /** Mesaj bir hata / sorun / uyarı mı? (kırmızı) Değilse işlem tamamlanmıştır (yeşil). */
+    private fun isError(msg: String): Boolean {
+        val m = msg.lowercase(java.util.Locale("tr", "TR"))
+        val bad = listOf(
+            "emedi", "amadı", "emiyor", "amıyor", "emez", "amaz",          // -lamadı, -lemedi, -lanamaz ...
+            "bulunamad", "yok", "zaten", "izni", "izin ", "geçersiz", "hata", "başarısız",
+            "bekleyin", "girin", "seç", "içeremez", "gerekli",
+            "could not", "cannot", "can't", "not found", "no device", "nothing", "failed", "error", "too small", "invalid", "select", "first", "wait"
+        )
+        return bad.any { m.contains(it) }
     }
 
     private fun clear() {
@@ -130,5 +144,29 @@ object Notice {
     fun showThenFinish(a: Activity, msg: CharSequence, long: Boolean = false) {
         show(a, msg, long)
         Handler(Looper.getMainLooper()).postDelayed({ if (!a.isFinishing) a.finish() }, duration(long) + 150)
+    }
+}
+
+
+/** Bildirim simgesi: yeşil daire içinde beyaz onay işareti ya da kırmızı daire içinde beyaz çarpı. */
+class NoticeIcon(ctx: Context, private val ok: Boolean) : View(ctx) {
+    private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = if (ok) 0xFF5AB316.toInt() else 0xFFEE1010.toInt() }
+    private val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.WHITE; style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND
+    }
+    override fun onDraw(c: Canvas) {
+        val w = width.toFloat(); val h = height.toFloat()
+        val r = minOf(w, h) / 2f
+        c.drawCircle(w / 2f, h / 2f, r, fill)
+        stroke.strokeWidth = r * 0.26f
+        if (ok) {
+            val p = Path()
+            p.moveTo(w * 0.28f, h * 0.52f); p.lineTo(w * 0.43f, h * 0.66f); p.lineTo(w * 0.73f, h * 0.35f)
+            c.drawPath(p, stroke)
+        } else {
+            c.drawLine(w * 0.34f, h * 0.34f, w * 0.66f, h * 0.66f, stroke)
+            c.drawLine(w * 0.66f, h * 0.34f, w * 0.34f, h * 0.66f, stroke)
+        }
     }
 }

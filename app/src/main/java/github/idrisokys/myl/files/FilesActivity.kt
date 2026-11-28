@@ -7,6 +7,7 @@ import github.idrisokys.myl.common.*
 import android.app.Activity
 import android.app.AlertDialog
 import android.content.ActivityNotFoundException
+import android.content.ClipData
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
@@ -31,7 +32,7 @@ import java.util.zip.ZipInputStream
 import java.text.SimpleDateFormat
 import java.util.*
 
-class FilesActivity : Activity() {
+open class FilesActivity : Activity() {
     companion object { const val EXTRA_PATH = "github.idrisokys.myl.files.PATH" }
 
     private val PINNED_RED = 0xFFB71C1C.toInt()   // sabitlenmiş öğenin üç noktası
@@ -103,6 +104,7 @@ class FilesActivity : Activity() {
         }
         setContentView(root); home()
         if (s == null && (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) == 0) handleShare(intent)
+        if (s == null) handlePick(intent)
         if (s == null) openRequestedPath(intent)
     }
 
@@ -110,6 +112,7 @@ class FilesActivity : Activity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleShare(intent)
+        handlePick(intent)
         openRequestedPath(intent)
     }
 
@@ -219,7 +222,7 @@ class FilesActivity : Activity() {
         refresh()
     }
 
-    private fun browse(d: File) { cur = d; list = null; sel.clear(); editMode = false; refresh() }
+    private fun browse(d: File) { cur = d; list = null; if (!(pickReq && pickMulti)) sel.clear(); editMode = false; refresh() }
 
     /** Açık klasörün Rust'tan gelen meta verisi (boyut/tarih/alt öğe sayısı); arama listelerinde null. */
     private var metaMap: Map<String, Native.Meta>? = null
@@ -265,6 +268,7 @@ class FilesActivity : Activity() {
         val ad = curAdapter
         if (ad == null || curLv?.isAttachedToWindow != true) { refresh(true); return }
         updateChrome()
+        pickCountV?.text = pickText()
         ad.notifyDataSetChanged()
     }
 
@@ -315,7 +319,7 @@ class FilesActivity : Activity() {
                 info.addView(tv(dateTexts[p], 14f, 0xFF999999.toInt()))
                 c.addView(info, LinearLayout.LayoutParams(-1, -2))
                 row.addView(c, LinearLayout.LayoutParams(0, -2, 1f))
-                if (pendingShare == null && !picking) {
+                if (pendingShare == null && !picking && !pickReq) {
                     // Üç nokta: tek dokunuş menü (Sabitle / Taşı / Paylaş / Sil / Yeni klasör); seçim modu sağ üstteki düğmeden açılır
                     row.addView(ImageView(this@FilesActivity).apply {
                         // Sabitlenmiş öğe: üç nokta koyu kırmızı
@@ -328,9 +332,9 @@ class FilesActivity : Activity() {
             }
         }
         curAdapter = lv.adapter as? BaseAdapter
-        lv.setOnItemClickListener { _, _, p, _ -> val f = l[p]; if (editMode) Unit else if (f.isDirectory) browse(f) else openAny(f) }
+        lv.setOnItemClickListener { _, _, p, _ -> val f = l[p]; if (editMode) Unit else if (f.isDirectory) browse(f) else if (pickReq) pickTap(f) else openAny(f) }
         lv.setOnItemLongClickListener { _, v, p, _ ->
-            if (pendingShare != null) return@setOnItemLongClickListener true
+            if (pendingShare != null || pickReq) return@setOnItemLongClickListener true
             val f = l[p]
             // seçim modunda satırın kendisi etkisiz (seçme sadece kutucuktan); aksi halde basılı tutunca ad değiştir
             if (!editMode) renameItem(f)
@@ -339,6 +343,7 @@ class FilesActivity : Activity() {
         val wrap = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         wrap.addView(lv, LinearLayout.LayoutParams(-1, 0, 1f))
         if (pendingShare != null) wrap.addView(saveBar(), -1, dp(52))
+        else if (pickReq) wrap.addView(pickBar(), -1, dp(52))
         else if (clip.isNotEmpty() && cur != null && list == null && !editMode) wrap.addView(pasteBar(), -1, dp(52))
         if (keepScroll && (sPos > 0 || sTop != 0)) lv.setSelectionFromTop(minOf(sPos, maxOf(0, l.size - 1)), sTop)
         curLv = lv
@@ -604,6 +609,57 @@ class FilesActivity : Activity() {
             }
             runOnUiThread { refresh() }
         }.start()
+    }
+
+    // ======================= DOSYA SEÇİCİ (sistem "Şuradan aç" listesinde Dosyalarım olarak görünür) =======================
+    private var pickReq = false; private var pickMulti = false; private var pickMime: List<String> = emptyList()
+    private var pickCountV: TextView? = null
+
+    private fun handlePick(i: Intent?) {
+        if (i == null || (i.action != Intent.ACTION_GET_CONTENT && i.action != Intent.ACTION_OPEN_DOCUMENT)) return
+        pickReq = true; pickMulti = i.getBooleanExtra(Intent.EXTRA_ALLOW_MULTIPLE, false)
+        val m = ArrayList<String>()
+        i.getStringArrayExtra(Intent.EXTRA_MIME_TYPES)?.let { m.addAll(it) }
+        i.type?.let { if (m.isEmpty()) m.add(it) }
+        pickMime = m.filter { it != "*/*" }
+        list = null; sel.clear(); editMode = false
+        val last = File(prefs.getString("lastPick", null) ?: "")
+        browse(if (last.isDirectory) last else root)
+    }
+
+    private fun pickAllowed(f: File): Boolean {
+        if (pickMime.isEmpty()) return true
+        val t = MimeTypeMap.getSingleton().getMimeTypeFromExtension(f.extension.lowercase()) ?: "application/octet-stream"
+        return pickMime.any { p -> if (p.endsWith("/*")) t.startsWith(p.dropLast(1)) else t == p }
+    }
+
+    private fun pickText() = if (pickMulti) "Seç (${sel.size})" else "Bir dosya seçin"
+
+    private fun pickTap(f: File) {
+        if (!pickAllowed(f)) { Notice.show(this, "Bu dosya türü seçilemez", false); return }
+        if (pickMulti) toggle(f) else finishPick(listOf(f))
+    }
+
+    private fun finishPick(files: List<File>) {
+        val ok = files.filter { it.isFile }
+        if (ok.isEmpty()) { Notice.show(this, "Önce bir dosya seçin", false); return }
+        val uris = ok.map { uri(it) }
+        val r = Intent().setData(uris[0]).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        val cd = ClipData.newUri(contentResolver, "dosya", uris[0])
+        for (k in 1 until uris.size) cd.addItem(ClipData.Item(uris[k]))
+        r.clipData = cd
+        ok.first().parentFile?.let { prefs.edit().putString("lastPick", it.path).apply() }
+        setResult(RESULT_OK, r); finish()
+    }
+
+    /** Seçici çubuğu: yeşil onay = seçilenleri gönder, kırmızı çarpı = vazgeç. */
+    private fun pickBar(): View {
+        val b = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setBackgroundColor(0xFF2A2A2A.toInt()); setPadding(dp(16), 0, dp(12), 0) }
+        val t = tv(pickText(), 15f, Color.WHITE); pickCountV = t
+        b.addView(t, LinearLayout.LayoutParams(0, -2, 1f))
+        if (pickMulti) b.addView(NoticeIcon(this, true).apply { contentDescription = "Seç"; setOnClickListener { finishPick(sel.toList()) } }, LinearLayout.LayoutParams(dp(40), dp(40)).apply { marginEnd = dp(12) })
+        b.addView(NoticeIcon(this, false).apply { contentDescription = "İptal"; setOnClickListener { setResult(RESULT_CANCELED); finish() } }, dp(40), dp(40))
+        return b
     }
 
     // ======================= PAYLAŞIMLA GELEN DOSYALARI KAYDET =======================

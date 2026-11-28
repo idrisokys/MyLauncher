@@ -1,5 +1,6 @@
 package github.idrisokys.myl.ocr
 
+import github.idrisokys.myl.common.Notice
 import android.app.Activity
 import android.content.Intent
 import android.graphics.Bitmap
@@ -34,10 +35,10 @@ class TextGrabActivity : Activity() {
     }
 
     private fun handle(bmp: Bitmap?) {
-        if (bmp == null) { toast(L("Ekran alınamadı", "Could not capture the screen")); finish(); return }
+        if (bmp == null) { Notice.showThenFinish(this, L("Ekran alınamadı", "Could not capture the screen"), false); return }
         OcrEngine.run(bmp) { words ->
             if (isDestroyed) return@run
-            if (words.isEmpty()) { toast(L("Metin bulunamadı", "No text found")); finish(); return@run }
+            if (words.isEmpty()) { Notice.showThenFinish(this, L("Metin bulunamadı", "No text found"), false); return@run }
             OcrHolder.bmp = bmp; OcrHolder.words = words
             startActivity(Intent(this, TextSelectActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             finish()
@@ -45,7 +46,6 @@ class TextGrabActivity : Activity() {
         }
     }
 
-    private fun toast(s: String) = Toast.makeText(this, s, Toast.LENGTH_SHORT).show()
 
     override fun onDestroy() { CaptureService.onShot = null; super.onDestroy() }
 }

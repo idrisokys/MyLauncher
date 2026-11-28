@@ -42,10 +42,12 @@ import org.fossify.editor.activities.EditActivity
  * - Kalem simgesi: seçim modu (bu modda basılı tutup silme duraklatılır)
  * - Seçim modunda: tümünü seç, klasöre taşı, çöp (seçilenleri .onemsiz klasörüne taşı)
  */
-class GalleryActivity : Activity() {
+open class GalleryActivity : Activity() {
     private val bg = 0xFF121212.toInt(); private val bar = 0xFF092C29.toInt(); private val accent = 0xFF4FA3F0.toInt()
     private lateinit var titleV: TextView
     private lateinit var selAllV: ImageView; private lateinit var moveV: ImageView; private lateinit var trashV: ImageView; private lateinit var penV: ImageView
+    private lateinit var okV: View; private lateinit var cancelV: View
+    private var pickReq = false; private var pickMulti = false; private var pickType = ""
     private lateinit var gv: GridView; private lateinit var emptyV: TextView
     private var gridAd: BaseAdapter? = null
     private val root: File = Environment.getExternalStorageDirectory()
@@ -93,7 +95,11 @@ class GalleryActivity : Activity() {
         trashV = ib(Icons.delete(), "Seçilenleri .onemsiz klasörüne taşı", View.GONE) { deleteSelected() }   // kalemin hemen solunda
         penV = ib(Icons.rename(), "Seç", View.VISIBLE) { setSelMode(!selMode) }
         tb.addView(titleV, LinearLayout.LayoutParams(0, -2, 1f))
+        okV = NoticeIcon(this, true).apply { visibility = View.GONE; contentDescription = "Seç"; setOnClickListener { finishPick(sel.toList()) } }
+        cancelV = NoticeIcon(this, false).apply { visibility = View.GONE; contentDescription = "İptal"; setOnClickListener { setResult(RESULT_CANCELED); finish() } }
         for (b in listOf(selAllV, moveV, trashV, penV)) tb.addView(b, LinearLayout.LayoutParams(dp(44), dp(44)))
+        tb.addView(okV, LinearLayout.LayoutParams(dp(36), dp(36)).apply { marginStart = dp(4); marginEnd = dp(4) })
+        tb.addView(cancelV, LinearLayout.LayoutParams(dp(36), dp(36)).apply { marginStart = dp(4); marginEnd = dp(4) })
 
         gv = GridView(this).apply {
             numColumns = 3; horizontalSpacing = dp(2); verticalSpacing = dp(2)
@@ -130,18 +136,20 @@ class GalleryActivity : Activity() {
         gv.setOnItemClickListener { _, _, p, _ ->
             if (p !in media.indices) return@setOnItemClickListener
             val f = media[p]
-            if (selMode) { if (!sel.remove(f)) sel.add(f); selectionChanged() }
+            if (pickReq) pickTap(f)
+            else if (selMode) { if (!sel.remove(f)) sel.add(f); selectionChanged() }
             else Viewer(media.toMutableList(), p) { gridAd?.notifyDataSetChanged(); updateChrome(); updateEmpty() }
         }
         gv.setOnItemLongClickListener { _, _, p, _ ->
             // Kalem (seçim) modu açıkken duraklatılır; kapalıyken basılı tutulan resim .onemsiz klasörüne taşınır.
-            if (!selMode && p in media.indices) removeMedia(media[p])
+            if (!pickReq && !selMode && p in media.indices) removeMedia(media[p])
             true
         }
         val body = FrameLayout(this)
         body.addView(gv, FrameLayout.LayoutParams(-1, -1)); body.addView(emptyV, FrameLayout.LayoutParams(-1, -1))
         col.addView(tb, -1, dp(54)); col.addView(body, LinearLayout.LayoutParams(-1, 0, 1f))
         setContentView(col)
+        initPick(intent)
         updateChrome(); updateEmpty()
         openRequested(intent)
     }
@@ -217,7 +225,39 @@ class GalleryActivity : Activity() {
         }
     }
 
+    // ======================= DOSYA SEÇİCİ (sistem "Şuradan aç" listesinde Galerim olarak görünür) =======================
+    private fun initPick(i: Intent?) {
+        if (i == null || (i.action != Intent.ACTION_GET_CONTENT && i.action != Intent.ACTION_OPEN_DOCUMENT)) return
+        pickReq = true; pickMulti = i.getBooleanExtra(Intent.EXTRA_ALLOW_MULTIPLE, false); selMode = pickMulti
+        val t = (i.getStringArrayExtra(Intent.EXTRA_MIME_TYPES)?.singleOrNull() ?: i.type ?: "").lowercase()
+        pickType = if (t.startsWith("image/")) "image" else if (t.startsWith("video/")) "video" else ""
+    }
+
+    private fun pickTap(f: File) {
+        val vid = f.extension.lowercase() in VID
+        if ((pickType == "image" && vid) || (pickType == "video" && !vid)) { toast("Bu dosya türü seçilemez"); return }
+        if (pickMulti) { if (!sel.remove(f)) sel.add(f); selectionChanged() } else finishPick(listOf(f))
+    }
+
+    private fun finishPick(files: List<File>) {
+        if (files.isEmpty()) { toast("Önce bir resim seçin"); return }
+        val uris = files.map { uri(it) }
+        val r = Intent().setData(uris[0]).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        val cd = ClipData.newUri(contentResolver, "galeri", uris[0])
+        for (k in 1 until uris.size) cd.addItem(ClipData.Item(uris[k]))
+        r.clipData = cd
+        setResult(RESULT_OK, r); finish()
+    }
+
     private fun updateChrome() {
+        if (pickReq) {
+            titleV.text = if (pickMulti && sel.isNotEmpty()) "${sel.size} seçili" else "Galerim"
+            selAllV.visibility = if (pickMulti) View.VISIBLE else View.GONE
+            moveV.visibility = View.GONE; trashV.visibility = View.GONE; penV.visibility = View.GONE
+            okV.visibility = if (pickMulti) View.VISIBLE else View.GONE
+            cancelV.visibility = View.VISIBLE
+            return
+        }
         titleV.text = if (selMode) "${sel.size} seçili" else "Galerim"
         val vis = if (selMode) View.VISIBLE else View.GONE
         selAllV.visibility = vis; moveV.visibility = vis; trashV.visibility = vis
@@ -715,5 +755,5 @@ class GalleryActivity : Activity() {
     override fun onDestroy() { viewer?.dlg?.dismiss(); pool.shutdownNow(); fullPool.shutdownNow(); super.onDestroy() }
 
     @Deprecated("Deprecated in Java")
-    override fun onBackPressed() { if (selMode) setSelMode(false) else super.onBackPressed() }
+    override fun onBackPressed() { if (selMode && !pickReq) setSelMode(false) else super.onBackPressed() }
 }

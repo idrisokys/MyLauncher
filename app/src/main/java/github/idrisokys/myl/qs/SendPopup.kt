@@ -1,5 +1,6 @@
 package github.idrisokys.myl.qs
 
+import github.idrisokys.myl.common.Notice
 import android.app.Activity
 import android.content.Intent
 import android.graphics.Color
@@ -300,7 +301,7 @@ class SendPopup(
                     }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
                     resize()
                     h.postDelayed({ closeNow(true) }, if (ok) 3000 else 5000)
-                } else Toast.makeText(act, r.message(), Toast.LENGTH_LONG).show()
+                } else Notice.show(act, r.message(), true)
             }
         }
     }
@@ -385,7 +386,7 @@ class SendPopup(
             showStatus(p, ready)
             return
         }
-        val i = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+        val i = Intent(Intent.ACTION_GET_CONTENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
             type = "*/*"
             putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
@@ -396,7 +397,7 @@ class SendPopup(
             act.startActivityForResult(i, reqPick)
             pw?.dismiss()
         } catch (e: Exception) {
-            Toast.makeText(act, L("Dosya seçici açılamadı", "Could not open file picker"), Toast.LENGTH_SHORT).show()
+            Notice.show(act, L("Dosya seçici açılamadı", "Could not open file picker"), false)
             closeNow()
         }
     }

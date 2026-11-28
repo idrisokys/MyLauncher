@@ -1,5 +1,6 @@
 package github.idrisokys.myl.ocr
 
+import github.idrisokys.myl.common.Notice
 import android.app.Activity
 import android.content.ClipData
 import android.content.Context
@@ -162,7 +163,7 @@ class TextSelectActivity : Activity() {
         val t = ((r.top - oy) / sc).roundToInt().coerceIn(0, bmp.height - 1)
         val w = ((r.right - ox) / sc).roundToInt().coerceIn(l + 1, bmp.width) - l
         val h = ((r.bottom - oy) / sc).roundToInt().coerceIn(t + 1, bmp.height) - t
-        if (w < 8 || h < 8) { Toast.makeText(this, L("Seçilen alan çok küçük", "Selected area is too small"), Toast.LENGTH_SHORT).show(); return }
+        if (w < 8 || h < 8) { Notice.show(this, L("Seçilen alan çok küçük", "Selected area is too small"), false); return }
 
         val cache = cacheDir
         Thread {
@@ -176,14 +177,14 @@ class TextSelectActivity : Activity() {
             } catch (e: Throwable) { null }
             runOnUiThread {
                 if (isDestroyed) return@runOnUiThread
-                if (f == null) { Toast.makeText(this, L("Resim hazırlanamadı", "Could not prepare the image"), Toast.LENGTH_SHORT).show(); return@runOnUiThread }
+                if (f == null) { Notice.show(this, L("Resim hazırlanamadı", "Could not prepare the image"), false); return@runOnUiThread }
                 val uri = KFileProvider.uriFor(this, f)
                 val send = Intent(Intent.ACTION_SEND).setType("image/png")
                     .putExtra(Intent.EXTRA_STREAM, uri)
                     .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 send.clipData = ClipData.newRawUri("", uri)
                 try { startActivity(Intent.createChooser(send, null)); exitCrop() }
-                catch (e: Exception) { Toast.makeText(this, L("Paylaşılamadı", "Could not share"), Toast.LENGTH_SHORT).show() }
+                catch (e: Exception) { Notice.show(this, L("Paylaşılamadı", "Could not share"), false) }
             }
         }.start()
     }
@@ -202,7 +203,7 @@ class TextSelectActivity : Activity() {
         if (t.isEmpty()) return
         val url = "https://www.google.com/search?q=" + java.net.URLEncoder.encode(t, "UTF-8")
         try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
-        catch (e: Exception) { Toast.makeText(this, L("Tarayıcı açılamadı", "Could not open browser"), Toast.LENGTH_SHORT).show() }
+        catch (e: Exception) { Notice.show(this, L("Tarayıcı açılamadı", "Could not open browser"), false) }
     }
 
     private fun share(t: String) {

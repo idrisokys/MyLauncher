@@ -80,6 +80,16 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="text/plain" />
             </intent-filter>
+            <!-- Kopyalama balonundaki "Cihaza gönder" (REMOTE_COPY) listesinde de "Notlarım": kopyalanan metin ClipData ile gelir -->
+            <intent-filter>
+                <action android:name="android.intent.action.REMOTE_COPY" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.REMOTE_COPY" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/*" />
+            </intent-filter>
         </activity>
         <!-- Paylaş menüsünde "Resmi Editle": resmi Galerim'deki sihirli değneğin açtığı düzenleyicide açar (arayüzsüz) -->
         <activity
